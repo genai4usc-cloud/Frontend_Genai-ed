@@ -1,0 +1,28 @@
+name: Mirror to genai4usc repo
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push mirror
+        env:
+          MIRROR_TOKEN: ${{ secrets.MIRROR_TOKEN }}
+        run: |
+          set -e
+          git config user.name "mirror-bot"
+          git config user.email "mirror-bot@users.noreply.github.com"
+
+          git remote add mirror "https://${MIRROR_TOKEN}@github.com/genai4usc/Frontend_Genai-ed.git"
+
+          git push --mirror mirror
