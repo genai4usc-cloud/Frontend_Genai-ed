@@ -23,6 +23,6 @@ jobs:
           git config user.name "mirror-bot"
           git config user.email "mirror-bot@users.noreply.github.com"
 
-          git remote add mirror "https://${MIRROR_TOKEN}@github.com/genai4usc/Frontend_Genai-ed.git"
+          git remote add mirror "https://${MIRROR_TOKEN}@github.com/genai4usc-cloud/Frontend_Genai-ed.git"
 
           git push --mirror mirror
