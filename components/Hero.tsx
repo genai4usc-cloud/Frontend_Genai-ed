@@ -13,11 +13,17 @@ export default function Hero() {
 
         <div className="max-w-6xl mx-auto">
           <div className="relative rounded-2xl overflow-hidden shadow-2xl">
-            <img
-              src="https://images.pexels.com/photos/2582937/pexels-photo-2582937.jpeg?auto=compress&cs=tinysrgb&w=1600"
-              alt="Modern classroom with technology"
+            <video
               className="w-full h-auto"
-            />
+              controls
+              poster="https://images.pexels.com/photos/5905445/pexels-photo-5905445.jpeg?auto=compress&cs=tinysrgb&w=1600"
+            >
+              <source
+                src="https://cdn.pixabay.com/video/2023/05/01/159773-821445071_large.mp4"
+                type="video/mp4"
+              />
+              Your browser does not support the video tag.
+            </video>
           </div>
         </div>
       </div>
