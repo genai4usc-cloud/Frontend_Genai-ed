@@ -1,0 +1,207 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase, Profile, Course, Lecture } from '@/lib/supabase';
+import EducatorLayout from '@/components/EducatorLayout';
+import CourseCard from '@/components/CourseCard';
+import LectureCard from '@/components/LectureCard';
+import { ClipboardCheck, FileText, GraduationCap, Plus } from 'lucide-react';
+
+export default function EducatorDashboard() {
+  const router = useRouter();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [lectures, setLectures] = useState<Lecture[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push('/educator/login');
+        return;
+      }
+
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (!profileData || profileData.role !== 'educator') {
+        await supabase.auth.signOut();
+        router.push('/educator/login');
+        return;
+      }
+
+      setProfile(profileData);
+
+      const { data: coursesData } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('educator_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (coursesData) setCourses(coursesData);
+
+      const { data: lecturesData } = await supabase
+        .from('lectures')
+        .select('*')
+        .eq('educator_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (lecturesData) setLectures(lecturesData);
+
+    } catch (error) {
+      console.error('Error loading dashboard:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading || !profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-lg">Loading...</div>
+      </div>
+    );
+  }
+
+  return (
+    <EducatorLayout profile={profile}>
+      <div className="space-y-8">
+        <div className="bg-gradient-to-r from-[#990000] to-[#770000] text-white p-8 rounded-2xl shadow-lg">
+          <h1 className="text-3xl font-bold mb-2">Hi, {profile.first_name}!</h1>
+          <p className="text-white/90 text-lg">Welcome back to your USC Educator Portal</p>
+        </div>
+
+        <div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">What would you like to do today?</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <button
+              onClick={() => router.push('/educator/policy-suggestor')}
+              className="bg-white p-6 rounded-xl shadow-md hover:shadow-xl transition-all border border-gray-100 text-left group"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="bg-blue-500 p-3 rounded-xl">
+                  <ClipboardCheck className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-gray-400 group-hover:text-gray-600 transition-colors">→</div>
+              </div>
+              <h3 className="font-semibold text-lg text-gray-900 mb-2">Policy Suggestor</h3>
+              <p className="text-gray-600 text-sm">Get AI-powered policy recommendations</p>
+            </button>
+
+            <button
+              onClick={() => router.push('/educator/lecture/new')}
+              className="bg-white p-6 rounded-xl shadow-md hover:shadow-xl transition-all border border-gray-100 text-left group"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="bg-[#990000] p-3 rounded-xl">
+                  <FileText className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-gray-400 group-hover:text-gray-600 transition-colors">→</div>
+              </div>
+              <h3 className="font-semibold text-lg text-gray-900 mb-2">Create Lecture</h3>
+              <p className="text-gray-600 text-sm">Generate AI-powered video lectures</p>
+            </button>
+
+            <button
+              onClick={() => router.push('/educator/quiz/new')}
+              className="bg-white p-6 rounded-xl shadow-md hover:shadow-xl transition-all border border-gray-100 text-left group"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="bg-green-600 p-3 rounded-xl">
+                  <GraduationCap className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-gray-400 group-hover:text-gray-600 transition-colors">→</div>
+              </div>
+              <h3 className="font-semibold text-lg text-gray-900 mb-2">Create Quiz</h3>
+              <p className="text-gray-600 text-sm">Design assessments for your students</p>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-gray-800">My Courses</h2>
+            <button
+              onClick={() => router.push('/educator/course/new')}
+              className="text-[#990000] hover:text-[#770000] font-medium text-sm flex items-center gap-2"
+            >
+              View All →
+            </button>
+          </div>
+
+          {courses.length === 0 ? (
+            <div className="bg-white p-12 rounded-xl border-2 border-dashed border-gray-300 text-center">
+              <div className="max-w-sm mx-auto">
+                <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Plus className="w-8 h-8 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No courses yet</h3>
+                <p className="text-gray-600 mb-6">Create your first course to get started</p>
+                <button
+                  onClick={() => router.push('/educator/course/new')}
+                  className="bg-[#FFCC00] hover:bg-[#EDB900] text-black font-bold py-3 px-6 rounded-lg transition-colors inline-flex items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  Create Course
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {courses.slice(0, 4).map((course) => (
+                <CourseCard key={course.id} course={course} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-gray-800">My Lectures</h2>
+            <button
+              onClick={() => router.push('/educator/lecture/new')}
+              className="text-[#990000] hover:text-[#770000] font-medium text-sm flex items-center gap-2"
+            >
+              View All →
+            </button>
+          </div>
+
+          {lectures.length === 0 ? (
+            <div className="bg-white p-12 rounded-xl border-2 border-dashed border-gray-300 text-center">
+              <div className="max-w-sm mx-auto">
+                <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Plus className="w-8 h-8 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No lectures yet</h3>
+                <p className="text-gray-600 mb-6">Create your first lecture to get started</p>
+                <button
+                  onClick={() => router.push('/educator/lecture/new')}
+                  className="bg-[#FFCC00] hover:bg-[#EDB900] text-black font-bold py-3 px-6 rounded-lg transition-colors inline-flex items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  Create Lecture
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {lectures.slice(0, 4).map((lecture) => (
+                <LectureCard key={lecture.id} lecture={lecture} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </EducatorLayout>
+  );
+}
