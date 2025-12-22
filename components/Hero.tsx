@@ -10,17 +10,6 @@ export default function Hero() {
             Empowering educators and students with responsible AI integration
           </p>
         </div>
-
-        <div className="max-w-6xl mx-auto">
-          <div className="relative rounded-2xl overflow-hidden shadow-2xl">
-              <source
-                src="https://cdn.pixabay.com/video/2023/05/01/159773-821445071_large.mp4"
-                type="video/mp4"
-              />
-              Your browser does not support the video tag.
-            </video>
-          </div>
-        </div>
       </div>
     </section>
   );
