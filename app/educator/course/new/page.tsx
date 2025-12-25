@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, Profile } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
-import { ArrowLeft, GraduationCap, FileText, Users, BookOpen, FolderOpen, Upload, Plus, X, Save } from 'lucide-react';
+import { ArrowLeft, GraduationCap, FileText, Users, BookOpen, FolderOpen, Upload, Plus, X, Save, File } from 'lucide-react';
 import { toast } from 'sonner';
+import { uploadCourseFile, uploadMultipleFiles, parseStudentCSV, validateFileSize, validateFileType } from '@/lib/fileUpload';
 
 export default function CreateCourse() {
   const router = useRouter();
@@ -27,6 +28,16 @@ export default function CreateCourse() {
 
   const [textbooks, setTextbooks] = useState<string[]>([]);
   const [textbookInput, setTextbookInput] = useState('');
+
+  const [syllabusFile, setSyllabusFile] = useState<File | null>(null);
+  const [studentRosterFile, setStudentRosterFile] = useState<File | null>(null);
+  const [courseMaterialsFiles, setCourseMaterialsFiles] = useState<File[]>([]);
+  const [backgroundMaterialsFiles, setBackgroundMaterialsFiles] = useState<File[]>([]);
+
+  const syllabusInputRef = useRef<HTMLInputElement>(null);
+  const studentRosterInputRef = useRef<HTMLInputElement>(null);
+  const courseMaterialsInputRef = useRef<HTMLInputElement>(null);
+  const backgroundMaterialsInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     checkAuth();
@@ -99,6 +110,100 @@ export default function CreateCourse() {
     setTextbooks(textbooks.filter((_, i) => i !== index));
   };
 
+  const handleSyllabusSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+
+    if (!validateFileType(file, allowedTypes)) {
+      toast.error('Please upload a PDF, DOC, or DOCX file');
+      return;
+    }
+
+    if (!validateFileSize(file, 10)) {
+      toast.error('File size must be less than 10MB');
+      return;
+    }
+
+    setSyllabusFile(file);
+  };
+
+  const handleStudentRosterSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+
+    if (!validateFileType(file, allowedTypes)) {
+      toast.error('Please upload a CSV or Excel file');
+      return;
+    }
+
+    if (!validateFileSize(file, 10)) {
+      toast.error('File size must be less than 10MB');
+      return;
+    }
+
+    setStudentRosterFile(file);
+
+    if (file.type === 'text/csv') {
+      const text = await file.text();
+      const emails = parseStudentCSV(text);
+
+      if (emails.length > 0) {
+        setStudents(prev => Array.from(new Set([...prev, ...emails])));
+        toast.success(`Added ${emails.length} students from CSV`);
+      } else {
+        toast.error('No valid email addresses found in CSV');
+      }
+    } else {
+      toast.info('Excel file uploaded. Students will be processed when course is saved.');
+    }
+  };
+
+  const handleCourseMaterialsSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const validFiles: File[] = [];
+
+    Array.from(files).forEach(file => {
+      if (!validateFileSize(file, 10)) {
+        toast.error(`${file.name} exceeds 10MB limit`);
+        return;
+      }
+      validFiles.push(file);
+    });
+
+    setCourseMaterialsFiles(prev => [...prev, ...validFiles]);
+  };
+
+  const handleBackgroundMaterialsSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const validFiles: File[] = [];
+
+    Array.from(files).forEach(file => {
+      if (!validateFileSize(file, 10)) {
+        toast.error(`${file.name} exceeds 10MB limit`);
+        return;
+      }
+      validFiles.push(file);
+    });
+
+    setBackgroundMaterialsFiles(prev => [...prev, ...validFiles]);
+  };
+
+  const removeCourseMaterial = (index: number) => {
+    setCourseMaterialsFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeBackgroundMaterial = (index: number) => {
+    setBackgroundMaterialsFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSaveCourse = async () => {
     if (!profile) return;
 
@@ -124,6 +229,38 @@ export default function CreateCourse() {
         .single();
 
       if (courseError) throw courseError;
+
+      let syllabusUrl: string | null = null;
+      const courseMaterialsUrls: string[] = [];
+      const backgroundMaterialsUrls: string[] = [];
+
+      if (syllabusFile) {
+        toast.info('Uploading syllabus...');
+        syllabusUrl = await uploadCourseFile(courseData.id, 'syllabus', syllabusFile);
+      }
+
+      if (courseMaterialsFiles.length > 0) {
+        toast.info(`Uploading ${courseMaterialsFiles.length} course materials...`);
+        const urls = await uploadMultipleFiles(courseData.id, 'materials', courseMaterialsFiles);
+        courseMaterialsUrls.push(...urls);
+      }
+
+      if (backgroundMaterialsFiles.length > 0) {
+        toast.info(`Uploading ${backgroundMaterialsFiles.length} background materials...`);
+        const urls = await uploadMultipleFiles(courseData.id, 'background', backgroundMaterialsFiles);
+        backgroundMaterialsUrls.push(...urls);
+      }
+
+      const { error: updateError } = await supabase
+        .from('courses')
+        .update({
+          syllabus_url: syllabusUrl,
+          course_materials_urls: courseMaterialsUrls,
+          background_materials_urls: backgroundMaterialsUrls,
+        })
+        .eq('id', courseData.id);
+
+      if (updateError) throw updateError;
 
       if (teachingAssistants.length > 0) {
         const taRecords = teachingAssistants.map(email => ({
@@ -283,11 +420,42 @@ export default function CreateCourse() {
               <h2 className="text-xl font-bold text-gray-900">Syllabus</h2>
             </div>
 
-            <div className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-gray-400 transition-colors cursor-pointer">
-              <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-700 font-medium mb-1">Click to upload syllabus</p>
-              <p className="text-gray-500 text-sm">PDF, DOC, DOCX up to 10MB</p>
-            </div>
+            <input
+              ref={syllabusInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx"
+              onChange={handleSyllabusSelect}
+              className="hidden"
+            />
+
+            {!syllabusFile ? (
+              <button
+                onClick={() => syllabusInputRef.current?.click()}
+                className="w-full border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-gray-400 transition-colors"
+              >
+                <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-700 font-medium mb-1">Click to upload syllabus</p>
+                <p className="text-gray-500 text-sm">PDF, DOC, DOCX up to 10MB</p>
+              </button>
+            ) : (
+              <div className="border-2 border-green-300 bg-green-50 rounded-xl p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <File className="w-8 h-8 text-green-600" />
+                    <div>
+                      <p className="font-medium text-gray-900">{syllabusFile.name}</p>
+                      <p className="text-sm text-gray-600">{(syllabusFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSyllabusFile(null)}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="pt-6 border-t border-gray-200">
@@ -340,10 +508,41 @@ export default function CreateCourse() {
               <h2 className="text-xl font-bold text-gray-900">Students</h2>
             </div>
 
-            <div className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-gray-400 transition-colors cursor-pointer mb-4">
-              <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-700 font-medium">Upload student list (Excel/CSV)</p>
-            </div>
+            <input
+              ref={studentRosterInputRef}
+              type="file"
+              accept=".csv,.xls,.xlsx"
+              onChange={handleStudentRosterSelect}
+              className="hidden"
+            />
+
+            {!studentRosterFile ? (
+              <button
+                onClick={() => studentRosterInputRef.current?.click()}
+                className="w-full border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-gray-400 transition-colors mb-4"
+              >
+                <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-700 font-medium">Upload student list (Excel/CSV)</p>
+              </button>
+            ) : (
+              <div className="border-2 border-green-300 bg-green-50 rounded-xl p-6 mb-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <File className="w-8 h-8 text-green-600" />
+                    <div>
+                      <p className="font-medium text-gray-900">{studentRosterFile.name}</p>
+                      <p className="text-sm text-gray-600">{(studentRosterFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setStudentRosterFile(null)}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="flex gap-2 mb-4">
               <input
@@ -429,11 +628,44 @@ export default function CreateCourse() {
               <h2 className="text-xl font-bold text-gray-900">Course Materials</h2>
             </div>
 
-            <div className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-gray-400 transition-colors cursor-pointer">
+            <input
+              ref={courseMaterialsInputRef}
+              type="file"
+              multiple
+              onChange={handleCourseMaterialsSelect}
+              className="hidden"
+            />
+
+            <button
+              onClick={() => courseMaterialsInputRef.current?.click()}
+              className="w-full border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-gray-400 transition-colors mb-4"
+            >
               <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-700 font-medium mb-1">Upload course materials</p>
               <p className="text-gray-500 text-sm">PDFs, documents, presentations, etc.</p>
-            </div>
+            </button>
+
+            {courseMaterialsFiles.length > 0 && (
+              <div className="space-y-2">
+                {courseMaterialsFiles.map((file, index) => (
+                  <div key={index} className="flex items-center justify-between bg-gray-50 px-4 py-3 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <File className="w-5 h-5 text-gray-600" />
+                      <div>
+                        <p className="text-gray-900 font-medium">{file.name}</p>
+                        <p className="text-sm text-gray-600">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeCourseMaterial(index)}
+                      className="text-gray-400 hover:text-red-600 transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="pt-6 border-t border-gray-200">
@@ -444,11 +676,44 @@ export default function CreateCourse() {
               <h2 className="text-xl font-bold text-gray-900">Background Materials</h2>
             </div>
 
-            <div className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-gray-400 transition-colors cursor-pointer">
+            <input
+              ref={backgroundMaterialsInputRef}
+              type="file"
+              multiple
+              onChange={handleBackgroundMaterialsSelect}
+              className="hidden"
+            />
+
+            <button
+              onClick={() => backgroundMaterialsInputRef.current?.click()}
+              className="w-full border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-gray-400 transition-colors mb-4"
+            >
               <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-700 font-medium mb-1">Upload background materials</p>
               <p className="text-gray-500 text-sm">PDFs, documents, presentations, etc.</p>
-            </div>
+            </button>
+
+            {backgroundMaterialsFiles.length > 0 && (
+              <div className="space-y-2">
+                {backgroundMaterialsFiles.map((file, index) => (
+                  <div key={index} className="flex items-center justify-between bg-gray-50 px-4 py-3 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <File className="w-5 h-5 text-gray-600" />
+                      <div>
+                        <p className="text-gray-900 font-medium">{file.name}</p>
+                        <p className="text-sm text-gray-600">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeBackgroundMaterial(index)}
+                      className="text-gray-400 hover:text-red-600 transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
