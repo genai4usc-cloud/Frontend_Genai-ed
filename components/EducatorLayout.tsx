@@ -1,9 +1,9 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Home, ClipboardCheck, FileText, GraduationCap, Library, BookOpen, LogOut, User } from 'lucide-react';
-import { supabase, Profile } from '@/lib/supabase';
+import { supabase, Profile, Course } from '@/lib/supabase';
 import Image from 'next/image';
 
 interface EducatorLayoutProps {
@@ -14,6 +14,23 @@ interface EducatorLayoutProps {
 export default function EducatorLayout({ children, profile }: EducatorLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const [courses, setCourses] = useState<Course[]>([]);
+
+  useEffect(() => {
+    loadCourses();
+  }, [profile.id]);
+
+  const loadCourses = async () => {
+    const { data } = await supabase
+      .from('courses')
+      .select('*')
+      .eq('educator_id', profile.id)
+      .order('created_at', { ascending: false });
+
+    if (data) {
+      setCourses(data);
+    }
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -93,9 +110,30 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
               My Courses
             </h3>
             <nav className="space-y-1">
+              {courses.map((course) => {
+                const isActive = pathname === `/educator/course/${course.id}`;
+                return (
+                  <button
+                    key={course.id}
+                    onClick={() => router.push(`/educator/course/${course.id}`)}
+                    className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-[#990000] text-white'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <div className="font-medium text-sm truncate">{course.title}</div>
+                    <div className={`text-xs mt-0.5 truncate ${
+                      isActive ? 'text-white/80' : 'text-gray-500'
+                    }`}>
+                      {course.code} - {course.semester}
+                    </div>
+                  </button>
+                );
+              })}
               <button
                 onClick={() => router.push('/educator/course/new')}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-gray-300 text-gray-600 hover:border-gray-400 hover:text-gray-900 transition-colors text-sm font-medium"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-gray-300 text-gray-600 hover:border-gray-400 hover:text-gray-900 transition-colors text-sm font-medium mt-2"
               >
                 <span className="text-lg">+</span>
                 <span>Add My Course</span>
