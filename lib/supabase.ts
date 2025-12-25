@@ -40,8 +40,31 @@ export type Lecture = {
   description: string;
   video_url: string | null;
   duration: number | null;
+  content_style: string[];
+  script_prompt: string;
+  generated_content: any;
+  library_personal: boolean;
+  library_usc: boolean;
+  status: 'draft' | 'generating' | 'completed';
   created_at: string;
   updated_at: string;
+};
+
+export type LectureCourse = {
+  id: string;
+  lecture_id: string;
+  course_id: string;
+  created_at: string;
+};
+
+export type LectureMaterial = {
+  id: string;
+  lecture_id: string;
+  material_url: string;
+  material_name: string;
+  material_type: 'main' | 'background';
+  source_course_id: string | null;
+  created_at: string;
 };
 
 export type CourseTeachingAssistant = {
