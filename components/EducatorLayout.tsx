@@ -22,8 +22,8 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
 
   const navItems = [
     { icon: Home, label: 'Dashboard', path: '/educator/dashboard' },
-    { icon: ClipboardCheck, label: 'Policy Suggestor', path: '/educator/policy-suggestor' },
     { icon: FileText, label: 'Create Lecture', path: '/educator/lecture/new' },
+    { icon: ClipboardCheck, label: 'Policy Suggestor', path: '/educator/policy-suggestor' },
     { icon: GraduationCap, label: 'Create Quiz', path: '/educator/quiz/new' },
   ];
 
