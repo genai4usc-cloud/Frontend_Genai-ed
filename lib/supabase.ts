@@ -22,6 +22,12 @@ export type Course = {
   title: string;
   description: string;
   student_count: number;
+  semester: string;
+  section: string;
+  instructor_name: string;
+  syllabus_url: string | null;
+  course_materials_urls: string[];
+  background_materials_urls: string[];
   created_at: string;
   updated_at: string;
 };
@@ -36,4 +42,25 @@ export type Lecture = {
   duration: number | null;
   created_at: string;
   updated_at: string;
+};
+
+export type CourseTeachingAssistant = {
+  id: string;
+  course_id: string;
+  email: string;
+  created_at: string;
+};
+
+export type CourseStudent = {
+  id: string;
+  course_id: string;
+  email: string;
+  created_at: string;
+};
+
+export type CourseTextbook = {
+  id: string;
+  course_id: string;
+  title_isbn: string;
+  created_at: string;
 };

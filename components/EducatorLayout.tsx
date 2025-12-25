@@ -94,11 +94,11 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
             </h3>
             <nav className="space-y-1">
               <button
-                onClick={() => router.push('/educator/courses')}
-                className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors text-sm"
+                onClick={() => router.push('/educator/course/new')}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-gray-300 text-gray-600 hover:border-gray-400 hover:text-gray-900 transition-colors text-sm font-medium"
               >
-                <BookOpen className="w-4 h-4" />
-                <span>View All Courses</span>
+                <span className="text-lg">+</span>
+                <span>Add My Course</span>
               </button>
             </nav>
           </div>
