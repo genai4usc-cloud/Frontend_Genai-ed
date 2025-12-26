@@ -146,11 +146,26 @@ export default function CreateLecture() {
   };
 
   const togglePreloadedMaterial = (url: string) => {
-    setSelectedPreloadedMaterialUrls(prev =>
-      prev.includes(url)
-        ? prev.filter(u => u !== url)
-        : [...prev, url]
-    );
+    const isCurrentlySelected = selectedPreloadedMaterialUrls.includes(url);
+
+    if (isCurrentlySelected) {
+      setSelectedPreloadedMaterialUrls(prev => prev.filter(u => u !== url));
+      setAllMaterials(prev => prev.filter(m => m.url !== url));
+    } else {
+      setSelectedPreloadedMaterialUrls(prev => [...prev, url]);
+
+      const material = preloadedMaterials.find(m => m.url === url);
+      if (material) {
+        setAllMaterials(prev => [...prev, {
+          url: material.url,
+          name: material.name,
+          type: 'main',
+          sourceCourseId: material.sourceCourseId,
+          courseTitle: material.courseTitle,
+          courseCode: material.courseCode
+        }]);
+      }
+    }
   };
 
   const handleAdditionalFilesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -158,6 +173,7 @@ export default function CreateLecture() {
     if (!files || files.length === 0) return;
 
     const validFiles: File[] = [];
+    const newMaterials: MaterialWithType[] = [];
 
     Array.from(files).forEach(file => {
       if (!validateFileSize(file, 10)) {
@@ -165,12 +181,23 @@ export default function CreateLecture() {
         return;
       }
       validFiles.push(file);
+
+      newMaterials.push({
+        url: `temp-${file.name}-${Date.now()}`,
+        name: file.name,
+        type: 'main'
+      });
     });
 
     setAdditionalFiles(prev => [...prev, ...validFiles]);
+    setAllMaterials(prev => [...prev, ...newMaterials]);
   };
 
   const removeAdditionalFile = (index: number) => {
+    const fileToRemove = additionalFiles[index];
+    if (fileToRemove) {
+      setAllMaterials(prev => prev.filter(m => !m.url.includes(fileToRemove.name)));
+    }
     setAdditionalFiles(prev => prev.filter((_, i) => i !== index));
   };
 
@@ -197,22 +224,6 @@ export default function CreateLecture() {
   };
 
   const handleContinueToContentStyle = () => {
-    const materials: MaterialWithType[] = [];
-
-    preloadedMaterials.forEach(material => {
-      if (selectedPreloadedMaterialUrls.includes(material.url)) {
-        materials.push({
-          url: material.url,
-          name: material.name,
-          type: 'main',
-          sourceCourseId: material.sourceCourseId,
-          courseTitle: material.courseTitle,
-          courseCode: material.courseCode
-        });
-      }
-    });
-
-    setAllMaterials(materials);
     setCurrentStep(3);
     setExpandedStep(3);
   };
