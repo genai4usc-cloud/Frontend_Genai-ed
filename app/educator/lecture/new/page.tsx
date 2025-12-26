@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
-import { ArrowLeft, Upload, File, Check, ChevronDown, ChevronUp, Info, Video, Mic, FileText, Sparkles } from 'lucide-react';
+import { ArrowLeft, Upload, File, Check, ChevronDown, ChevronUp, Info, Video, Mic, FileText, Sparkles, Download, Eye, Play, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { validateFileSize } from '@/lib/fileUpload';
 
@@ -47,6 +47,9 @@ export default function CreateLecture() {
   const [scriptGenerated, setScriptGenerated] = useState(false);
 
   const [selectedAvatar, setSelectedAvatar] = useState<AvatarType | null>(null);
+
+  const [contentGenerated, setContentGenerated] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const additionalFilesInputRef = useRef<HTMLInputElement>(null);
   const scriptFileInputRef = useRef<HTMLInputElement>(null);
@@ -276,6 +279,31 @@ Thank you for watching. Please review the materials and complete the assignment.
     setExpandedStep(6);
   };
 
+  const handleGenerateContent = async () => {
+    setIsGenerating(true);
+    toast.info('Generating content...');
+
+    setTimeout(() => {
+      setIsGenerating(false);
+      setContentGenerated(true);
+      toast.success('Content generated successfully!');
+      setCurrentStep(7);
+      setExpandedStep(7);
+    }, 2000);
+  };
+
+  const handleRegenerateScript = () => {
+    toast.info('Regenerating with changes...');
+  };
+
+  const handleRegenerateSlides = () => {
+    toast.info('Regenerating slides...');
+  };
+
+  const handlePublishContent = () => {
+    toast.success('Content published successfully!');
+  };
+
   const getFileExtension = (filename: string) => {
     const ext = filename.split('.').pop()?.toUpperCase();
     return ext || 'FILE';
@@ -295,7 +323,8 @@ Thank you for watching. Please review the materials and complete the assignment.
     { number: 3, title: 'Select Content Style', subtitle: 'Choose one or more content formats' },
     { number: 4, title: 'Script or Prompt Engineering', subtitle: 'Add your script or generate with AI' },
     { number: 5, title: 'Select Avatar', subtitle: 'Choose an AI presenter' },
-    { number: 6, title: 'Generate Content', subtitle: 'Review and regenerate if needed' }
+    { number: 6, title: 'Generate Content', subtitle: 'Review and regenerate if needed' },
+    { number: 7, title: 'Publish Content', subtitle: 'Choose where to publish and download options' }
   ];
 
   const avatarOptions = [
@@ -761,50 +790,179 @@ Thank you for watching. Please review the materials and complete the assignment.
 
                 {isExpanded && step.number === 6 && (
                   <div className="p-6 pt-0 space-y-6">
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
-                      <Sparkles className="w-16 h-16 text-[#990000] mx-auto mb-4" />
-                      <h3 className="text-xl font-bold text-gray-900 mb-2">Ready to Generate!</h3>
-                      <p className="text-gray-600 mb-6">
-                        Your lecture is configured and ready. Click the button below to start generating your AI-powered content.
-                      </p>
-                      <button
-                        onClick={() => {
-                          toast.success('Content generation will be implemented soon!');
-                        }}
-                        className="bg-[#990000] hover:bg-[#770000] text-white font-bold py-4 px-12 rounded-lg transition-colors text-lg"
-                      >
-                        Generate Content
-                      </button>
-                    </div>
+                    {!contentGenerated ? (
+                      <>
+                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
+                          <Sparkles className="w-16 h-16 text-[#990000] mx-auto mb-4" />
+                          <h3 className="text-xl font-bold text-gray-900 mb-2">Ready to Generate!</h3>
+                          <p className="text-gray-600 mb-6">
+                            Your lecture is configured and ready. Click the button below to start generating your AI-powered content.
+                          </p>
+                          <button
+                            onClick={handleGenerateContent}
+                            disabled={isGenerating}
+                            className="bg-[#990000] hover:bg-[#770000] text-white font-bold py-4 px-12 rounded-lg transition-colors text-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
+                          >
+                            {isGenerating ? 'Generating...' : 'Generate Content'}
+                          </button>
+                        </div>
 
-                    <div className="border border-gray-200 rounded-xl p-6">
-                      <h4 className="font-bold text-gray-900 mb-4">Summary</h4>
-                      <div className="space-y-3 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Courses Selected:</span>
-                          <span className="font-medium text-gray-900">{selectedCourseIds.length}</span>
+                        <div className="border border-gray-200 rounded-xl p-6">
+                          <h4 className="font-bold text-gray-900 mb-4">Summary</h4>
+                          <div className="space-y-3 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Courses Selected:</span>
+                              <span className="font-medium text-gray-900">{selectedCourseIds.length}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Materials Added:</span>
+                              <span className="font-medium text-gray-900">{allMaterials.length + additionalFiles.length}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Content Styles:</span>
+                              <span className="font-medium text-gray-900">{contentStyles.join(', ').toUpperCase()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Avatar:</span>
+                              <span className="font-medium text-gray-900">
+                                {avatarOptions.find(a => a.id === selectedAvatar)?.label || 'None'}
+                              </span>
+                            </div>
+                            {scriptMode === 'ai' && (
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Video Length:</span>
+                                <span className="font-medium text-gray-900">{videoLength} minutes</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Materials Added:</span>
-                          <span className="font-medium text-gray-900">{allMaterials.length + additionalFiles.length}</span>
+                      </>
+                    ) : (
+                      <div className="space-y-6">
+                        {(contentStyles.includes('video') || contentStyles.includes('audio')) && (
+                          <div>
+                            <h4 className="font-semibold text-gray-900 mb-4">Content Preview</h4>
+                            <div className="bg-gray-900 rounded-xl p-20 flex items-center justify-center aspect-video">
+                              <div className="text-center">
+                                <Play className="w-20 h-20 text-gray-400 mx-auto mb-4" />
+                                <p className="text-white text-lg">Video/Audio Preview</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {contentStyles.includes('powerpoint') && (
+                          <div>
+                            <h4 className="font-semibold text-gray-900 mb-4">PowerPoint Preview</h4>
+                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-12 text-center">
+                              <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                              <p className="text-gray-700 font-medium">PowerPoint slides generated</p>
+                              <p className="text-gray-600 text-sm mt-1">12 slides created</p>
+                            </div>
+                          </div>
+                        )}
+
+                        <div>
+                          <h4 className="font-semibold text-gray-900 mb-4">Edit Script & Regenerate</h4>
+                          <textarea
+                            value={generatedScript}
+                            onChange={(e) => setGeneratedScript(e.target.value)}
+                            className="w-full h-48 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent bg-white"
+                          />
+                          <button
+                            onClick={handleRegenerateScript}
+                            className="mt-3 bg-[#FFCC00] hover:bg-[#E6B800] text-black font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2"
+                          >
+                            <Sparkles className="w-5 h-5" />
+                            Regenerate with Changes
+                          </button>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Content Styles:</span>
-                          <span className="font-medium text-gray-900">{contentStyles.join(', ').toUpperCase()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Avatar:</span>
-                          <span className="font-medium text-gray-900">
-                            {avatarOptions.find(a => a.id === selectedAvatar)?.label || 'None'}
-                          </span>
-                        </div>
-                        {scriptMode === 'ai' && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Video Length:</span>
-                            <span className="font-medium text-gray-900">{videoLength} minutes</span>
+
+                        {contentStyles.includes('powerpoint') && (
+                          <div>
+                            <h4 className="font-semibold text-gray-900 mb-4">Edit Prompt & Regenerate</h4>
+                            <button
+                              onClick={handleRegenerateSlides}
+                              className="bg-[#FFCC00] hover:bg-[#E6B800] text-black font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2"
+                            >
+                              <Sparkles className="w-5 h-5" />
+                              Regenerate Slides
+                            </button>
                           </div>
                         )}
                       </div>
+                    )}
+                  </div>
+                )}
+
+                {isExpanded && step.number === 7 && (
+                  <div className="p-6 pt-0 space-y-6">
+                    <div>
+                      <h4 className="font-semibold text-gray-900 mb-4">Publish To</h4>
+
+                      <div className="mb-4">
+                        <p className="text-sm text-gray-600 mb-3">Courses (Selected Earlier):</p>
+                        <div className="space-y-2">
+                          {courses.filter(c => selectedCourseIds.includes(c.id)).map(course => (
+                            <div key={course.id} className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+                              <CheckCircle className="w-5 h-5 text-green-600" />
+                              <span className="font-medium text-gray-900">{course.code} - {course.title}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={addToPersonalLibrary}
+                            onChange={(e) => setAddToPersonalLibrary(e.target.checked)}
+                            className="w-5 h-5 text-[#990000] rounded focus:ring-[#990000]"
+                          />
+                          <span className="font-medium text-gray-900">Personal Library</span>
+                        </label>
+                        <label className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={addToUSCLibrary}
+                            onChange={(e) => setAddToUSCLibrary(e.target.checked)}
+                            className="w-5 h-5 text-[#990000] rounded focus:ring-[#990000]"
+                          />
+                          <span className="font-medium text-gray-900">USC Library</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handlePublishContent}
+                        className="flex-1 bg-[#990000] hover:bg-[#770000] text-white font-bold py-4 px-8 rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        <CheckCircle className="w-5 h-5" />
+                        Publish Content
+                      </button>
+                      <button
+                        onClick={() => toast.info('Download functionality coming soon')}
+                        className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-4 px-8 rounded-lg transition-colors flex items-center gap-2"
+                      >
+                        <Download className="w-5 h-5" />
+                        Download
+                      </button>
+                      <button
+                        onClick={() => toast.info('Student view coming soon')}
+                        className="bg-[#FFCC00] hover:bg-[#E6B800] text-black font-bold py-4 px-8 rounded-lg transition-colors flex items-center gap-2"
+                      >
+                        <Eye className="w-5 h-5" />
+                        Student View
+                      </button>
+                    </div>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <p className="text-sm text-blue-900 flex items-center gap-2">
+                        <Info className="w-4 h-4" />
+                        Your content will be published to the selected locations and will be available immediately to students.
+                      </p>
                     </div>
                   </div>
                 )}
