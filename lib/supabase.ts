@@ -42,7 +42,10 @@ export type Lecture = {
   duration: number | null;
   content_style: string[];
   script_prompt: string;
+  script_file_url: string | null;
   generated_content: any;
+  avatar: 'professional_male' | 'professional_female' | 'casual_male' | 'casual_female' | null;
+  video_length: number;
   library_personal: boolean;
   library_usc: boolean;
   status: 'draft' | 'generating' | 'completed';

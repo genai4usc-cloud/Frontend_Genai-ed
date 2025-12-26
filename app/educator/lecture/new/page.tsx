@@ -2,15 +2,11 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase, Profile, Course, LectureMaterial } from '@/lib/supabase';
+import { supabase, Profile, Course } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
-import { ArrowLeft, Upload, File, Check, ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { ArrowLeft, Upload, File, Check, ChevronDown, ChevronUp, Info, Video, Mic, FileText, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { uploadMultipleFiles, validateFileSize } from '@/lib/fileUpload';
-
-type CourseWithMaterials = Course & {
-  materials: Array<{ url: string; name: string; courseTitle: string; courseCode: string }>;
-};
+import { validateFileSize } from '@/lib/fileUpload';
 
 type MaterialWithType = {
   url: string;
@@ -21,13 +17,16 @@ type MaterialWithType = {
   courseCode?: string;
 };
 
+type AvatarType = 'professional_male' | 'professional_female' | 'casual_male' | 'casual_female';
+
 export default function CreateLecture() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentStep, setCurrentStep] = useState(1);
+  const [expandedStep, setExpandedStep] = useState(1);
 
-  const [courses, setCourses] = useState<CourseWithMaterials[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([]);
   const [addToPersonalLibrary, setAddToPersonalLibrary] = useState(false);
   const [addToUSCLibrary, setAddToUSCLibrary] = useState(false);
@@ -37,8 +36,20 @@ export default function CreateLecture() {
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([]);
   const [allMaterials, setAllMaterials] = useState<MaterialWithType[]>([]);
 
-  const [expandedStep, setExpandedStep] = useState(1);
+  const [contentStyles, setContentStyles] = useState<string[]>([]);
+
+  const [scriptMode, setScriptMode] = useState<'direct' | 'ai'>('ai');
+  const [scriptDirect, setScriptDirect] = useState('');
+  const [scriptFile, setScriptFile] = useState<File | null>(null);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [videoLength, setVideoLength] = useState(5);
+  const [generatedScript, setGeneratedScript] = useState('');
+  const [scriptGenerated, setScriptGenerated] = useState(false);
+
+  const [selectedAvatar, setSelectedAvatar] = useState<AvatarType | null>(null);
+
   const additionalFilesInputRef = useRef<HTMLInputElement>(null);
+  const scriptFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     checkAuth();
@@ -83,11 +94,7 @@ export default function CreateLecture() {
         .order('created_at', { ascending: false });
 
       if (coursesData) {
-        const coursesWithMaterials: CourseWithMaterials[] = coursesData.map(course => ({
-          ...course,
-          materials: []
-        }));
-        setCourses(coursesWithMaterials);
+        setCourses(coursesData);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -164,6 +171,18 @@ export default function CreateLecture() {
     setAdditionalFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleScriptFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!validateFileSize(file, 5)) {
+      toast.error('Script file exceeds 5MB limit');
+      return;
+    }
+
+    setScriptFile(file);
+  };
+
   const handleContinueToMaterials = () => {
     if (selectedCourseIds.length === 0 && !addToPersonalLibrary && !addToUSCLibrary) {
       toast.error('Please select at least one course or library');
@@ -172,23 +191,6 @@ export default function CreateLecture() {
 
     setCurrentStep(2);
     setExpandedStep(2);
-
-    const materials: MaterialWithType[] = [];
-
-    preloadedMaterials.forEach(material => {
-      if (selectedPreloadedMaterialUrls.includes(material.url)) {
-        materials.push({
-          url: material.url,
-          name: material.name,
-          type: 'main',
-          sourceCourseId: material.sourceCourseId,
-          courseTitle: material.courseTitle,
-          courseCode: material.courseCode
-        });
-      }
-    });
-
-    setAllMaterials(materials);
   };
 
   const handleContinueToContentStyle = () => {
@@ -218,6 +220,62 @@ export default function CreateLecture() {
     );
   };
 
+  const toggleContentStyle = (style: string) => {
+    setContentStyles(prev =>
+      prev.includes(style)
+        ? prev.filter(s => s !== style)
+        : [...prev, style]
+    );
+  };
+
+  const handleContinueToScriptPrompt = () => {
+    if (contentStyles.length === 0) {
+      toast.error('Please select at least one content style');
+      return;
+    }
+
+    setCurrentStep(4);
+    setExpandedStep(4);
+  };
+
+  const handleGenerateScript = async () => {
+    setScriptGenerated(true);
+    setGeneratedScript(`Introduction:
+Welcome to today's lecture. In this ${videoLength}-minute video, we'll explore Create an engaging educational video script about the topic.
+
+Main Content:
+[Generated content based on your prompt would appear here...]
+
+Conclusion:
+Thank you for watching. Please review the materials and complete the assignment.`);
+    toast.success('Script generated successfully!');
+  };
+
+  const handleContinueToAvatarSelection = () => {
+    if (scriptMode === 'direct' && !scriptDirect && !scriptFile) {
+      toast.error('Please enter a script or upload a script file');
+      return;
+    }
+
+    if (scriptMode === 'ai' && !scriptGenerated) {
+      toast.error('Please generate a script first');
+      return;
+    }
+
+    setCurrentStep(5);
+    setExpandedStep(5);
+  };
+
+  const handleContinueToGenerateContent = () => {
+    if (!selectedAvatar) {
+      toast.error('Please select an avatar');
+      return;
+    }
+
+    setCurrentStep(6);
+    setExpandedStep(6);
+  };
+
   const getFileExtension = (filename: string) => {
     const ext = filename.split('.').pop()?.toUpperCase();
     return ext || 'FILE';
@@ -236,8 +294,15 @@ export default function CreateLecture() {
     { number: 2, title: 'Select Materials', subtitle: 'Add any additional materials for the lecture' },
     { number: 3, title: 'Select Content Style', subtitle: 'Choose one or more content formats' },
     { number: 4, title: 'Script or Prompt Engineering', subtitle: 'Add your script or generate with AI' },
-    { number: 5, title: 'Generate Content', subtitle: 'Review and regenerate if needed' },
-    { number: 6, title: 'Publish Content', subtitle: 'Choose where to publish and download options' }
+    { number: 5, title: 'Select Avatar', subtitle: 'Choose an AI presenter' },
+    { number: 6, title: 'Generate Content', subtitle: 'Review and regenerate if needed' }
+  ];
+
+  const avatarOptions = [
+    { id: 'professional_male', label: 'Professional Male', emoji: '👨‍💼' },
+    { id: 'professional_female', label: 'Professional Female', emoji: '👩‍💼' },
+    { id: 'casual_male', label: 'Casual Male', emoji: '🙋‍♂️' },
+    { id: 'casual_female', label: 'Casual Female', emoji: '🙋‍♀️' }
   ];
 
   return (
@@ -263,7 +328,7 @@ export default function CreateLecture() {
         </div>
 
         <div className="space-y-4">
-          {steps.map((step, index) => {
+          {steps.map((step) => {
             const isCompleted = currentStep > step.number;
             const isCurrent = currentStep === step.number;
             const isExpanded = expandedStep === step.number;
@@ -467,28 +532,226 @@ export default function CreateLecture() {
                 )}
 
                 {isExpanded && step.number === 3 && (
-                  <div className="p-6 pt-0">
-                    <p className="text-gray-600 mb-4">Content style selection will be implemented in a future update.</p>
+                  <div className="p-6 pt-0 space-y-6">
+                    <div className="grid grid-cols-3 gap-4">
+                      <button
+                        onClick={() => toggleContentStyle('video')}
+                        className={`p-8 border-2 rounded-xl text-center transition-all ${
+                          contentStyles.includes('video')
+                            ? 'border-[#990000] bg-red-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <Video className={`w-12 h-12 mx-auto mb-4 ${contentStyles.includes('video') ? 'text-[#990000]' : 'text-gray-400'}`} />
+                        <h4 className="font-bold text-gray-900 mb-1">Video</h4>
+                        <p className="text-sm text-gray-600">AI Avatar with voice</p>
+                      </button>
+
+                      <button
+                        onClick={() => toggleContentStyle('audio')}
+                        className={`p-8 border-2 rounded-xl text-center transition-all ${
+                          contentStyles.includes('audio')
+                            ? 'border-[#990000] bg-red-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <Mic className={`w-12 h-12 mx-auto mb-4 ${contentStyles.includes('audio') ? 'text-[#990000]' : 'text-gray-400'}`} />
+                        <h4 className="font-bold text-gray-900 mb-1">Audio</h4>
+                        <p className="text-sm text-gray-600">Voice narration only</p>
+                      </button>
+
+                      <button
+                        onClick={() => toggleContentStyle('powerpoint')}
+                        className={`p-8 border-2 rounded-xl text-center transition-all ${
+                          contentStyles.includes('powerpoint')
+                            ? 'border-[#990000] bg-red-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <FileText className={`w-12 h-12 mx-auto mb-4 ${contentStyles.includes('powerpoint') ? 'text-[#990000]' : 'text-gray-400'}`} />
+                        <h4 className="font-bold text-gray-900 mb-1">PowerPoint</h4>
+                        <p className="text-sm text-gray-600">Slides only</p>
+                      </button>
+                    </div>
+
+                    {contentStyles.length > 0 && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-sm text-blue-900">
+                          <span className="font-semibold">Selected: </span>
+                          {contentStyles.map(s => s.toUpperCase()).join(', ')}
+                        </p>
+                      </div>
+                    )}
+
                     <button
-                      onClick={() => {
-                        setCurrentStep(4);
-                        setExpandedStep(4);
-                      }}
+                      onClick={handleContinueToScriptPrompt}
                       className="bg-[#990000] hover:bg-[#770000] text-white font-bold py-3 px-8 rounded-lg transition-colors"
                     >
-                      Continue to Script/Prompt
+                      Continue to Script & Prompt
                     </button>
                   </div>
                 )}
 
                 {isExpanded && step.number === 4 && (
-                  <div className="p-6 pt-0">
-                    <p className="text-gray-600 mb-4">Script and prompt engineering will be implemented in a future update.</p>
+                  <div className="p-6 pt-0 space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        onClick={() => setScriptMode('direct')}
+                        className={`p-6 border-2 rounded-xl text-center transition-all ${
+                          scriptMode === 'direct'
+                            ? 'border-[#990000] bg-red-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <FileText className={`w-8 h-8 mx-auto mb-3 ${scriptMode === 'direct' ? 'text-[#990000]' : 'text-gray-400'}`} />
+                        <h4 className="font-bold text-gray-900">Add Script Directly</h4>
+                      </button>
+
+                      <button
+                        onClick={() => setScriptMode('ai')}
+                        className={`p-6 border-2 rounded-xl text-center transition-all ${
+                          scriptMode === 'ai'
+                            ? 'border-[#990000] bg-red-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <Sparkles className={`w-8 h-8 mx-auto mb-3 ${scriptMode === 'ai' ? 'text-[#990000]' : 'text-gray-400'}`} />
+                        <h4 className="font-bold text-gray-900">Generate with AI Prompt</h4>
+                      </button>
+                    </div>
+
+                    {scriptMode === 'direct' && (
+                      <div className="space-y-4">
+                        <div>
+                          <h4 className="font-semibold text-gray-900 mb-3">Enter Script</h4>
+                          <textarea
+                            value={scriptDirect}
+                            onChange={(e) => setScriptDirect(e.target.value)}
+                            placeholder="Type your script here..."
+                            className="w-full h-40 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent"
+                          />
+                        </div>
+
+                        <div className="text-center">
+                          <p className="text-gray-600 mb-4">or</p>
+                          <input
+                            ref={scriptFileInputRef}
+                            type="file"
+                            accept=".txt,.doc,.docx,.pdf"
+                            onChange={handleScriptFileSelect}
+                            className="hidden"
+                          />
+                          <button
+                            onClick={() => scriptFileInputRef.current?.click()}
+                            className="w-full border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-gray-400 transition-colors"
+                          >
+                            <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                            <p className="text-gray-700 font-medium">Upload Script File</p>
+                            <p className="text-gray-500 text-sm">TXT, DOC, DOCX, PDF</p>
+                          </button>
+
+                          {scriptFile && (
+                            <div className="mt-4 bg-gray-50 p-4 rounded-lg flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <File className="w-5 h-5 text-gray-400" />
+                                <span className="font-medium text-gray-900">{scriptFile.name}</span>
+                              </div>
+                              <button
+                                onClick={() => setScriptFile(null)}
+                                className="text-red-600 hover:text-red-700 text-sm font-medium"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {scriptMode === 'ai' && (
+                      <div className="space-y-4">
+                        <div>
+                          <h4 className="font-semibold text-gray-900 mb-3">AI Prompt</h4>
+                          <textarea
+                            value={aiPrompt}
+                            onChange={(e) => setAiPrompt(e.target.value)}
+                            placeholder="Describe what you want the AI to create. Leave blank to use default prompt..."
+                            className="w-full h-32 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent"
+                          />
+                          <p className="text-sm text-gray-500 mt-2">
+                            Default: "Create an engaging educational video script about the topic"
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="block font-semibold text-gray-900 mb-3">Video Length (minutes)</label>
+                          <select
+                            value={videoLength}
+                            onChange={(e) => setVideoLength(Number(e.target.value))}
+                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent"
+                          >
+                            <option value={5}>5 minutes</option>
+                            <option value={10}>10 minutes</option>
+                            <option value={15}>15 minutes</option>
+                            <option value={20}>20 minutes</option>
+                            <option value={30}>30 minutes</option>
+                            <option value={45}>45 minutes</option>
+                            <option value={60}>60 minutes</option>
+                          </select>
+                        </div>
+
+                        <button
+                          onClick={handleGenerateScript}
+                          className="bg-[#FFCC00] hover:bg-[#E6B800] text-black font-bold py-3 px-8 rounded-lg transition-colors flex items-center gap-2"
+                        >
+                          <Sparkles className="w-5 h-5" />
+                          Generate Script with AI
+                        </button>
+
+                        {scriptGenerated && (
+                          <div>
+                            <h4 className="font-semibold text-gray-900 mb-3">Generated Script (You can edit)</h4>
+                            <textarea
+                              value={generatedScript}
+                              onChange={(e) => setGeneratedScript(e.target.value)}
+                              className="w-full h-48 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent bg-gray-50"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <button
-                      onClick={() => {
-                        setCurrentStep(5);
-                        setExpandedStep(5);
-                      }}
+                      onClick={handleContinueToAvatarSelection}
+                      disabled={scriptMode === 'direct' ? (!scriptDirect && !scriptFile) : !scriptGenerated}
+                      className="bg-[#990000] hover:bg-[#770000] text-white font-bold py-3 px-8 rounded-lg transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                    >
+                      Continue to Avatar Selection
+                    </button>
+                  </div>
+                )}
+
+                {isExpanded && step.number === 5 && (
+                  <div className="p-6 pt-0 space-y-6">
+                    <div className="grid grid-cols-4 gap-4">
+                      {avatarOptions.map((avatar) => (
+                        <button
+                          key={avatar.id}
+                          onClick={() => setSelectedAvatar(avatar.id as AvatarType)}
+                          className={`p-6 border-2 rounded-xl text-center transition-all ${
+                            selectedAvatar === avatar.id
+                              ? 'border-[#990000] bg-red-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="text-5xl mb-3">{avatar.emoji}</div>
+                          <h4 className="font-bold text-gray-900 text-sm">{avatar.label}</h4>
+                        </button>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={handleContinueToGenerateContent}
                       className="bg-[#990000] hover:bg-[#770000] text-white font-bold py-3 px-8 rounded-lg transition-colors"
                     >
                       Continue to Generate Content
@@ -496,30 +759,53 @@ export default function CreateLecture() {
                   </div>
                 )}
 
-                {isExpanded && step.number === 5 && (
-                  <div className="p-6 pt-0">
-                    <p className="text-gray-600 mb-4">Content generation will be implemented in a future update.</p>
-                    <button
-                      onClick={() => {
-                        setCurrentStep(6);
-                        setExpandedStep(6);
-                      }}
-                      className="bg-[#990000] hover:bg-[#770000] text-white font-bold py-3 px-8 rounded-lg transition-colors"
-                    >
-                      Continue to Publish
-                    </button>
-                  </div>
-                )}
-
                 {isExpanded && step.number === 6 && (
-                  <div className="p-6 pt-0">
-                    <p className="text-gray-600 mb-4">Publish options will be implemented in a future update.</p>
-                    <button
-                      onClick={() => toast.success('Lecture creation flow completed! Full implementation coming soon.')}
-                      className="bg-[#990000] hover:bg-[#770000] text-white font-bold py-3 px-8 rounded-lg transition-colors"
-                    >
-                      Publish Lecture
-                    </button>
+                  <div className="p-6 pt-0 space-y-6">
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
+                      <Sparkles className="w-16 h-16 text-[#990000] mx-auto mb-4" />
+                      <h3 className="text-xl font-bold text-gray-900 mb-2">Ready to Generate!</h3>
+                      <p className="text-gray-600 mb-6">
+                        Your lecture is configured and ready. Click the button below to start generating your AI-powered content.
+                      </p>
+                      <button
+                        onClick={() => {
+                          toast.success('Content generation will be implemented soon!');
+                        }}
+                        className="bg-[#990000] hover:bg-[#770000] text-white font-bold py-4 px-12 rounded-lg transition-colors text-lg"
+                      >
+                        Generate Content
+                      </button>
+                    </div>
+
+                    <div className="border border-gray-200 rounded-xl p-6">
+                      <h4 className="font-bold text-gray-900 mb-4">Summary</h4>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Courses Selected:</span>
+                          <span className="font-medium text-gray-900">{selectedCourseIds.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Materials Added:</span>
+                          <span className="font-medium text-gray-900">{allMaterials.length + additionalFiles.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Content Styles:</span>
+                          <span className="font-medium text-gray-900">{contentStyles.join(', ').toUpperCase()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Avatar:</span>
+                          <span className="font-medium text-gray-900">
+                            {avatarOptions.find(a => a.id === selectedAvatar)?.label || 'None'}
+                          </span>
+                        </div>
+                        {scriptMode === 'ai' && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Video Length:</span>
+                            <span className="font-medium text-gray-900">{videoLength} minutes</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
