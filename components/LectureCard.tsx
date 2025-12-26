@@ -15,7 +15,7 @@ export default function LectureCard({ lecture }: LectureCardProps) {
     <div className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all border border-gray-100 overflow-hidden">
       <div className="p-6">
         <div className="flex items-start gap-3 mb-4">
-          <div className="bg-[#990000] p-2 rounded-lg">
+          <div className="bg-brand-maroon p-2 rounded-lg">
             <PlayCircle className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1">
@@ -39,7 +39,7 @@ export default function LectureCard({ lecture }: LectureCardProps) {
               router.push(`/educator/lecture/${lecture.id}`);
             }
           }}
-          className="w-full bg-[#FFCC00] hover:bg-[#EDB900] text-black font-bold py-3 rounded-lg transition-colors"
+          className="w-full bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 rounded-lg transition-colors"
         >
           Open Lecture
         </button>

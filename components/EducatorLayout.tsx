@@ -50,11 +50,11 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-[#990000] text-white px-6 py-4 shadow-lg">
+      <header className="bg-brand-maroon text-white px-6 py-4 shadow-lg">
         <div className="flex items-center justify-between max-w-screen-2xl mx-auto">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center">
-              <span className="text-[#990000] font-bold text-sm">USC</span>
+              <span className="text-brand-maroon font-bold text-sm">USC</span>
             </div>
             <div>
               <h1 className="text-xl font-bold">USC GenAI Learning Platform</h1>
@@ -63,7 +63,7 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
           </div>
 
           <div className="flex items-center gap-4">
-            <button className="bg-[#FFCC00] text-black px-6 py-2 rounded-lg font-semibold hover:bg-[#EDB900] transition-colors flex items-center gap-2">
+            <button className="bg-brand-yellow text-black px-6 py-2 rounded-lg font-semibold hover:bg-brand-yellow-hover transition-colors flex items-center gap-2">
               <LogOut className="w-4 h-4" />
               Educator Portal
             </button>
@@ -74,7 +74,7 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
                   {profile.first_name} {profile.last_name}
                 </div>
               </div>
-              <div className="w-10 h-10 bg-[#FFCC00] rounded-full flex items-center justify-center">
+              <div className="w-10 h-10 bg-brand-yellow rounded-full flex items-center justify-center">
                 <span className="text-black font-bold text-sm">{getInitials()}</span>
               </div>
             </div>
@@ -94,7 +94,7 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
                   onClick={() => router.push(item.path)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                     isActive
-                      ? 'bg-[#990000] text-white'
+                      ? 'bg-brand-maroon text-white'
                       : 'text-gray-700 hover:bg-gray-100'
                   }`}
                 >
@@ -118,7 +118,7 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
                     onClick={() => router.push(`/educator/course/${course.id}`)}
                     className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
                       isActive
-                        ? 'bg-[#990000] text-white'
+                        ? 'bg-brand-maroon text-white'
                         : 'text-gray-700 hover:bg-gray-100'
                     }`}
                   >

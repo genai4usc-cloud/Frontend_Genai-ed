@@ -26,7 +26,7 @@ export default function SignupCard({ role }: SignupCardProps) {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <div className="bg-[#990000] text-white p-6 relative">
+          <div className="bg-brand-maroon text-white p-6 relative">
             <button
               onClick={() => router.push('/')}
               className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-white"
@@ -62,7 +62,7 @@ export default function SignupCard({ role }: SignupCardProps) {
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     placeholder="Enter your first name"
-                    className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
+                    className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                     required
                   />
                 </div>
@@ -80,7 +80,7 @@ export default function SignupCard({ role }: SignupCardProps) {
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     placeholder="Enter your last name"
-                    className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
+                    className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                     required
                   />
                 </div>
@@ -98,7 +98,7 @@ export default function SignupCard({ role }: SignupCardProps) {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="Enter your email"
-                    className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
+                    className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                     required
                   />
                 </div>
@@ -116,7 +116,7 @@ export default function SignupCard({ role }: SignupCardProps) {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Create a password"
-                    className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
+                    className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                     required
                   />
                 </div>
@@ -124,7 +124,7 @@ export default function SignupCard({ role }: SignupCardProps) {
 
               <button
                 type="submit"
-                className="w-full bg-[#FFCC00] hover:bg-[#EDB900] text-black font-bold py-3 rounded-lg transition-colors focus:outline-none focus:ring-4 focus:ring-[#FFCC00]/50 shadow-md hover:shadow-lg"
+                className="w-full bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 rounded-lg transition-colors focus:outline-none focus:ring-4 focus:ring-[#FFCC00]/50 shadow-md hover:shadow-lg"
               >
                 Create Account
               </button>
@@ -135,7 +135,7 @@ export default function SignupCard({ role }: SignupCardProps) {
                 Already have an account?{' '}
                 <a
                   href={`/${role}/login`}
-                  className="text-[#990000] font-medium hover:underline focus:outline-none focus:ring-2 focus:ring-[#990000] rounded px-1"
+                  className="text-brand-maroon font-medium hover:underline focus:outline-none focus:ring-2 focus:ring-brand-maroon rounded px-1"
                 >
                   Sign in
                 </a>
@@ -145,11 +145,11 @@ export default function SignupCard({ role }: SignupCardProps) {
             <div className="mt-8 pt-6 border-t border-gray-200">
               <p className="text-xs text-center text-gray-500">
                 By continuing, you agree to GenAI&apos;s{' '}
-                <a href="#" className="text-[#990000] hover:underline">
+                <a href="#" className="text-brand-maroon hover:underline">
                   Terms of Service
                 </a>{' '}
                 and{' '}
-                <a href="#" className="text-[#990000] hover:underline">
+                <a href="#" className="text-brand-maroon hover:underline">
                   Privacy Policy
                 </a>
               </p>

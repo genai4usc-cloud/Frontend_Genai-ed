@@ -28,14 +28,14 @@ export default function RoleCTA() {
         <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-6">
           <button
             onClick={handleEducatorClick}
-            className="bg-[#FFCC00] text-black px-12 py-4 rounded-lg text-xl hover:bg-[#e6b800] transition-all transform hover:scale-105 shadow-lg"
+            className="bg-brand-yellow text-black px-12 py-4 rounded-lg text-xl hover:bg-brand-yellow-hover transition-all transform hover:scale-105 shadow-lg"
           >
             I&apos;m an Educator
           </button>
 
           <button
             onClick={handleStudentClick}
-            className="bg-[#990000] text-white px-12 py-4 rounded-lg text-xl hover:bg-[#800000] transition-all transform hover:scale-105 shadow-lg"
+            className="bg-brand-maroon text-white px-12 py-4 rounded-lg text-xl hover:bg-brand-maroon-hover transition-all transform hover:scale-105 shadow-lg"
           >
             I&apos;m a Student
           </button>
@@ -44,7 +44,7 @@ export default function RoleCTA() {
         <div className="text-center">
           <a
             href="#"
-            className="text-sm text-gray-700 hover:text-[#990000] underline transition-colors focus:outline-none focus:ring-2 focus:ring-[#990000] rounded px-2 py-1"
+            className="text-sm text-gray-700 hover:text-brand-maroon underline transition-colors focus:outline-none focus:ring-2 focus:ring-brand-maroon rounded px-2 py-1"
           >
             Sign in as an administrator
           </a>

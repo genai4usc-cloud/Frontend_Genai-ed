@@ -15,7 +15,7 @@ export default function CourseCard({ course }: CourseCardProps) {
     <div className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all border border-gray-100 overflow-hidden">
       <div className="p-6">
         <div className="mb-4">
-          <span className="inline-block bg-[#990000] text-white text-xs font-bold px-3 py-1 rounded-full">
+          <span className="inline-block bg-brand-maroon text-white text-xs font-bold px-3 py-1 rounded-full">
             {course.code}
           </span>
         </div>
@@ -31,7 +31,7 @@ export default function CourseCard({ course }: CourseCardProps) {
         </div>
         <button
           onClick={() => router.push(`/educator/course/${course.id}`)}
-          className="w-full bg-[#FFCC00] hover:bg-[#EDB900] text-black font-bold py-3 rounded-lg transition-colors"
+          className="w-full bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 rounded-lg transition-colors"
         >
           Manage Course
         </button>

@@ -60,6 +60,12 @@ const config: Config = {
           '4': 'hsl(var(--chart-4))',
           '5': 'hsl(var(--chart-5))',
         },
+        brand: {
+          maroon: 'hsl(var(--brand-maroon))',
+          'maroon-hover': 'hsl(var(--brand-maroon-hover))',
+          yellow: 'hsl(var(--brand-yellow))',
+          'yellow-hover': 'hsl(var(--brand-yellow-hover))',
+        },
       },
       keyframes: {
         'accordion-down': {

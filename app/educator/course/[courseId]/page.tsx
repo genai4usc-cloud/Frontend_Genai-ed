@@ -361,7 +361,7 @@ export default function ManageCourse() {
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Course Not Found</h1>
           <button
             onClick={() => router.push('/educator/dashboard')}
-            className="text-[#990000] hover:text-[#770000] font-medium"
+            className="text-brand-maroon hover:text-brand-maroon-hover font-medium"
           >
             Return to Dashboard
           </button>
@@ -390,7 +390,7 @@ export default function ManageCourse() {
           <button
             onClick={handleUpdateCourse}
             disabled={saving}
-            className="bg-[#990000] hover:bg-[#770000] text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save className="w-5 h-5" />
             {saving ? 'Updating...' : 'Update Course'}
@@ -400,7 +400,7 @@ export default function ManageCourse() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 space-y-8">
           <div>
             <div className="flex items-center gap-3 mb-6">
-              <div className="bg-[#990000] p-3 rounded-xl">
+              <div className="bg-brand-maroon p-3 rounded-xl">
                 <GraduationCap className="w-6 h-6 text-white" />
               </div>
               <h2 className="text-xl font-bold text-gray-900">Basic Information</h2>
@@ -414,7 +414,7 @@ export default function ManageCourse() {
                 <select
                   value={semester}
                   onChange={(e) => setSemester(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
                 >
                   <option value="Fall 2025">Fall 2025</option>
                   <option value="Spring 2025">Spring 2025</option>
@@ -433,7 +433,7 @@ export default function ManageCourse() {
                   value={courseNumber}
                   onChange={(e) => setCourseNumber(e.target.value)}
                   placeholder="e.g., ECON 203"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
                 />
               </div>
 
@@ -446,7 +446,7 @@ export default function ManageCourse() {
                   value={section}
                   onChange={(e) => setSection(e.target.value)}
                   placeholder="e.g., 001"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
                 />
               </div>
 
@@ -459,7 +459,7 @@ export default function ManageCourse() {
                   value={courseTitle}
                   onChange={(e) => setCourseTitle(e.target.value)}
                   placeholder="e.g., Principles of Microeconomics"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
                 />
               </div>
 
@@ -472,7 +472,7 @@ export default function ManageCourse() {
                   value={instructorName}
                   onChange={(e) => setInstructorName(e.target.value)}
                   placeholder="e.g., Dr. John Smith"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
                 />
               </div>
             </div>
@@ -480,7 +480,7 @@ export default function ManageCourse() {
 
           <div className="pt-6 border-t border-gray-200">
             <div className="flex items-center gap-3 mb-6">
-              <div className="bg-[#FFCC00] p-3 rounded-xl">
+              <div className="bg-brand-yellow p-3 rounded-xl">
                 <FileText className="w-6 h-6 text-black" />
               </div>
               <h2 className="text-xl font-bold text-gray-900">Syllabus</h2>
@@ -513,7 +513,7 @@ export default function ManageCourse() {
                   </div>
                   <button
                     onClick={() => syllabusInputRef.current?.click()}
-                    className="text-[#990000] hover:text-[#770000] font-medium text-sm"
+                    className="text-brand-maroon hover:text-brand-maroon-hover font-medium text-sm"
                   >
                     Replace
                   </button>
@@ -554,7 +554,7 @@ export default function ManageCourse() {
 
           <div className="pt-6 border-t border-gray-200">
             <div className="flex items-center gap-3 mb-6">
-              <div className="bg-[#990000] p-3 rounded-xl">
+              <div className="bg-brand-maroon p-3 rounded-xl">
                 <Users className="w-6 h-6 text-white" />
               </div>
               <h2 className="text-xl font-bold text-gray-900">Teaching Assistants</h2>
@@ -567,11 +567,11 @@ export default function ManageCourse() {
                 onChange={(e) => setTaInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && addTeachingAssistant()}
                 placeholder="Enter TA email"
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent"
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
               />
               <button
                 onClick={addTeachingAssistant}
-                className="bg-[#FFCC00] hover:bg-[#EDB900] p-3 rounded-lg transition-colors"
+                className="bg-brand-yellow hover:bg-brand-yellow-hover p-3 rounded-lg transition-colors"
               >
                 <Plus className="w-6 h-6 text-black" />
               </button>
@@ -596,7 +596,7 @@ export default function ManageCourse() {
 
           <div className="pt-6 border-t border-gray-200">
             <div className="flex items-center gap-3 mb-6">
-              <div className="bg-[#FFCC00] p-3 rounded-xl">
+              <div className="bg-brand-yellow p-3 rounded-xl">
                 <Users className="w-6 h-6 text-black" />
               </div>
               <h2 className="text-xl font-bold text-gray-900">Students</h2>
@@ -625,11 +625,11 @@ export default function ManageCourse() {
                 onChange={(e) => setStudentInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && addStudent()}
                 placeholder="Enter student email"
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent"
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
               />
               <button
                 onClick={addStudent}
-                className="bg-[#FFCC00] hover:bg-[#EDB900] p-3 rounded-lg transition-colors"
+                className="bg-brand-yellow hover:bg-brand-yellow-hover p-3 rounded-lg transition-colors"
               >
                 <Plus className="w-6 h-6 text-black" />
               </button>
@@ -654,7 +654,7 @@ export default function ManageCourse() {
 
           <div className="pt-6 border-t border-gray-200">
             <div className="flex items-center gap-3 mb-6">
-              <div className="bg-[#FFCC00] p-3 rounded-xl">
+              <div className="bg-brand-yellow p-3 rounded-xl">
                 <BookOpen className="w-6 h-6 text-black" />
               </div>
               <h2 className="text-xl font-bold text-gray-900">Textbooks</h2>
@@ -667,11 +667,11 @@ export default function ManageCourse() {
                 onChange={(e) => setTextbookInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && addTextbook()}
                 placeholder="Enter textbook title and ISBN"
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent"
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
               />
               <button
                 onClick={addTextbook}
-                className="bg-[#FFCC00] hover:bg-[#EDB900] p-3 rounded-lg transition-colors"
+                className="bg-brand-yellow hover:bg-brand-yellow-hover p-3 rounded-lg transition-colors"
               >
                 <Plus className="w-6 h-6 text-black" />
               </button>
@@ -696,7 +696,7 @@ export default function ManageCourse() {
 
           <div className="pt-6 border-t border-gray-200">
             <div className="flex items-center gap-3 mb-6">
-              <div className="bg-[#990000] p-3 rounded-xl">
+              <div className="bg-brand-maroon p-3 rounded-xl">
                 <FileText className="w-6 h-6 text-white" />
               </div>
               <h2 className="text-xl font-bold text-gray-900">Course Materials</h2>
@@ -771,7 +771,7 @@ export default function ManageCourse() {
 
           <div className="pt-6 border-t border-gray-200">
             <div className="flex items-center gap-3 mb-6">
-              <div className="bg-[#990000] p-3 rounded-xl">
+              <div className="bg-brand-maroon p-3 rounded-xl">
                 <FolderOpen className="w-6 h-6 text-white" />
               </div>
               <h2 className="text-xl font-bold text-gray-900">Background Materials</h2>

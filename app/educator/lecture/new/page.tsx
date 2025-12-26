@@ -362,7 +362,7 @@ Thank you for watching. Please review the materials and complete the assignment.
           </div>
         </div>
 
-        <div className="bg-[#990000] text-white rounded-2xl p-8">
+        <div className="bg-brand-maroon text-white rounded-2xl p-8">
           <h2 className="text-2xl font-bold mb-2">Create New Lecture</h2>
           <p className="text-white/90">Follow the steps below to create AI-powered educational content</p>
         </div>
@@ -380,7 +380,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                   className="w-full flex items-center gap-4 p-6 text-left hover:bg-gray-50 transition-colors"
                 >
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg ${
-                    isCompleted ? 'bg-green-600' : isCurrent ? 'bg-[#990000]' : 'bg-gray-300'
+                    isCompleted ? 'bg-green-600' : isCurrent ? 'bg-brand-maroon' : 'bg-gray-300'
                   }`}>
                     {isCompleted ? <Check className="w-6 h-6" /> : step.number}
                   </div>
@@ -402,7 +402,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                               type="checkbox"
                               checked={selectedCourseIds.includes(course.id)}
                               onChange={() => toggleCourse(course.id)}
-                              className="w-5 h-5 text-[#990000] rounded focus:ring-[#990000]"
+                              className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon"
                             />
                             <span className="font-medium text-gray-900">{course.code} - {course.title}</span>
                           </label>
@@ -418,7 +418,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                             type="checkbox"
                             checked={addToPersonalLibrary}
                             onChange={(e) => setAddToPersonalLibrary(e.target.checked)}
-                            className="w-5 h-5 text-[#990000] rounded focus:ring-[#990000]"
+                            className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon"
                           />
                           <span className="font-medium text-gray-900">Personal Library</span>
                         </label>
@@ -427,7 +427,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                             type="checkbox"
                             checked={addToUSCLibrary}
                             onChange={(e) => setAddToUSCLibrary(e.target.checked)}
-                            className="w-5 h-5 text-[#990000] rounded focus:ring-[#990000]"
+                            className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon"
                           />
                           <span className="font-medium text-gray-900">USC Library</span>
                         </label>
@@ -436,7 +436,7 @@ Thank you for watching. Please review the materials and complete the assignment.
 
                     <button
                       onClick={handleContinueToMaterials}
-                      className="bg-[#990000] hover:bg-[#770000] text-white font-bold py-3 px-8 rounded-lg transition-colors"
+                      className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-8 rounded-lg transition-colors"
                     >
                       Continue to Materials Selection
                     </button>
@@ -464,7 +464,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                                 type="checkbox"
                                 checked={selectedPreloadedMaterialUrls.includes(material.url)}
                                 onChange={() => togglePreloadedMaterial(material.url)}
-                                className="w-5 h-5 text-[#990000] rounded focus:ring-[#990000]"
+                                className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon"
                               />
                               <File className="w-5 h-5 text-gray-400" />
                               <div className="flex-1">
@@ -539,7 +539,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                                   onClick={() => changeMaterialType(material.url, 'main')}
                                   className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
                                     material.type === 'main'
-                                      ? 'bg-[#990000] text-white'
+                                      ? 'bg-brand-maroon text-white'
                                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                   }`}
                                 >
@@ -549,7 +549,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                                   onClick={() => changeMaterialType(material.url, 'background')}
                                   className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
                                     material.type === 'background'
-                                      ? 'bg-[#FFCC00] text-black'
+                                      ? 'bg-brand-yellow text-black'
                                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                   }`}
                                 >
@@ -564,7 +564,7 @@ Thank you for watching. Please review the materials and complete the assignment.
 
                     <button
                       onClick={handleContinueToContentStyle}
-                      className="bg-[#990000] hover:bg-[#770000] text-white font-bold py-3 px-8 rounded-lg transition-colors"
+                      className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-8 rounded-lg transition-colors"
                     >
                       Continue to Content Style
                     </button>
@@ -578,11 +578,11 @@ Thank you for watching. Please review the materials and complete the assignment.
                         onClick={() => toggleContentStyle('video')}
                         className={`p-8 border-2 rounded-xl text-center transition-all ${
                           contentStyles.includes('video')
-                            ? 'border-[#990000] bg-red-50'
+                            ? 'border-brand-maroon bg-red-50'
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
-                        <Video className={`w-12 h-12 mx-auto mb-4 ${contentStyles.includes('video') ? 'text-[#990000]' : 'text-gray-400'}`} />
+                        <Video className={`w-12 h-12 mx-auto mb-4 ${contentStyles.includes('video') ? 'text-brand-maroon' : 'text-gray-400'}`} />
                         <h4 className="font-bold text-gray-900 mb-1">Video</h4>
                         <p className="text-sm text-gray-600">AI Avatar with voice</p>
                       </button>
@@ -591,11 +591,11 @@ Thank you for watching. Please review the materials and complete the assignment.
                         onClick={() => toggleContentStyle('audio')}
                         className={`p-8 border-2 rounded-xl text-center transition-all ${
                           contentStyles.includes('audio')
-                            ? 'border-[#990000] bg-red-50'
+                            ? 'border-brand-maroon bg-red-50'
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
-                        <Mic className={`w-12 h-12 mx-auto mb-4 ${contentStyles.includes('audio') ? 'text-[#990000]' : 'text-gray-400'}`} />
+                        <Mic className={`w-12 h-12 mx-auto mb-4 ${contentStyles.includes('audio') ? 'text-brand-maroon' : 'text-gray-400'}`} />
                         <h4 className="font-bold text-gray-900 mb-1">Audio</h4>
                         <p className="text-sm text-gray-600">Voice narration only</p>
                       </button>
@@ -604,11 +604,11 @@ Thank you for watching. Please review the materials and complete the assignment.
                         onClick={() => toggleContentStyle('powerpoint')}
                         className={`p-8 border-2 rounded-xl text-center transition-all ${
                           contentStyles.includes('powerpoint')
-                            ? 'border-[#990000] bg-red-50'
+                            ? 'border-brand-maroon bg-red-50'
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
-                        <FileText className={`w-12 h-12 mx-auto mb-4 ${contentStyles.includes('powerpoint') ? 'text-[#990000]' : 'text-gray-400'}`} />
+                        <FileText className={`w-12 h-12 mx-auto mb-4 ${contentStyles.includes('powerpoint') ? 'text-brand-maroon' : 'text-gray-400'}`} />
                         <h4 className="font-bold text-gray-900 mb-1">PowerPoint</h4>
                         <p className="text-sm text-gray-600">Slides only</p>
                       </button>
@@ -625,7 +625,7 @@ Thank you for watching. Please review the materials and complete the assignment.
 
                     <button
                       onClick={handleContinueToScriptPrompt}
-                      className="bg-[#990000] hover:bg-[#770000] text-white font-bold py-3 px-8 rounded-lg transition-colors"
+                      className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-8 rounded-lg transition-colors"
                     >
                       Continue to Script & Prompt
                     </button>
@@ -639,11 +639,11 @@ Thank you for watching. Please review the materials and complete the assignment.
                         onClick={() => setScriptMode('direct')}
                         className={`p-6 border-2 rounded-xl text-center transition-all ${
                           scriptMode === 'direct'
-                            ? 'border-[#990000] bg-red-50'
+                            ? 'border-brand-maroon bg-red-50'
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
-                        <FileText className={`w-8 h-8 mx-auto mb-3 ${scriptMode === 'direct' ? 'text-[#990000]' : 'text-gray-400'}`} />
+                        <FileText className={`w-8 h-8 mx-auto mb-3 ${scriptMode === 'direct' ? 'text-brand-maroon' : 'text-gray-400'}`} />
                         <h4 className="font-bold text-gray-900">Add Script Directly</h4>
                       </button>
 
@@ -651,11 +651,11 @@ Thank you for watching. Please review the materials and complete the assignment.
                         onClick={() => setScriptMode('ai')}
                         className={`p-6 border-2 rounded-xl text-center transition-all ${
                           scriptMode === 'ai'
-                            ? 'border-[#990000] bg-red-50'
+                            ? 'border-brand-maroon bg-red-50'
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
-                        <Sparkles className={`w-8 h-8 mx-auto mb-3 ${scriptMode === 'ai' ? 'text-[#990000]' : 'text-gray-400'}`} />
+                        <Sparkles className={`w-8 h-8 mx-auto mb-3 ${scriptMode === 'ai' ? 'text-brand-maroon' : 'text-gray-400'}`} />
                         <h4 className="font-bold text-gray-900">Generate with AI Prompt</h4>
                       </button>
                     </div>
@@ -668,7 +668,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                             value={scriptDirect}
                             onChange={(e) => setScriptDirect(e.target.value)}
                             placeholder="Type your script here..."
-                            className="w-full h-40 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent"
+                            className="w-full h-40 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
                           />
                         </div>
 
@@ -716,7 +716,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                             value={aiPrompt}
                             onChange={(e) => setAiPrompt(e.target.value)}
                             placeholder="Describe what you want the AI to create. Leave blank to use default prompt..."
-                            className="w-full h-32 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent"
+                            className="w-full h-32 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
                           />
                           <p className="text-sm text-gray-500 mt-2">
                             Default: "Create an engaging educational video script about the topic"
@@ -728,7 +728,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                           <select
                             value={videoLength}
                             onChange={(e) => setVideoLength(Number(e.target.value))}
-                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent"
+                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
                           >
                             <option value={5}>5 minutes</option>
                             <option value={10}>10 minutes</option>
@@ -742,7 +742,7 @@ Thank you for watching. Please review the materials and complete the assignment.
 
                         <button
                           onClick={handleGenerateScript}
-                          className="bg-[#FFCC00] hover:bg-[#E6B800] text-black font-bold py-3 px-8 rounded-lg transition-colors flex items-center gap-2"
+                          className="bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 px-8 rounded-lg transition-colors flex items-center gap-2"
                         >
                           <Sparkles className="w-5 h-5" />
                           Generate Script with AI
@@ -754,7 +754,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                             <textarea
                               value={generatedScript}
                               onChange={(e) => setGeneratedScript(e.target.value)}
-                              className="w-full h-48 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent bg-gray-50"
+                              className="w-full h-48 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent bg-gray-50"
                             />
                           </div>
                         )}
@@ -764,7 +764,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                     <button
                       onClick={handleContinueToAvatarSelection}
                       disabled={scriptMode === 'direct' ? (!scriptDirect && !scriptFile) : !scriptGenerated}
-                      className="bg-[#990000] hover:bg-[#770000] text-white font-bold py-3 px-8 rounded-lg transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                      className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-8 rounded-lg transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                     >
                       Continue to Avatar Selection
                     </button>
@@ -780,7 +780,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                           onClick={() => setSelectedAvatar(avatar.id as AvatarType)}
                           className={`p-6 border-2 rounded-xl text-center transition-all ${
                             selectedAvatar === avatar.id
-                              ? 'border-[#990000] bg-red-50'
+                              ? 'border-brand-maroon bg-red-50'
                               : 'border-gray-200 hover:border-gray-300'
                           }`}
                         >
@@ -792,7 +792,7 @@ Thank you for watching. Please review the materials and complete the assignment.
 
                     <button
                       onClick={handleContinueToGenerateContent}
-                      className="bg-[#990000] hover:bg-[#770000] text-white font-bold py-3 px-8 rounded-lg transition-colors"
+                      className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-8 rounded-lg transition-colors"
                     >
                       Continue to Generate Content
                     </button>
@@ -804,7 +804,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                     {!contentGenerated ? (
                       <>
                         <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
-                          <Sparkles className="w-16 h-16 text-[#990000] mx-auto mb-4" />
+                          <Sparkles className="w-16 h-16 text-brand-maroon mx-auto mb-4" />
                           <h3 className="text-xl font-bold text-gray-900 mb-2">Ready to Generate!</h3>
                           <p className="text-gray-600 mb-6">
                             Your lecture is configured and ready. Click the button below to start generating your AI-powered content.
@@ -812,7 +812,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                           <button
                             onClick={handleGenerateContent}
                             disabled={isGenerating}
-                            className="bg-[#990000] hover:bg-[#770000] text-white font-bold py-4 px-12 rounded-lg transition-colors text-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-4 px-12 rounded-lg transition-colors text-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
                           >
                             {isGenerating ? 'Generating...' : 'Generate Content'}
                           </button>
@@ -878,11 +878,11 @@ Thank you for watching. Please review the materials and complete the assignment.
                           <textarea
                             value={generatedScript}
                             onChange={(e) => setGeneratedScript(e.target.value)}
-                            className="w-full h-48 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent bg-white"
+                            className="w-full h-48 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent bg-white"
                           />
                           <button
                             onClick={handleRegenerateScript}
-                            className="mt-3 bg-[#FFCC00] hover:bg-[#E6B800] text-black font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2"
+                            className="mt-3 bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2"
                           >
                             <Sparkles className="w-5 h-5" />
                             Regenerate with Changes
@@ -894,7 +894,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                             <h4 className="font-semibold text-gray-900 mb-4">Edit Prompt & Regenerate</h4>
                             <button
                               onClick={handleRegenerateSlides}
-                              className="bg-[#FFCC00] hover:bg-[#E6B800] text-black font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2"
+                              className="bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2"
                             >
                               <Sparkles className="w-5 h-5" />
                               Regenerate Slides
@@ -929,7 +929,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                             type="checkbox"
                             checked={addToPersonalLibrary}
                             onChange={(e) => setAddToPersonalLibrary(e.target.checked)}
-                            className="w-5 h-5 text-[#990000] rounded focus:ring-[#990000]"
+                            className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon"
                           />
                           <span className="font-medium text-gray-900">Personal Library</span>
                         </label>
@@ -938,7 +938,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                             type="checkbox"
                             checked={addToUSCLibrary}
                             onChange={(e) => setAddToUSCLibrary(e.target.checked)}
-                            className="w-5 h-5 text-[#990000] rounded focus:ring-[#990000]"
+                            className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon"
                           />
                           <span className="font-medium text-gray-900">USC Library</span>
                         </label>
@@ -948,7 +948,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                     <div className="flex gap-3">
                       <button
                         onClick={handlePublishContent}
-                        className="flex-1 bg-[#990000] hover:bg-[#770000] text-white font-bold py-4 px-8 rounded-lg transition-colors flex items-center justify-center gap-2"
+                        className="flex-1 bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-4 px-8 rounded-lg transition-colors flex items-center justify-center gap-2"
                       >
                         <CheckCircle className="w-5 h-5" />
                         Publish Content
@@ -962,7 +962,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                       </button>
                       <button
                         onClick={() => toast.info('Student view coming soon')}
-                        className="bg-[#FFCC00] hover:bg-[#E6B800] text-black font-bold py-4 px-8 rounded-lg transition-colors flex items-center gap-2"
+                        className="bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-4 px-8 rounded-lg transition-colors flex items-center gap-2"
                       >
                         <Eye className="w-5 h-5" />
                         Student View

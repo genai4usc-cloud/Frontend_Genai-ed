@@ -93,7 +93,7 @@ export default function EducatorLoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <div className="bg-[#990000] text-white p-6 relative">
+          <div className="bg-brand-maroon text-white p-6 relative">
             <button
               onClick={() => router.push('/')}
               className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-white"
@@ -138,7 +138,7 @@ export default function EducatorLoginPage() {
                         value={loginEmail}
                         onChange={(e) => setLoginEmail(e.target.value)}
                         placeholder="Enter your email"
-                        className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
+                        className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                         required
                         disabled={loading}
                       />
@@ -157,7 +157,7 @@ export default function EducatorLoginPage() {
                         value={loginPassword}
                         onChange={(e) => setLoginPassword(e.target.value)}
                         placeholder="Enter your password"
-                        className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
+                        className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                         required
                         disabled={loading}
                       />
@@ -167,7 +167,7 @@ export default function EducatorLoginPage() {
                   <div className="text-right">
                     <a
                       href="#"
-                      className="text-sm text-[#990000] hover:underline focus:outline-none focus:ring-2 focus:ring-[#990000] rounded px-1"
+                      className="text-sm text-brand-maroon hover:underline focus:outline-none focus:ring-2 focus:ring-brand-maroon rounded px-1"
                     >
                       Forgot password?
                     </a>
@@ -176,7 +176,7 @@ export default function EducatorLoginPage() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-[#FFCC00] hover:bg-[#EDB900] text-black font-bold py-3 rounded-lg transition-colors focus:outline-none focus:ring-4 focus:ring-[#FFCC00]/50 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 rounded-lg transition-colors focus:outline-none focus:ring-4 focus:ring-[#FFCC00]/50 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loading ? 'Please wait...' : 'Continue'}
                   </button>
@@ -203,7 +203,7 @@ export default function EducatorLoginPage() {
                         value={signupFirstName}
                         onChange={(e) => setSignupFirstName(e.target.value)}
                         placeholder="Enter your first name"
-                        className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
+                        className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                         required
                         disabled={loading}
                       />
@@ -222,7 +222,7 @@ export default function EducatorLoginPage() {
                         value={signupLastName}
                         onChange={(e) => setSignupLastName(e.target.value)}
                         placeholder="Enter your last name"
-                        className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
+                        className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                         required
                         disabled={loading}
                       />
@@ -241,7 +241,7 @@ export default function EducatorLoginPage() {
                         value={signupEmail}
                         onChange={(e) => setSignupEmail(e.target.value)}
                         placeholder="Enter your email"
-                        className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
+                        className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                         required
                         disabled={loading}
                       />
@@ -260,7 +260,7 @@ export default function EducatorLoginPage() {
                         value={signupPassword}
                         onChange={(e) => setSignupPassword(e.target.value)}
                         placeholder="Create a password"
-                        className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#990000] focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
+                        className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                         required
                         disabled={loading}
                       />
@@ -270,7 +270,7 @@ export default function EducatorLoginPage() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-[#FFCC00] hover:bg-[#EDB900] text-black font-bold py-3 rounded-lg transition-colors focus:outline-none focus:ring-4 focus:ring-[#FFCC00]/50 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 rounded-lg transition-colors focus:outline-none focus:ring-4 focus:ring-[#FFCC00]/50 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loading ? 'Creating account...' : 'Continue'}
                   </button>
@@ -281,11 +281,11 @@ export default function EducatorLoginPage() {
             <div className="mt-8 pt-6 border-t border-gray-200">
               <p className="text-xs text-center text-gray-500">
                 By continuing, you agree to GenAI&apos;s{' '}
-                <a href="#" className="text-[#990000] hover:underline">
+                <a href="#" className="text-brand-maroon hover:underline">
                   Terms of Service
                 </a>{' '}
                 and{' '}
-                <a href="#" className="text-[#990000] hover:underline">
+                <a href="#" className="text-brand-maroon hover:underline">
                   Privacy Policy
                 </a>
               </p>

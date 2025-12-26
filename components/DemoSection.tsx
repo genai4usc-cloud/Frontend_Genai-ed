@@ -36,8 +36,8 @@ export default function DemoSection() {
           >
             <div className="aspect-video flex items-center justify-center">
               <div className="relative z-10">
-                <div className="w-24 h-24 md:w-32 md:h-32 bg-[#FFCC00] rounded-full flex items-center justify-center group-hover:scale-110 transition-transform shadow-2xl">
-                  <Play className="w-12 h-12 md:w-16 md:h-16 text-[#990000] fill-[#990000] ml-2" />
+                <div className="w-24 h-24 md:w-32 md:h-32 bg-brand-yellow rounded-full flex items-center justify-center group-hover:scale-110 transition-transform shadow-2xl">
+                  <Play className="w-12 h-12 md:w-16 md:h-16 text-brand-maroon fill-brand-maroon ml-2" />
                 </div>
               </div>
 

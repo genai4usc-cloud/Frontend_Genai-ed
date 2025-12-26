@@ -76,7 +76,7 @@ export default function EducatorDashboard() {
   return (
     <EducatorLayout profile={profile}>
       <div className="space-y-8">
-        <div className="bg-gradient-to-r from-[#990000] to-[#770000] text-white p-8 rounded-2xl shadow-lg">
+        <div className="bg-gradient-to-r from-brand-maroon to-brand-maroon-hover text-white p-8 rounded-2xl shadow-lg">
           <h1 className="text-3xl font-bold mb-2">Hi, {profile.first_name}!</h1>
           <p className="text-white/90 text-lg">Welcome back to your USC Educator Portal</p>
         </div>
@@ -89,7 +89,7 @@ export default function EducatorDashboard() {
               className="bg-white p-6 rounded-xl shadow-md hover:shadow-xl transition-all border border-gray-100 text-left group"
             >
               <div className="flex items-start justify-between mb-4">
-                <div className="bg-[#990000] p-3 rounded-xl">
+                <div className="bg-brand-maroon p-3 rounded-xl">
                   <FileText className="w-6 h-6 text-white" />
                 </div>
                 <div className="text-gray-400 group-hover:text-gray-600 transition-colors">→</div>
@@ -139,7 +139,7 @@ export default function EducatorDashboard() {
             <h2 className="text-xl font-semibold text-gray-800">My Courses</h2>
             <button
               onClick={() => router.push('/educator/course/new')}
-              className="text-[#990000] hover:text-[#770000] font-medium text-sm flex items-center gap-2"
+              className="text-brand-maroon hover:text-brand-maroon-hover font-medium text-sm flex items-center gap-2"
             >
               View All →
             </button>
@@ -155,7 +155,7 @@ export default function EducatorDashboard() {
                 <p className="text-gray-600 mb-6">Create your first course to get started</p>
                 <button
                   onClick={() => router.push('/educator/course/new')}
-                  className="bg-[#FFCC00] hover:bg-[#EDB900] text-black font-bold py-3 px-6 rounded-lg transition-colors inline-flex items-center gap-2"
+                  className="bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 px-6 rounded-lg transition-colors inline-flex items-center gap-2"
                 >
                   <Plus className="w-5 h-5" />
                   Create Course
@@ -176,7 +176,7 @@ export default function EducatorDashboard() {
             <h2 className="text-xl font-semibold text-gray-800">My Lectures</h2>
             <button
               onClick={() => router.push('/educator/lecture/new')}
-              className="text-[#990000] hover:text-[#770000] font-medium text-sm flex items-center gap-2"
+              className="text-brand-maroon hover:text-brand-maroon-hover font-medium text-sm flex items-center gap-2"
             >
               View All →
             </button>
@@ -192,7 +192,7 @@ export default function EducatorDashboard() {
                 <p className="text-gray-600 mb-6">Create your first lecture to get started</p>
                 <button
                   onClick={() => router.push('/educator/lecture/new')}
-                  className="bg-[#FFCC00] hover:bg-[#EDB900] text-black font-bold py-3 px-6 rounded-lg transition-colors inline-flex items-center gap-2"
+                  className="bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 px-6 rounded-lg transition-colors inline-flex items-center gap-2"
                 >
                   <Plus className="w-5 h-5" />
                   Create Lecture
