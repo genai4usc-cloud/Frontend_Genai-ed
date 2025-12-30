@@ -306,9 +306,12 @@ Thank you for watching. Please review the materials and complete the assignment.
       setIsGenerating(false);
       setContentGenerated(true);
       toast.success('Content generated successfully!');
-      setCurrentStep(7);
-      setExpandedStep(7);
     }, 2000);
+  };
+
+  const handleGoToPublish = () => {
+    setCurrentStep(7);
+    setExpandedStep(7);
   };
 
   const handleRegenerateScript = () => {
@@ -888,13 +891,22 @@ Thank you for watching. Please review the materials and complete the assignment.
                             onChange={(e) => setGeneratedScript(e.target.value)}
                             className="w-full h-48 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent bg-white"
                           />
-                          <button
-                            onClick={handleRegenerateScript}
-                            className="mt-3 bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2"
-                          >
-                            <Sparkles className="w-5 h-5" />
-                            Regenerate with Changes
-                          </button>
+                          <div className="mt-3 flex gap-3">
+                            <button
+                              onClick={handleRegenerateScript}
+                              className="bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2"
+                            >
+                              <Sparkles className="w-5 h-5" />
+                              Regenerate with Changes
+                            </button>
+                            <button
+                              onClick={handleGoToPublish}
+                              className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2"
+                            >
+                              <CheckCircle className="w-5 h-5" />
+                              Go to Publish
+                            </button>
+                          </div>
                         </div>
 
                         {contentStyles.includes('powerpoint') && (
