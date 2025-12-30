@@ -165,7 +165,15 @@ export default function EducatorDashboard() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {courses.slice(0, 4).map((course) => (
-                <CourseCard key={course.id} course={course} />
+                <CourseCard
+                  key={course.id}
+                  code={course.code}
+                  title={course.title}
+                  instructorName={course.instructor_name}
+                  semester={course.semester}
+                  studentCount={course.student_count}
+                  onClick={() => router.push(`/educator/course/${course.id}`)}
+                />
               ))}
             </div>
           )}
@@ -202,7 +210,18 @@ export default function EducatorDashboard() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {lectures.slice(0, 4).map((lecture) => (
-                <LectureCard key={lecture.id} lecture={lecture} />
+                <LectureCard
+                  key={lecture.id}
+                  title={lecture.title}
+                  duration={lecture.duration || 0}
+                  onClick={() => {
+                    if (lecture.course_id) {
+                      router.push(`/educator/course/${lecture.course_id}/lecture/${lecture.id}`);
+                    } else {
+                      router.push(`/educator/lecture/${lecture.id}`);
+                    }
+                  }}
+                />
               ))}
             </div>
           )}

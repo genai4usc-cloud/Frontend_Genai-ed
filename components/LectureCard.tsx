@@ -1,48 +1,79 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { PlayCircle, Clock } from 'lucide-react';
-import { Lecture } from '@/lib/supabase';
+import { PlayCircle, Clock, Loader2 } from 'lucide-react';
 
 interface LectureCardProps {
-  lecture: Lecture;
+  title: string;
+  courseCode?: string;
+  instructorName?: string;
+  duration?: number;
+  createdAt?: string;
+  isNew?: boolean;
+  status?: string;
+  onClick: () => void;
 }
 
-export default function LectureCard({ lecture }: LectureCardProps) {
-  const router = useRouter();
+export default function LectureCard({
+  title,
+  courseCode,
+  instructorName,
+  duration,
+  createdAt,
+  isNew = false,
+  status,
+  onClick
+}: LectureCardProps) {
+  const getStatusBadge = () => {
+    if (status === 'generating') {
+      return (
+        <span className="px-2 py-1 bg-brand-yellow text-brand-maroon text-xs font-bold rounded-full flex items-center gap-1">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          Generating
+        </span>
+      );
+    }
+    if (isNew) {
+      return (
+        <span className="px-2 py-1 bg-brand-yellow text-brand-maroon text-xs font-bold rounded-full">
+          NEW
+        </span>
+      );
+    }
+    return null;
+  };
+
+  const thumbnailEmojis = ['🧠', '💭', '🗣️', '📚', '✨', '💡'];
+  const randomEmoji = thumbnailEmojis[Math.floor(Math.random() * thumbnailEmojis.length)];
 
   return (
-    <div className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all border border-gray-100 overflow-hidden">
-      <div className="p-6">
-        <div className="flex items-start gap-3 mb-4">
-          <div className="bg-brand-maroon p-2 rounded-lg">
-            <PlayCircle className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-gray-900 mb-1">{lecture.title}</h3>
-            {lecture.description && (
-              <p className="text-gray-600 text-sm line-clamp-2">{lecture.description}</p>
-            )}
-          </div>
+    <div
+      onClick={onClick}
+      className="bg-card border border-border rounded-xl overflow-hidden hover:shadow-lg transition-all cursor-pointer group"
+    >
+      <div className="bg-gradient-to-br from-brand-maroon to-brand-maroon-hover h-40 flex items-center justify-center text-6xl group-hover:scale-105 transition-transform">
+        {randomEmoji}
+      </div>
+      <div className="p-4">
+        <div className="flex items-start justify-between mb-2">
+          <h3 className="font-bold text-foreground line-clamp-2 flex-1">{title}</h3>
+          {getStatusBadge()}
         </div>
-        {lecture.duration && (
-          <div className="flex items-center gap-1 text-sm text-gray-500 mb-4">
-            <Clock className="w-4 h-4" />
-            <span>{lecture.duration} minutes</span>
-          </div>
+        {(courseCode || instructorName) && (
+          <p className="text-sm text-muted-foreground mb-2">
+            {courseCode && <span>{courseCode}</span>}
+            {courseCode && instructorName && <span> • </span>}
+            {instructorName && <span>{instructorName}</span>}
+          </p>
         )}
-        <button
-          onClick={() => {
-            if (lecture.course_id) {
-              router.push(`/educator/course/${lecture.course_id}/lecture/${lecture.id}`);
-            } else {
-              router.push(`/educator/lecture/${lecture.id}`);
-            }
-          }}
-          className="w-full bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 rounded-lg transition-colors"
-        >
-          Open Lecture
-        </button>
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          {duration !== undefined && (
+            <div className="flex items-center gap-1">
+              <Clock className="w-4 h-4" />
+              <span>{duration} min</span>
+            </div>
+          )}
+          {createdAt && <span>{createdAt}</span>}
+        </div>
       </div>
     </div>
   );
