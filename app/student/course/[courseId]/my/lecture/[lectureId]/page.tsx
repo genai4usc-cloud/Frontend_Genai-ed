@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import StudentLayout from '@/components/StudentLayout';
-import { supabase } from '@/lib/supabase';
+import { supabase, Profile } from '@/lib/supabase';
 import {
   ArrowLeft,
   MessageSquare,
@@ -44,6 +44,7 @@ export default function StudentMyLectureViewer() {
   const lectureId = params.lectureId as string;
 
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [lecture, setLecture] = useState<StudentLecture | null>(null);
   const [course, setCourse] = useState<Course | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -73,6 +74,21 @@ export default function StudentMyLectureViewer() {
     if (!user) {
       router.push('/student/login');
       return;
+    }
+
+    if (!profile) {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (!profileData || profileData.role !== 'student') {
+        router.push('/');
+        return;
+      }
+
+      setProfile(profileData);
     }
 
     const { data: lectureData } = await supabase
@@ -160,25 +176,23 @@ export default function StudentMyLectureViewer() {
     return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
   };
 
-  if (loading) {
+  if (loading || !profile) {
     return (
-      <StudentLayout>
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center">
-            <div className="w-12 h-12 border-4 border-brand-maroon border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Loading lecture...</p>
-          </div>
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-brand-maroon border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading lecture...</p>
         </div>
-      </StudentLayout>
+      </div>
     );
   }
 
   if (!lecture || !course) {
     return (
-      <StudentLayout>
+      <StudentLayout profile={profile}>
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
-            <p className="text-muted-foreground">Lecture not found</p>
+            <p className="text-gray-600">Lecture not found</p>
           </div>
         </div>
       </StudentLayout>
@@ -186,7 +200,7 @@ export default function StudentMyLectureViewer() {
   }
 
   return (
-    <StudentLayout>
+    <StudentLayout profile={profile}>
       <div className="h-full flex flex-col">
         <div className="bg-card border-b border-border px-6 py-4">
           <button

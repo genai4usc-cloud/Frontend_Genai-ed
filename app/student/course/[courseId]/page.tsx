@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import StudentLayout from '@/components/StudentLayout';
 import LectureCard from '@/components/LectureCard';
-import { supabase } from '@/lib/supabase';
+import { supabase, Profile } from '@/lib/supabase';
 import {
   BookOpen,
   MessageSquare,
@@ -54,6 +54,7 @@ export default function StudentCourse() {
   const courseId = params.courseId as string;
 
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [activeTab, setActiveTab] = useState<'lectures' | 'chat' | 'uploads'>('lectures');
   const [course, setCourse] = useState<Course | null>(null);
   const [courseLectures, setCourseLectures] = useState<Lecture[]>([]);
@@ -81,17 +82,18 @@ export default function StudentCourse() {
       return;
     }
 
-    const { data: profile } = await supabase
+    const { data: profileData } = await supabase
       .from('profiles')
-      .select('role')
+      .select('*')
       .eq('id', user.id)
       .maybeSingle();
 
-    if (!profile || profile.role !== 'student') {
+    if (!profileData || profileData.role !== 'student') {
       router.push('/');
       return;
     }
 
+    setProfile(profileData);
     await loadCourseData(user.email!, user.id);
   };
 
@@ -238,25 +240,23 @@ export default function StudentCourse() {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
-  if (loading) {
+  if (loading || !profile) {
     return (
-      <StudentLayout>
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center">
-            <div className="w-12 h-12 border-4 border-brand-maroon border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Loading course...</p>
-          </div>
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-brand-maroon border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading course...</p>
         </div>
-      </StudentLayout>
+      </div>
     );
   }
 
   if (!course) {
     return (
-      <StudentLayout>
+      <StudentLayout profile={profile}>
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
-            <p className="text-muted-foreground">Course not found</p>
+            <p className="text-gray-600">Course not found</p>
           </div>
         </div>
       </StudentLayout>
@@ -264,7 +264,7 @@ export default function StudentCourse() {
   }
 
   return (
-    <StudentLayout>
+    <StudentLayout profile={profile}>
       <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
         <div className="bg-card border border-border rounded-xl p-6">
           <div className="flex items-start justify-between mb-2">

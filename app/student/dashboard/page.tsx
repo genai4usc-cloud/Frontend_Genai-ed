@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import StudentLayout from '@/components/StudentLayout';
 import CourseCard from '@/components/CourseCard';
 import LectureCard from '@/components/LectureCard';
-import { supabase } from '@/lib/supabase';
+import { supabase, Profile } from '@/lib/supabase';
 import {
   Video,
   TrendingUp,
@@ -50,6 +50,7 @@ interface LibraryResource {
 export default function StudentDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [userName, setUserName] = useState('');
   const [stats, setStats] = useState({
     enrolledCourses: 0,
@@ -97,18 +98,19 @@ export default function StudentDashboard() {
       return;
     }
 
-    const { data: profile } = await supabase
+    const { data: profileData } = await supabase
       .from('profiles')
-      .select('first_name, role')
+      .select('*')
       .eq('id', user.id)
       .maybeSingle();
 
-    if (!profile || profile.role !== 'student') {
+    if (!profileData || profileData.role !== 'student') {
       router.push('/');
       return;
     }
 
-    setUserName(profile.first_name || 'Student');
+    setProfile(profileData);
+    setUserName(profileData.first_name || 'Student');
     await loadDashboardData(user.email!);
     setLoading(false);
   };
@@ -250,21 +252,19 @@ export default function StudentDashboard() {
     }
   ];
 
-  if (loading) {
+  if (loading || !profile) {
     return (
-      <StudentLayout>
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center">
-            <div className="w-12 h-12 border-4 border-brand-maroon border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Loading dashboard...</p>
-          </div>
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-brand-maroon border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
         </div>
-      </StudentLayout>
+      </div>
     );
   }
 
   return (
-    <StudentLayout>
+    <StudentLayout profile={profile}>
       <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
         <div className="bg-gradient-to-r from-brand-maroon to-brand-maroon-hover rounded-2xl p-8 text-white shadow-lg">
           <h1 className="text-3xl font-bold mb-2">Hi, {userName}!</h1>
