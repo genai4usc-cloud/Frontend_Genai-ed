@@ -224,7 +224,8 @@ export default function StudentDashboard() {
       icon: Video,
       color: 'bg-red-50 dark:bg-red-950',
       iconColor: 'text-brand-maroon',
-      href: '/student/create-lecture'
+      href: '/student/create-lecture',
+      comingSoon: false
     },
     {
       title: 'LLM Playground',
@@ -232,23 +233,26 @@ export default function StudentDashboard() {
       icon: MessageSquare,
       color: 'bg-yellow-50 dark:bg-yellow-950',
       iconColor: 'text-brand-yellow',
-      href: '/student/llm-playground'
+      href: '/student/llm-playground',
+      comingSoon: true
     },
     {
       title: 'Brainstorming',
-      description: 'Ideate with AI',
+      description: 'Ideate with AI - Coming soon',
       icon: Lightbulb,
       color: 'bg-purple-50 dark:bg-purple-950',
       iconColor: 'text-purple-600 dark:text-purple-400',
-      href: '/student/brainstorming'
+      href: '/student/brainstorming',
+      comingSoon: true
     },
     {
       title: 'Test Knowledge',
-      description: 'Practice quizzes',
+      description: 'Practice quizzes - Coming soon',
       icon: ClipboardCheck,
       color: 'bg-blue-50 dark:bg-blue-950',
       iconColor: 'text-blue-600 dark:text-blue-400',
-      href: '/student/test-knowledge'
+      href: '/student/test-knowledge',
+      comingSoon: true
     }
   ];
 
