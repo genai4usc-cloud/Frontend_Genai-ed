@@ -2,7 +2,8 @@
 
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { X, Mail, Lock, GraduationCap, BookOpen } from 'lucide-react';
+import { X, Mail, Lock, GraduationCap, BookOpen, AlertCircle } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface AuthCardProps {
   role: 'educator' | 'student';
@@ -12,10 +13,72 @@ export default function AuthCard({ role }: AuthCardProps) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    console.log('Login attempt:', { role, email, password });
+    setError('');
+    setLoading(true);
+
+    console.log('Starting login process...');
+
+    try {
+      console.log('Calling Supabase signInWithPassword...');
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      console.log('SignIn response:', { data, signInError });
+
+      if (signInError) {
+        console.error('SignIn error:', signInError);
+        setError(signInError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (!data.user) {
+        console.error('No user returned from login');
+        setError('Login failed. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('User authenticated, checking profile...');
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .maybeSingle();
+
+      console.log('Profile check result:', { profile, profileError });
+
+      if (profileError || !profile) {
+        console.error('Profile error or not found:', profileError);
+        setError('Profile not found. Please contact support.');
+        await supabase.auth.signOut();
+        setLoading(false);
+        return;
+      }
+
+      if (profile.role !== role) {
+        console.error('Role mismatch:', { expected: role, actual: profile.role });
+        setError(`This account is registered as ${profile.role}. Please use the correct portal.`);
+        await supabase.auth.signOut();
+        setLoading(false);
+        return;
+      }
+
+      console.log('Login successful, redirecting to dashboard...');
+      router.push(`/${role}/dashboard`);
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      setError('An unexpected error occurred. Please try again.');
+      setLoading(false);
+    }
   };
 
   const title = role === 'educator' ? 'Educator Portal' : 'Student Portal';
@@ -48,6 +111,13 @@ export default function AuthCard({ role }: AuthCardProps) {
 
           <form onSubmit={handleSubmit} className="p-8">
             <div className="space-y-6">
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+              )}
+
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                   Email Address
@@ -62,6 +132,7 @@ export default function AuthCard({ role }: AuthCardProps) {
                     placeholder="Enter your email"
                     className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                     required
+                    disabled={loading}
                   />
                 </div>
               </div>
@@ -80,6 +151,7 @@ export default function AuthCard({ role }: AuthCardProps) {
                     placeholder="Enter your password"
                     className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                     required
+                    disabled={loading}
                   />
                 </div>
               </div>
@@ -95,9 +167,10 @@ export default function AuthCard({ role }: AuthCardProps) {
 
               <button
                 type="submit"
-                className="w-full bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 rounded-lg transition-colors focus:outline-none focus:ring-4 focus:ring-[#FFCC00]/50 shadow-md hover:shadow-lg"
+                disabled={loading}
+                className="w-full bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 rounded-lg transition-colors focus:outline-none focus:ring-4 focus:ring-[#FFCC00]/50 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Sign In
+                {loading ? 'Signing in...' : 'Sign In'}
               </button>
             </div>
 

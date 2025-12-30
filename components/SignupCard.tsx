@@ -2,7 +2,8 @@
 
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { X, Mail, Lock, User, GraduationCap, BookOpen } from 'lucide-react';
+import { X, Mail, Lock, User, GraduationCap, BookOpen, AlertCircle, CheckCircle } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface SignupCardProps {
   role: 'educator' | 'student';
@@ -14,10 +15,84 @@ export default function SignupCard({ role }: SignupCardProps) {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    console.log('Signup attempt:', { role, firstName, lastName, email, password });
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    console.log('Starting signup process...');
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      console.log('Calling Supabase signUp...');
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/${role}/dashboard`,
+        }
+      });
+
+      console.log('SignUp response:', { authData, signUpError });
+
+      if (signUpError) {
+        console.error('SignUp error:', signUpError);
+        setError(signUpError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (!authData.user) {
+        console.error('No user returned from signup');
+        setError('Signup failed. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('User created, creating profile...');
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: authData.user.id,
+          email: email,
+          first_name: firstName,
+          last_name: lastName,
+          role: role,
+        });
+
+      console.log('Profile creation result:', { profileError });
+
+      if (profileError) {
+        console.error('Profile error:', profileError);
+        setError('Failed to create profile. Please contact support.');
+        setLoading(false);
+        return;
+      }
+
+      if (authData.session) {
+        console.log('Session exists, redirecting to dashboard...');
+        router.push(`/${role}/dashboard`);
+      } else {
+        console.log('No session - email confirmation may be required');
+        setSuccess('Account created successfully! Please check your email to confirm your account before logging in.');
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      setError('An unexpected error occurred. Please try again.');
+      setLoading(false);
+    }
   };
 
   const title = role === 'educator' ? 'Educator Portal' : 'Student Portal';
@@ -50,6 +125,20 @@ export default function SignupCard({ role }: SignupCardProps) {
 
           <form onSubmit={handleSubmit} className="p-8">
             <div className="space-y-6">
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+              )}
+
+              {success && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+                  <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-green-800">{success}</p>
+                </div>
+              )}
+
               <div>
                 <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-2">
                   First Name
@@ -64,6 +153,7 @@ export default function SignupCard({ role }: SignupCardProps) {
                     placeholder="Enter your first name"
                     className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                     required
+                    disabled={loading}
                   />
                 </div>
               </div>
@@ -82,6 +172,7 @@ export default function SignupCard({ role }: SignupCardProps) {
                     placeholder="Enter your last name"
                     className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                     required
+                    disabled={loading}
                   />
                 </div>
               </div>
@@ -100,6 +191,7 @@ export default function SignupCard({ role }: SignupCardProps) {
                     placeholder="Enter your email"
                     className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                     required
+                    disabled={loading}
                   />
                 </div>
               </div>
@@ -115,18 +207,21 @@ export default function SignupCard({ role }: SignupCardProps) {
                     id="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Create a password"
+                    placeholder="Create a password (min 6 characters)"
                     className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent outline-none transition-all bg-[#f3f3f5]"
                     required
+                    disabled={loading}
+                    minLength={6}
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="w-full bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 rounded-lg transition-colors focus:outline-none focus:ring-4 focus:ring-[#FFCC00]/50 shadow-md hover:shadow-lg"
+                disabled={loading}
+                className="w-full bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 rounded-lg transition-colors focus:outline-none focus:ring-4 focus:ring-[#FFCC00]/50 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Create Account
+                {loading ? 'Creating account...' : 'Create Account'}
               </button>
             </div>
 
