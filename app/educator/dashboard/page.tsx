@@ -14,6 +14,7 @@ export default function EducatorDashboard() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [lectures, setLectures] = useState<Lecture[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -42,21 +43,31 @@ export default function EducatorDashboard() {
 
       setProfile(profileData);
 
-      const { data: coursesData } = await supabase
+      const { data: coursesData, error: coursesError } = await supabase
         .from('courses')
         .select('*')
         .eq('educator_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (coursesData) setCourses(coursesData);
+      if (coursesError) {
+        console.error('Error loading courses:', coursesError);
+      } else if (coursesData) {
+        console.log('Loaded courses:', coursesData);
+        setCourses(coursesData);
+      }
 
-      const { data: lecturesData } = await supabase
+      const { data: lecturesData, error: lecturesError } = await supabase
         .from('lectures')
         .select('*')
         .eq('educator_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (lecturesData) setLectures(lecturesData);
+      if (lecturesError) {
+        console.error('Error loading lectures:', lecturesError);
+      } else if (lecturesData) {
+        console.log('Loaded lectures:', lecturesData);
+        setLectures(lecturesData);
+      }
 
     } catch (error) {
       console.error('Error loading dashboard:', error);
@@ -73,12 +84,34 @@ export default function EducatorDashboard() {
     );
   }
 
+  const handleRefreshData = async () => {
+    setLoading(true);
+    await checkAuth();
+  };
+
   return (
     <EducatorLayout profile={profile}>
       <div className="space-y-8">
         <div className="bg-gradient-to-r from-brand-maroon to-brand-maroon-hover text-white p-8 rounded-2xl shadow-lg">
-          <h1 className="text-3xl font-bold mb-2">Hi, {profile.first_name}!</h1>
-          <p className="text-white/90 text-lg">Welcome back to your USC Educator Portal</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">Hi, {profile.first_name}!</h1>
+              <p className="text-white/90 text-lg">Welcome back to your USC Educator Portal</p>
+            </div>
+            <button
+              onClick={handleRefreshData}
+              className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg transition-colors text-sm"
+            >
+              Refresh Data
+            </button>
+          </div>
+          {showDebug && (
+            <div className="mt-4 bg-white/10 p-4 rounded-lg text-sm">
+              <p>User ID: {profile.id}</p>
+              <p>Email: {profile.email}</p>
+              <p>Courses loaded: {courses.length}</p>
+            </div>
+          )}
         </div>
 
         <div>

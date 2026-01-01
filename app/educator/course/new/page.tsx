@@ -205,7 +205,10 @@ export default function CreateCourse() {
   };
 
   const handleSaveCourse = async () => {
-    if (!profile) return;
+    if (!profile) {
+      toast.error('Profile not loaded. Please refresh the page.');
+      return;
+    }
 
     if (!courseNumber.trim() || !courseTitle.trim()) {
       toast.error('Please fill in required fields: Course Number and Course Title');
@@ -214,6 +217,14 @@ export default function CreateCourse() {
 
     setSaving(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        toast.error('Not authenticated. Please log in again.');
+        router.push('/educator/login');
+        return;
+      }
+
       const { data: courseData, error: courseError } = await supabase
         .from('courses')
         .insert({
@@ -228,7 +239,10 @@ export default function CreateCourse() {
         .select()
         .single();
 
-      if (courseError) throw courseError;
+      if (courseError) {
+        console.error('Course creation error:', courseError);
+        throw courseError;
+      }
 
       let syllabusUrl: string | null = null;
       const courseMaterialsUrls: string[] = [];
@@ -288,9 +302,10 @@ export default function CreateCourse() {
 
       toast.success('Course created successfully!');
       router.push(`/educator/course/${courseData.id}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating course:', error);
-      toast.error('Failed to create course. Please try again.');
+      const errorMessage = error?.message || 'Failed to create course. Please try again.';
+      toast.error(errorMessage);
     } finally {
       setSaving(false);
     }
