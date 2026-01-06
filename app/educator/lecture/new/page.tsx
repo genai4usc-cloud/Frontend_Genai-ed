@@ -80,6 +80,7 @@ export default function CreateLecture() {
   useEffect(() => {
     if (lectureId) {
       loadExistingMaterials(lectureId);
+      loadLectureData(lectureId);
     }
   }, [lectureId]);
 
@@ -197,6 +198,45 @@ export default function CreateLecture() {
       }
     } catch (error) {
       console.error('Error loading materials:', error);
+    }
+  };
+
+  const loadLectureData = async (lectureIdToLoad: string) => {
+    try {
+      const { data: lectureData, error } = await supabase
+        .from('lectures')
+        .select('selected_course_ids, library_personal, library_usc, content_style, avatar_character, avatar_style, status')
+        .eq('id', lectureIdToLoad)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (lectureData) {
+        if (lectureData.selected_course_ids && lectureData.selected_course_ids.length > 0) {
+          setSelectedCourseIds(lectureData.selected_course_ids);
+        }
+
+        setAddToPersonalLibrary(lectureData.library_personal || false);
+        setAddToUSCLibrary(lectureData.library_usc || false);
+
+        if (lectureData.content_style && lectureData.content_style.length > 0) {
+          setContentStyles(lectureData.content_style);
+        }
+
+        if (lectureData.avatar_character) {
+          setSelectedCharacter(lectureData.avatar_character as AvatarCharacter);
+        }
+
+        if (lectureData.avatar_style) {
+          setSelectedStyle(lectureData.avatar_style);
+        }
+
+        if (lectureData.status === 'generated' || lectureData.status === 'published') {
+          setContentGenerated(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading lecture data:', error);
     }
   };
 
@@ -414,6 +454,7 @@ export default function CreateLecture() {
             educator_id: profile.id,
             title: 'Untitled Lecture',
             description: '',
+            selected_course_ids: selectedCourseIds,
             library_personal: addToPersonalLibrary,
             library_usc: addToUSCLibrary,
             status: 'draft'
@@ -432,6 +473,7 @@ export default function CreateLecture() {
         const { error: updateError } = await supabase
           .from('lectures')
           .update({
+            selected_course_ids: selectedCourseIds,
             library_personal: addToPersonalLibrary,
             library_usc: addToUSCLibrary
           })
@@ -967,12 +1009,25 @@ SLIDE 1: Untitled Lecture
     }
 
     try {
+      const { data: artifacts, error: artifactsError } = await supabase
+        .from('lecture_artifacts')
+        .select('id')
+        .eq('lecture_id', lectureId);
+
+      if (artifactsError) throw artifactsError;
+
+      if (!artifacts || artifacts.length === 0) {
+        toast.error('Cannot publish: No content artifacts found. Please generate content first.');
+        return;
+      }
+
       const { error: updateError } = await supabase
         .from('lectures')
         .update({
+          selected_course_ids: selectedCourseIds,
           library_personal: addToPersonalLibrary,
           library_usc: addToUSCLibrary,
-          status: 'completed'
+          status: 'published'
         })
         .eq('id', lectureId);
 
