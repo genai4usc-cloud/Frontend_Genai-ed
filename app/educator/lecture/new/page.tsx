@@ -793,35 +793,157 @@ SLIDE 1: Untitled Lecture
     toast.info('Generating content...');
 
     try {
-      const { error: updateError } = await supabase
+      const jobTypes: string[] = [];
+
+      if (contentStyles.includes('audio')) {
+        jobTypes.push('audio');
+      }
+      if (contentStyles.includes('powerpoint')) {
+        jobTypes.push('pptx');
+      }
+      if (contentStyles.includes('video')) {
+        jobTypes.push('video_static', 'video_avatar');
+      }
+
+      if (jobTypes.length === 0) {
+        toast.error('No content styles selected');
+        setIsGenerating(false);
+        return;
+      }
+
+      const jobIds: string[] = [];
+      for (const jobType of jobTypes) {
+        const { data: jobData, error: jobError } = await supabase
+          .from('lecture_jobs')
+          .insert({
+            lecture_id: lectureId,
+            job_type: jobType,
+            status: 'queued',
+            progress: 0
+          })
+          .select()
+          .single();
+
+        if (jobError) throw jobError;
+        if (jobData) jobIds.push(jobData.id);
+      }
+
+      for (let i = 0; i < jobIds.length; i++) {
+        const jobId = jobIds[i];
+        const jobType = jobTypes[i];
+
+        await supabase
+          .from('lecture_jobs')
+          .update({
+            status: 'running',
+            progress: 25
+          })
+          .eq('id', jobId);
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        await supabase
+          .from('lecture_jobs')
+          .update({
+            progress: 50
+          })
+          .eq('id', jobId);
+
+        const placeholderContent = `Placeholder ${jobType} content for lecture ${lectureId}`;
+        const fileName = `lecture-${lectureId}-${jobType}-${Date.now()}.txt`;
+        const blob = new Blob([placeholderContent], { type: 'text/plain' });
+
+        const { error: uploadError } = await supabase.storage
+          .from('lecture-assets')
+          .upload(`artifacts/${fileName}`, blob, {
+            contentType: 'text/plain',
+            upsert: true
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from('lecture-assets')
+          .getPublicUrl(`artifacts/${fileName}`);
+
+        const artifactTypeMap: Record<string, string> = {
+          'audio': 'audio_mp3',
+          'pptx': 'pptx',
+          'video_static': 'video_static_mp4',
+          'video_avatar': 'video_avatar_mp4'
+        };
+
+        const artifactType = artifactTypeMap[jobType];
+
+        const { data: existingArtifact } = await supabase
+          .from('lecture_artifacts')
+          .select('id')
+          .eq('lecture_id', lectureId)
+          .eq('artifact_type', artifactType)
+          .maybeSingle();
+
+        if (existingArtifact) {
+          await supabase
+            .from('lecture_artifacts')
+            .update({
+              file_url: urlData.publicUrl
+            })
+            .eq('id', existingArtifact.id);
+        } else {
+          await supabase
+            .from('lecture_artifacts')
+            .insert({
+              lecture_id: lectureId,
+              artifact_type: artifactType,
+              file_url: urlData.publicUrl
+            });
+        }
+
+        await supabase
+          .from('lecture_jobs')
+          .update({
+            progress: 75
+          })
+          .eq('id', jobId);
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        await supabase
+          .from('lecture_jobs')
+          .update({
+            status: 'succeeded',
+            progress: 100
+          })
+          .eq('id', jobId);
+      }
+
+      const { error: statusError } = await supabase
         .from('lectures')
         .update({
-          status: 'generating'
+          status: 'generated'
         })
         .eq('id', lectureId);
 
-      if (updateError) throw updateError;
+      if (statusError) throw statusError;
 
-      setTimeout(async () => {
-        const { error: completeError } = await supabase
-          .from('lectures')
-          .update({
-            status: 'completed'
-          })
-          .eq('id', lectureId);
-
-        if (completeError) {
-          console.error('Error updating status:', completeError);
-        }
-
-        setIsGenerating(false);
-        setContentGenerated(true);
-        toast.success('Content generated successfully!');
-      }, 2000);
+      setIsGenerating(false);
+      setContentGenerated(true);
+      toast.success('Content generated successfully!');
     } catch (error) {
       console.error('Error generating content:', error);
       toast.error('Failed to generate content');
       setIsGenerating(false);
+
+      if (lectureId) {
+        await supabase
+          .from('lecture_jobs')
+          .update({
+            status: 'failed',
+            error_message: error instanceof Error ? error.message : 'Unknown error'
+          })
+          .eq('lecture_id', lectureId)
+          .in('status', ['queued', 'running']);
+      }
     }
   };
 
