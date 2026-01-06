@@ -546,16 +546,133 @@ export default function CreateLecture() {
   };
 
   const handleGenerateScript = async () => {
-    setScriptGenerated(true);
-    setGeneratedScript(`Introduction:
-Welcome to today's lecture. In this ${videoLength}-minute video, we'll explore Create an engaging educational video script about the topic.
+    if (!lectureId) {
+      toast.error('No lecture draft found');
+      return;
+    }
 
-Main Content:
-[Generated content based on your prompt would appear here...]
+    if (!aiPrompt.trim()) {
+      toast.error('Please enter an AI prompt');
+      return;
+    }
 
-Conclusion:
-Thank you for watching. Please review the materials and complete the assignment.`);
-    toast.success('Script generated successfully!');
+    try {
+      const { error: updateError } = await supabase
+        .from('lectures')
+        .update({
+          script_mode: 'ai',
+          script_prompt: aiPrompt,
+          video_length: videoLength
+        })
+        .eq('id', lectureId);
+
+      if (updateError) throw updateError;
+
+      const { data: jobData, error: jobError } = await supabase
+        .from('lecture_jobs')
+        .insert({
+          lecture_id: lectureId,
+          job_type: 'scripts',
+          status: 'running',
+          progress: 0
+        })
+        .select()
+        .single();
+
+      if (jobError) throw jobError;
+
+      const { data: materials } = await supabase
+        .from('lecture_materials')
+        .select('file_name, material_role')
+        .eq('lecture_id', lectureId);
+
+      const mainMaterials = materials?.filter(m => m.material_role === 'main').map(m => m.file_name) || [];
+      const backgroundMaterials = materials?.filter(m => m.material_role === 'background').map(m => m.file_name) || [];
+
+      const materialsSummary = `Main Materials: ${mainMaterials.length > 0 ? mainMaterials.join(', ') : 'None'}
+
+Background Materials: ${backgroundMaterials.length > 0 ? backgroundMaterials.join(', ') : 'None'}`;
+
+      const placeholderScript = `TITLE:
+Untitled Lecture
+
+${materialsSummary}
+
+VIDEO SCRIPT:
+Welcome to today's lecture. Over the next ${videoLength} minutes, we'll explore the key concepts and ideas that you need to understand. This content has been carefully crafted based on your course materials to ensure comprehensive coverage of the subject matter.
+
+Let's begin by examining the fundamental principles. [Content continues based on AI prompt: ${aiPrompt}]
+
+Throughout this lecture, we'll reference the main materials you've provided and draw on background knowledge to give you a complete understanding.
+
+Thank you for your attention. Please review the materials and reach out if you have any questions.
+
+AUDIO SCRIPT:
+Welcome to today's lecture. Over the next ${videoLength} minutes, we'll explore the key concepts and ideas that you need to understand. This content has been carefully crafted based on your course materials to ensure comprehensive coverage of the subject matter.
+
+Let's begin by examining the fundamental principles. [Content continues based on AI prompt: ${aiPrompt}]
+
+Throughout this lecture, we'll reference the main materials you've provided and draw on background knowledge to give you a complete understanding.
+
+Thank you for your attention. Please review the materials and reach out if you have any questions.
+
+PPT SCRIPT:
+SLIDE 1: Untitled Lecture
+- Introduction to key concepts
+- Overview of learning objectives
+
+SLIDE 2: Fundamental Principles
+- Core concept 1
+- Core concept 2
+- Core concept 3
+
+SLIDE 3: Deep Dive
+- Detailed explanation
+- Examples and applications
+- Real-world context
+
+SLIDE 4: Summary & Key Takeaways
+- Main points recap
+- Important considerations
+- Next steps`;
+
+      const { error: scriptError } = await supabase
+        .from('lectures')
+        .update({
+          script_text: placeholderScript
+        })
+        .eq('id', lectureId);
+
+      if (scriptError) throw scriptError;
+
+      const { error: jobUpdateError } = await supabase
+        .from('lecture_jobs')
+        .update({
+          status: 'succeeded',
+          progress: 100
+        })
+        .eq('id', jobData.id);
+
+      if (jobUpdateError) throw jobUpdateError;
+
+      setGeneratedScript(placeholderScript);
+      setScriptGenerated(true);
+      toast.success('Script generated successfully!');
+    } catch (error) {
+      console.error('Error generating script:', error);
+      toast.error('Failed to generate script');
+
+      if (lectureId) {
+        await supabase
+          .from('lecture_jobs')
+          .update({
+            status: 'failed',
+            error_message: error instanceof Error ? error.message : 'Unknown error'
+          })
+          .eq('lecture_id', lectureId)
+          .eq('job_type', 'scripts');
+      }
+    }
   };
 
   const handleContinueToAvatarSelection = async () => {
@@ -575,23 +692,51 @@ Thank you for watching. Please review the materials and complete the assignment.
     }
 
     try {
-      const scriptContent = scriptMode === 'direct'
-        ? (scriptDirect || scriptFile?.name || '')
-        : generatedScript;
+      let scriptTextFormatted = generatedScript;
 
-      const { error: updateError } = await supabase
-        .from('lectures')
-        .update({
-          script_prompt: scriptContent,
-          video_length: videoLength,
-          generated_content: {
-            script_mode: scriptMode,
-            ai_prompt: aiPrompt
-          }
-        })
-        .eq('id', lectureId);
+      if (scriptMode === 'direct') {
+        const directScriptContent = scriptDirect || scriptFile?.name || '';
 
-      if (updateError) throw updateError;
+        const { data: materials } = await supabase
+          .from('lecture_materials')
+          .select('file_name, material_role')
+          .eq('lecture_id', lectureId);
+
+        const mainMaterials = materials?.filter(m => m.material_role === 'main').map(m => m.file_name) || [];
+        const backgroundMaterials = materials?.filter(m => m.material_role === 'background').map(m => m.file_name) || [];
+
+        const materialsSummary = `Main Materials: ${mainMaterials.length > 0 ? mainMaterials.join(', ') : 'None'}
+
+Background Materials: ${backgroundMaterials.length > 0 ? backgroundMaterials.join(', ') : 'None'}`;
+
+        scriptTextFormatted = `TITLE:
+Untitled Lecture
+
+${materialsSummary}
+
+VIDEO SCRIPT:
+${directScriptContent}
+
+AUDIO SCRIPT:
+${directScriptContent}
+
+PPT SCRIPT:
+SLIDE 1: Untitled Lecture
+- Key point 1
+- Key point 2
+- Key point 3`;
+
+        const { error: updateError } = await supabase
+          .from('lectures')
+          .update({
+            script_mode: 'direct',
+            script_text: scriptTextFormatted,
+            video_length: videoLength
+          })
+          .eq('id', lectureId);
+
+        if (updateError) throw updateError;
+      }
 
       toast.success('Script saved');
       setCurrentStep(5);
