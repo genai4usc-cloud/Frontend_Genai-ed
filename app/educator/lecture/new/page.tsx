@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
 import { ArrowLeft, Upload, File, Check, ChevronDown, ChevronUp, Info, Video, Mic, FileText, Sparkles, Download, Eye, Play, CheckCircle } from 'lucide-react';
@@ -21,11 +21,13 @@ type AvatarType = 'professional_male' | 'professional_female' | 'casual_male' | 
 
 export default function CreateLecture() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentStep, setCurrentStep] = useState(1);
   const [expandedStep, setExpandedStep] = useState(1);
 
+  const [lectureId, setLectureId] = useState<string | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([]);
   const [addToPersonalLibrary, setAddToPersonalLibrary] = useState(false);
@@ -57,6 +59,13 @@ export default function CreateLecture() {
   useEffect(() => {
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    const idFromUrl = searchParams.get('id');
+    if (idFromUrl) {
+      setLectureId(idFromUrl);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (selectedCourseIds.length > 0) {
@@ -213,19 +222,116 @@ export default function CreateLecture() {
     setScriptFile(file);
   };
 
-  const handleContinueToMaterials = () => {
+  const handleContinueToMaterials = async () => {
     if (selectedCourseIds.length === 0 && !addToPersonalLibrary && !addToUSCLibrary) {
       toast.error('Please select at least one course or library');
       return;
     }
 
-    setCurrentStep(2);
-    setExpandedStep(2);
+    if (!profile) return;
+
+    try {
+      let currentLectureId = lectureId;
+
+      if (!currentLectureId) {
+        const { data: newLecture, error: lectureError } = await supabase
+          .from('lectures')
+          .insert({
+            educator_id: profile.id,
+            title: 'Untitled Lecture',
+            description: '',
+            library_personal: addToPersonalLibrary,
+            library_usc: addToUSCLibrary,
+            status: 'draft'
+          })
+          .select()
+          .single();
+
+        if (lectureError) throw lectureError;
+        if (!newLecture) throw new Error('Failed to create lecture');
+
+        currentLectureId = newLecture.id;
+        setLectureId(currentLectureId);
+
+        router.push(`/educator/lecture/new?id=${currentLectureId}`);
+      } else {
+        const { error: updateError } = await supabase
+          .from('lectures')
+          .update({
+            library_personal: addToPersonalLibrary,
+            library_usc: addToUSCLibrary
+          })
+          .eq('id', currentLectureId);
+
+        if (updateError) throw updateError;
+      }
+
+      const { error: deleteCoursesError } = await supabase
+        .from('lecture_courses')
+        .delete()
+        .eq('lecture_id', currentLectureId);
+
+      if (deleteCoursesError) throw deleteCoursesError;
+
+      if (selectedCourseIds.length > 0) {
+        const lectureCourses = selectedCourseIds.map(courseId => ({
+          lecture_id: currentLectureId,
+          course_id: courseId
+        }));
+
+        const { error: insertCoursesError } = await supabase
+          .from('lecture_courses')
+          .insert(lectureCourses);
+
+        if (insertCoursesError) throw insertCoursesError;
+      }
+
+      toast.success('Draft saved');
+      setCurrentStep(2);
+      setExpandedStep(2);
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      toast.error('Failed to save draft');
+    }
   };
 
-  const handleContinueToContentStyle = () => {
-    setCurrentStep(3);
-    setExpandedStep(3);
+  const handleContinueToContentStyle = async () => {
+    if (!lectureId) {
+      toast.error('No lecture draft found');
+      return;
+    }
+
+    try {
+      const { error: deleteMaterialsError } = await supabase
+        .from('lecture_materials')
+        .delete()
+        .eq('lecture_id', lectureId);
+
+      if (deleteMaterialsError) throw deleteMaterialsError;
+
+      const materialsToInsert = allMaterials.map(material => ({
+        lecture_id: lectureId,
+        material_url: material.url,
+        material_name: material.name,
+        material_type: material.type,
+        source_course_id: material.sourceCourseId || null
+      }));
+
+      if (materialsToInsert.length > 0) {
+        const { error: insertMaterialsError } = await supabase
+          .from('lecture_materials')
+          .insert(materialsToInsert);
+
+        if (insertMaterialsError) throw insertMaterialsError;
+      }
+
+      toast.success('Materials saved');
+      setCurrentStep(3);
+      setExpandedStep(3);
+    } catch (error) {
+      console.error('Error saving materials:', error);
+      toast.error('Failed to save materials');
+    }
   };
 
   const changeMaterialType = (url: string, type: 'main' | 'background') => {
@@ -242,14 +348,34 @@ export default function CreateLecture() {
     );
   };
 
-  const handleContinueToScriptPrompt = () => {
+  const handleContinueToScriptPrompt = async () => {
     if (contentStyles.length === 0) {
       toast.error('Please select at least one content style');
       return;
     }
 
-    setCurrentStep(4);
-    setExpandedStep(4);
+    if (!lectureId) {
+      toast.error('No lecture draft found');
+      return;
+    }
+
+    try {
+      const { error: updateError } = await supabase
+        .from('lectures')
+        .update({
+          content_style: contentStyles
+        })
+        .eq('id', lectureId);
+
+      if (updateError) throw updateError;
+
+      toast.success('Content style saved');
+      setCurrentStep(4);
+      setExpandedStep(4);
+    } catch (error) {
+      console.error('Error saving content style:', error);
+      toast.error('Failed to save content style');
+    }
   };
 
   const handleGenerateScript = async () => {
@@ -265,7 +391,7 @@ Thank you for watching. Please review the materials and complete the assignment.
     toast.success('Script generated successfully!');
   };
 
-  const handleContinueToAvatarSelection = () => {
+  const handleContinueToAvatarSelection = async () => {
     if (scriptMode === 'direct' && !scriptDirect && !scriptFile) {
       toast.error('Please enter a script or upload a script file');
       return;
@@ -276,29 +402,109 @@ Thank you for watching. Please review the materials and complete the assignment.
       return;
     }
 
-    setCurrentStep(5);
-    setExpandedStep(5);
+    if (!lectureId) {
+      toast.error('No lecture draft found');
+      return;
+    }
+
+    try {
+      const scriptContent = scriptMode === 'direct'
+        ? (scriptDirect || scriptFile?.name || '')
+        : generatedScript;
+
+      const { error: updateError } = await supabase
+        .from('lectures')
+        .update({
+          script_prompt: scriptContent,
+          video_length: videoLength,
+          generated_content: {
+            script_mode: scriptMode,
+            ai_prompt: aiPrompt
+          }
+        })
+        .eq('id', lectureId);
+
+      if (updateError) throw updateError;
+
+      toast.success('Script saved');
+      setCurrentStep(5);
+      setExpandedStep(5);
+    } catch (error) {
+      console.error('Error saving script:', error);
+      toast.error('Failed to save script');
+    }
   };
 
-  const handleContinueToGenerateContent = () => {
+  const handleContinueToGenerateContent = async () => {
     if (!selectedAvatar) {
       toast.error('Please select an avatar');
       return;
     }
 
-    setCurrentStep(6);
-    setExpandedStep(6);
+    if (!lectureId) {
+      toast.error('No lecture draft found');
+      return;
+    }
+
+    try {
+      const { error: updateError } = await supabase
+        .from('lectures')
+        .update({
+          avatar: selectedAvatar
+        })
+        .eq('id', lectureId);
+
+      if (updateError) throw updateError;
+
+      toast.success('Avatar saved');
+      setCurrentStep(6);
+      setExpandedStep(6);
+    } catch (error) {
+      console.error('Error saving avatar:', error);
+      toast.error('Failed to save avatar');
+    }
   };
 
   const handleGenerateContent = async () => {
+    if (!lectureId) {
+      toast.error('No lecture draft found');
+      return;
+    }
+
     setIsGenerating(true);
     toast.info('Generating content...');
 
-    setTimeout(() => {
+    try {
+      const { error: updateError } = await supabase
+        .from('lectures')
+        .update({
+          status: 'generating'
+        })
+        .eq('id', lectureId);
+
+      if (updateError) throw updateError;
+
+      setTimeout(async () => {
+        const { error: completeError } = await supabase
+          .from('lectures')
+          .update({
+            status: 'completed'
+          })
+          .eq('id', lectureId);
+
+        if (completeError) {
+          console.error('Error updating status:', completeError);
+        }
+
+        setIsGenerating(false);
+        setContentGenerated(true);
+        toast.success('Content generated successfully!');
+      }, 2000);
+    } catch (error) {
+      console.error('Error generating content:', error);
+      toast.error('Failed to generate content');
       setIsGenerating(false);
-      setContentGenerated(true);
-      toast.success('Content generated successfully!');
-    }, 2000);
+    }
   };
 
   const handleGoToPublish = () => {
@@ -314,8 +520,30 @@ Thank you for watching. Please review the materials and complete the assignment.
     toast.info('Regenerating slides...');
   };
 
-  const handlePublishContent = () => {
-    toast.success('Content published successfully!');
+  const handlePublishContent = async () => {
+    if (!lectureId) {
+      toast.error('No lecture draft found');
+      return;
+    }
+
+    try {
+      const { error: updateError } = await supabase
+        .from('lectures')
+        .update({
+          library_personal: addToPersonalLibrary,
+          library_usc: addToUSCLibrary,
+          status: 'completed'
+        })
+        .eq('id', lectureId);
+
+      if (updateError) throw updateError;
+
+      toast.success('Content published successfully!');
+      router.push('/educator/dashboard');
+    } catch (error) {
+      console.error('Error publishing content:', error);
+      toast.error('Failed to publish content');
+    }
   };
 
   const getFileExtension = (filename: string) => {
