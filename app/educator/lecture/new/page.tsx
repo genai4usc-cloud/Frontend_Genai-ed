@@ -17,7 +17,16 @@ type MaterialWithType = {
   courseCode?: string;
 };
 
-type AvatarType = 'professional_male' | 'professional_female' | 'casual_male' | 'casual_female';
+type AvatarCharacter = 'lisa' | 'lori' | 'meg' | 'jeff' | 'max' | 'harry';
+
+type AvatarStyles = {
+  lisa: 'casual-sitting' | 'graceful-sitting' | 'graceful-standing' | 'technical-sitting' | 'technical-standing';
+  lori: 'casual' | 'graceful' | 'formal';
+  meg: 'formal' | 'casual' | 'business';
+  jeff: 'formal' | 'business';
+  max: 'business' | 'casual' | 'formal';
+  harry: 'business' | 'casual' | 'youthful';
+};
 
 export default function CreateLecture() {
   const router = useRouter();
@@ -48,7 +57,8 @@ export default function CreateLecture() {
   const [generatedScript, setGeneratedScript] = useState('');
   const [scriptGenerated, setScriptGenerated] = useState(false);
 
-  const [selectedAvatar, setSelectedAvatar] = useState<AvatarType | null>(null);
+  const [selectedCharacter, setSelectedCharacter] = useState<AvatarCharacter | null>(null);
+  const [selectedStyle, setSelectedStyle] = useState<string>('');
 
   const [contentGenerated, setContentGenerated] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -593,8 +603,13 @@ Thank you for watching. Please review the materials and complete the assignment.
   };
 
   const handleContinueToGenerateContent = async () => {
-    if (!selectedAvatar) {
-      toast.error('Please select an avatar');
+    if (!selectedCharacter) {
+      toast.error('Please select a character');
+      return;
+    }
+
+    if (!selectedStyle) {
+      toast.error('Please select a style');
       return;
     }
 
@@ -607,7 +622,8 @@ Thank you for watching. Please review the materials and complete the assignment.
       const { error: updateError } = await supabase
         .from('lectures')
         .update({
-          avatar: selectedAvatar
+          avatar_character: selectedCharacter,
+          avatar_style: selectedStyle
         })
         .eq('id', lectureId);
 
@@ -727,11 +743,40 @@ Thank you for watching. Please review the materials and complete the assignment.
   ];
 
   const avatarOptions = [
-    { id: 'professional_male', label: 'Professional Male', emoji: '👨‍💼' },
-    { id: 'professional_female', label: 'Professional Female', emoji: '👩‍💼' },
-    { id: 'casual_male', label: 'Casual Male', emoji: '🙋‍♂️' },
-    { id: 'casual_female', label: 'Casual Female', emoji: '🙋‍♀️' }
+    { id: 'lisa' as AvatarCharacter, label: 'Lisa', emoji: '👩' },
+    { id: 'lori' as AvatarCharacter, label: 'Lori', emoji: '👩‍💼' },
+    { id: 'meg' as AvatarCharacter, label: 'Meg', emoji: '👩‍💻' },
+    { id: 'jeff' as AvatarCharacter, label: 'Jeff', emoji: '👨‍💼' },
+    { id: 'max' as AvatarCharacter, label: 'Max', emoji: '👨‍💻' },
+    { id: 'harry' as AvatarCharacter, label: 'Harry', emoji: '👨' }
   ];
+
+  const characterStyles: Record<AvatarCharacter, { styles: string[]; default: string }> = {
+    lisa: {
+      styles: ['casual-sitting', 'graceful-sitting', 'graceful-standing', 'technical-sitting', 'technical-standing'],
+      default: 'graceful-sitting'
+    },
+    lori: {
+      styles: ['casual', 'graceful', 'formal'],
+      default: 'graceful'
+    },
+    meg: {
+      styles: ['formal', 'casual', 'business'],
+      default: 'formal'
+    },
+    jeff: {
+      styles: ['formal', 'business'],
+      default: 'formal'
+    },
+    max: {
+      styles: ['business', 'casual', 'formal'],
+      default: 'business'
+    },
+    harry: {
+      styles: ['business', 'casual', 'youthful'],
+      default: 'business'
+    }
+  };
 
   return (
     <EducatorLayout profile={profile}>
@@ -1161,26 +1206,50 @@ Thank you for watching. Please review the materials and complete the assignment.
 
                 {isExpanded && step.number === 5 && (
                   <div className="p-6 pt-0 space-y-6">
-                    <div className="grid grid-cols-4 gap-4">
-                      {avatarOptions.map((avatar) => (
-                        <button
-                          key={avatar.id}
-                          onClick={() => setSelectedAvatar(avatar.id as AvatarType)}
-                          className={`p-6 border-2 rounded-xl text-center transition-all ${
-                            selectedAvatar === avatar.id
-                              ? 'border-brand-maroon bg-red-50'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <div className="text-5xl mb-3">{avatar.emoji}</div>
-                          <h4 className="font-bold text-gray-900 text-sm">{avatar.label}</h4>
-                        </button>
-                      ))}
+                    <div>
+                      <h4 className="font-semibold text-gray-900 mb-4">Select Character</h4>
+                      <div className="grid grid-cols-3 gap-4">
+                        {avatarOptions.map((avatar) => (
+                          <button
+                            key={avatar.id}
+                            onClick={() => {
+                              setSelectedCharacter(avatar.id);
+                              setSelectedStyle(characterStyles[avatar.id].default);
+                            }}
+                            className={`p-6 border-2 rounded-xl text-center transition-all ${
+                              selectedCharacter === avatar.id
+                                ? 'border-brand-maroon bg-red-50'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <div className="text-5xl mb-3">{avatar.emoji}</div>
+                            <h4 className="font-bold text-gray-900 text-sm">{avatar.label}</h4>
+                          </button>
+                        ))}
+                      </div>
                     </div>
+
+                    {selectedCharacter && (
+                      <div>
+                        <label className="block font-semibold text-gray-900 mb-3">Select Style</label>
+                        <select
+                          value={selectedStyle}
+                          onChange={(e) => setSelectedStyle(e.target.value)}
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
+                        >
+                          {characterStyles[selectedCharacter].styles.map((style) => (
+                            <option key={style} value={style}>
+                              {style.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
                     <button
                       onClick={handleContinueToGenerateContent}
-                      className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-8 rounded-lg transition-colors"
+                      disabled={!selectedCharacter || !selectedStyle}
+                      className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-8 rounded-lg transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                     >
                       Continue to Generate Content
                     </button>
@@ -1222,11 +1291,19 @@ Thank you for watching. Please review the materials and complete the assignment.
                               <span className="font-medium text-gray-900">{contentStyles.join(', ').toUpperCase()}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-gray-600">Avatar:</span>
+                              <span className="text-gray-600">Character:</span>
                               <span className="font-medium text-gray-900">
-                                {avatarOptions.find(a => a.id === selectedAvatar)?.label || 'None'}
+                                {selectedCharacter ? avatarOptions.find(a => a.id === selectedCharacter)?.label : 'None'}
                               </span>
                             </div>
+                            {selectedCharacter && selectedStyle && (
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Style:</span>
+                                <span className="font-medium text-gray-900">
+                                  {selectedStyle.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                                </span>
+                              </div>
+                            )}
                             {scriptMode === 'ai' && (
                               <div className="flex justify-between">
                                 <span className="text-gray-600">Video Length:</span>
