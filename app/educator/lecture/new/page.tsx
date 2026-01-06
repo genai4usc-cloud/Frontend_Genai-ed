@@ -68,6 +68,12 @@ export default function CreateLecture() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (lectureId) {
+      loadExistingMaterials(lectureId);
+    }
+  }, [lectureId]);
+
+  useEffect(() => {
     if (selectedCourseIds.length > 0) {
       loadCourseMaterials();
     } else {
@@ -148,6 +154,42 @@ export default function CreateLecture() {
     setPreloadedMaterials(materials);
   };
 
+  const loadExistingMaterials = async (lectureIdToLoad: string) => {
+    try {
+      const { data: materialsData, error } = await supabase
+        .from('lecture_materials')
+        .select('*')
+        .eq('lecture_id', lectureIdToLoad);
+
+      if (error) throw error;
+
+      if (materialsData) {
+        const loadedMaterials: MaterialWithType[] = [];
+        const preloadedUrls: string[] = [];
+
+        materialsData.forEach(material => {
+          const newMaterial: MaterialWithType = {
+            url: material.material_url,
+            name: material.material_name,
+            type: material.material_type as 'main' | 'background',
+            sourceCourseId: material.source_course_id
+          };
+
+          loadedMaterials.push(newMaterial);
+
+          if (material.source_type === 'course_preloaded') {
+            preloadedUrls.push(material.material_url);
+          }
+        });
+
+        setAllMaterials(loadedMaterials);
+        setSelectedPreloadedMaterialUrls(preloadedUrls);
+      }
+    } catch (error) {
+      console.error('Error loading materials:', error);
+    }
+  };
+
   const toggleCourse = (courseId: string) => {
     setSelectedCourseIds(prev =>
       prev.includes(courseId)
@@ -216,52 +258,120 @@ export default function CreateLecture() {
     }
   };
 
-  const handleAdditionalFilesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAdditionalFilesSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const validFiles: File[] = [];
-    const newMaterials: MaterialWithType[] = [];
+    if (!lectureId) {
+      toast.error('Please save draft first');
+      return;
+    }
 
-    Array.from(files).forEach(file => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error('Not authenticated');
+      return;
+    }
+
+    const validFiles: File[] = [];
+
+    for (const file of Array.from(files)) {
       if (!validateFileSize(file, 10)) {
         toast.error(`${file.name} exceeds 10MB limit`);
-        return;
+        continue;
       }
-      validFiles.push(file);
 
-      newMaterials.push({
-        url: `temp-${file.name}-${Date.now()}`,
-        name: file.name,
-        type: 'main'
-      });
-    });
+      try {
+        const timestamp = Date.now();
+        const filePath = `${user.id}/${lectureId}/materials/${timestamp}-${file.name}`;
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('lecture-assets')
+          .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('lecture-assets')
+          .getPublicUrl(filePath);
+
+        const { error: insertError } = await supabase
+          .from('lecture_materials')
+          .insert({
+            lecture_id: lectureId,
+            material_url: publicUrl,
+            material_name: file.name,
+            material_type: 'main',
+            source_type: 'uploaded',
+            file_mime: file.type,
+            file_size_bytes: file.size
+          });
+
+        if (insertError) throw insertError;
+
+        validFiles.push(file);
+
+        setAllMaterials(prev => [...prev, {
+          url: publicUrl,
+          name: file.name,
+          type: 'main'
+        }]);
+
+        toast.success(`${file.name} uploaded`);
+      } catch (error) {
+        console.error('Error uploading file:', error);
+        toast.error(`Failed to upload ${file.name}`);
+      }
+    }
 
     setAdditionalFiles(prev => [...prev, ...validFiles]);
-    setAllMaterials(prev => [...prev, ...newMaterials]);
   };
 
   const removeAdditionalFile = async (index: number) => {
     const fileToRemove = additionalFiles[index];
-    if (fileToRemove) {
-      const materialToRemove = allMaterials.find(m => m.url.includes(fileToRemove.name));
-      setAllMaterials(prev => prev.filter(m => !m.url.includes(fileToRemove.name)));
+    if (!fileToRemove) return;
 
-      if (lectureId && materialToRemove) {
-        try {
-          const { error } = await supabase
-            .from('lecture_materials')
-            .delete()
-            .eq('lecture_id', lectureId)
-            .eq('material_url', materialToRemove.url);
+    const materialToRemove = allMaterials.find(m => m.url.includes(fileToRemove.name));
+    if (!materialToRemove) return;
 
-          if (error) throw error;
-        } catch (error) {
-          console.error('Error removing file:', error);
+    setAllMaterials(prev => prev.filter(m => !m.url.includes(fileToRemove.name)));
+    setAdditionalFiles(prev => prev.filter((_, i) => i !== index));
+
+    if (lectureId) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const urlParts = materialToRemove.url.split('/lecture-assets/');
+        if (urlParts.length === 2) {
+          const filePath = urlParts[1];
+
+          const { error: storageError } = await supabase.storage
+            .from('lecture-assets')
+            .remove([filePath]);
+
+          if (storageError) {
+            console.error('Error removing from storage:', storageError);
+          }
         }
+
+        const { error: dbError } = await supabase
+          .from('lecture_materials')
+          .delete()
+          .eq('lecture_id', lectureId)
+          .eq('material_url', materialToRemove.url);
+
+        if (dbError) throw dbError;
+
+        toast.success('File removed');
+      } catch (error) {
+        console.error('Error removing file:', error);
+        toast.error('Failed to remove file');
       }
     }
-    setAdditionalFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleScriptFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -343,6 +453,10 @@ export default function CreateLecture() {
       toast.success('Draft saved');
       setCurrentStep(2);
       setExpandedStep(2);
+
+      if (currentLectureId) {
+        await loadExistingMaterials(currentLectureId);
+      }
     } catch (error) {
       console.error('Error saving draft:', error);
       toast.error('Failed to save draft');
@@ -355,40 +469,9 @@ export default function CreateLecture() {
       return;
     }
 
-    try {
-      const { error: deleteUploadedError } = await supabase
-        .from('lecture_materials')
-        .delete()
-        .eq('lecture_id', lectureId)
-        .eq('source_type', 'uploaded');
-
-      if (deleteUploadedError) throw deleteUploadedError;
-
-      const uploadedMaterials = allMaterials.filter(m => m.url.startsWith('temp-'));
-      const materialsToInsert = uploadedMaterials.map(material => ({
-        lecture_id: lectureId,
-        material_url: material.url,
-        material_name: material.name,
-        material_type: material.type,
-        source_course_id: material.sourceCourseId || null,
-        source_type: 'uploaded'
-      }));
-
-      if (materialsToInsert.length > 0) {
-        const { error: insertMaterialsError } = await supabase
-          .from('lecture_materials')
-          .insert(materialsToInsert);
-
-        if (insertMaterialsError) throw insertMaterialsError;
-      }
-
-      toast.success('Materials saved');
-      setCurrentStep(3);
-      setExpandedStep(3);
-    } catch (error) {
-      console.error('Error saving materials:', error);
-      toast.error('Failed to save materials');
-    }
+    toast.success('Materials saved');
+    setCurrentStep(3);
+    setExpandedStep(3);
   };
 
   const changeMaterialType = async (url: string, type: 'main' | 'background') => {
