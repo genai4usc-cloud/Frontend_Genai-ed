@@ -33,7 +33,7 @@ export default function CreateLecture() {
   const [addToPersonalLibrary, setAddToPersonalLibrary] = useState(false);
   const [addToUSCLibrary, setAddToUSCLibrary] = useState(false);
 
-  const [preloadedMaterials, setPreloadedMaterials] = useState<Array<{ url: string; name: string; courseTitle: string; courseCode: string; sourceCourseId: string }>>([]);
+  const [preloadedMaterials, setPreloadedMaterials] = useState<Array<{ url: string; name: string; courseTitle: string; courseCode: string; sourceCourseId: string; defaultType: 'main' | 'background' }>>([]);
   const [selectedPreloadedMaterialUrls, setSelectedPreloadedMaterialUrls] = useState<string[]>([]);
   const [additionalFiles, setAdditionalFiles] = useState<File[]>([]);
   const [allMaterials, setAllMaterials] = useState<MaterialWithType[]>([]);
@@ -116,7 +116,7 @@ export default function CreateLecture() {
   };
 
   const loadCourseMaterials = () => {
-    const materials: Array<{ url: string; name: string; courseTitle: string; courseCode: string; sourceCourseId: string }> = [];
+    const materials: Array<{ url: string; name: string; courseTitle: string; courseCode: string; sourceCourseId: string; defaultType: 'main' | 'background' }> = [];
 
     selectedCourseIds.forEach(courseId => {
       const course = courses.find(c => c.id === courseId);
@@ -127,7 +127,8 @@ export default function CreateLecture() {
             name: `Material ${index + 1}`,
             courseTitle: course.title,
             courseCode: course.code,
-            sourceCourseId: course.id
+            sourceCourseId: course.id,
+            defaultType: 'main'
           });
         });
 
@@ -137,7 +138,8 @@ export default function CreateLecture() {
             name: `Background Material ${index + 1}`,
             courseTitle: course.title,
             courseCode: course.code,
-            sourceCourseId: course.id
+            sourceCourseId: course.id,
+            defaultType: 'background'
           });
         });
       }
@@ -154,25 +156,62 @@ export default function CreateLecture() {
     );
   };
 
-  const togglePreloadedMaterial = (url: string) => {
+  const togglePreloadedMaterial = async (url: string) => {
     const isCurrentlySelected = selectedPreloadedMaterialUrls.includes(url);
+    const material = preloadedMaterials.find(m => m.url === url);
+
+    if (!material) return;
 
     if (isCurrentlySelected) {
       setSelectedPreloadedMaterialUrls(prev => prev.filter(u => u !== url));
       setAllMaterials(prev => prev.filter(m => m.url !== url));
+
+      if (lectureId) {
+        try {
+          const { error } = await supabase
+            .from('lecture_materials')
+            .delete()
+            .eq('lecture_id', lectureId)
+            .eq('material_url', url);
+
+          if (error) throw error;
+        } catch (error) {
+          console.error('Error removing material:', error);
+          toast.error('Failed to remove material');
+        }
+      }
     } else {
       setSelectedPreloadedMaterialUrls(prev => [...prev, url]);
 
-      const material = preloadedMaterials.find(m => m.url === url);
-      if (material) {
-        setAllMaterials(prev => [...prev, {
-          url: material.url,
-          name: material.name,
-          type: 'main',
-          sourceCourseId: material.sourceCourseId,
-          courseTitle: material.courseTitle,
-          courseCode: material.courseCode
-        }]);
+      const newMaterial = {
+        url: material.url,
+        name: material.name,
+        type: material.defaultType,
+        sourceCourseId: material.sourceCourseId,
+        courseTitle: material.courseTitle,
+        courseCode: material.courseCode
+      };
+
+      setAllMaterials(prev => [...prev, newMaterial]);
+
+      if (lectureId) {
+        try {
+          const { error } = await supabase
+            .from('lecture_materials')
+            .insert({
+              lecture_id: lectureId,
+              material_url: material.url,
+              material_name: material.name,
+              material_type: material.defaultType,
+              source_course_id: material.sourceCourseId,
+              source_type: 'course_preloaded'
+            });
+
+          if (error) throw error;
+        } catch (error) {
+          console.error('Error adding material:', error);
+          toast.error('Failed to add material');
+        }
       }
     }
   };
@@ -202,10 +241,25 @@ export default function CreateLecture() {
     setAllMaterials(prev => [...prev, ...newMaterials]);
   };
 
-  const removeAdditionalFile = (index: number) => {
+  const removeAdditionalFile = async (index: number) => {
     const fileToRemove = additionalFiles[index];
     if (fileToRemove) {
+      const materialToRemove = allMaterials.find(m => m.url.includes(fileToRemove.name));
       setAllMaterials(prev => prev.filter(m => !m.url.includes(fileToRemove.name)));
+
+      if (lectureId && materialToRemove) {
+        try {
+          const { error } = await supabase
+            .from('lecture_materials')
+            .delete()
+            .eq('lecture_id', lectureId)
+            .eq('material_url', materialToRemove.url);
+
+          if (error) throw error;
+        } catch (error) {
+          console.error('Error removing file:', error);
+        }
+      }
     }
     setAdditionalFiles(prev => prev.filter((_, i) => i !== index));
   };
@@ -302,19 +356,22 @@ export default function CreateLecture() {
     }
 
     try {
-      const { error: deleteMaterialsError } = await supabase
+      const { error: deleteUploadedError } = await supabase
         .from('lecture_materials')
         .delete()
-        .eq('lecture_id', lectureId);
+        .eq('lecture_id', lectureId)
+        .eq('source_type', 'uploaded');
 
-      if (deleteMaterialsError) throw deleteMaterialsError;
+      if (deleteUploadedError) throw deleteUploadedError;
 
-      const materialsToInsert = allMaterials.map(material => ({
+      const uploadedMaterials = allMaterials.filter(m => m.url.startsWith('temp-'));
+      const materialsToInsert = uploadedMaterials.map(material => ({
         lecture_id: lectureId,
         material_url: material.url,
         material_name: material.name,
         material_type: material.type,
-        source_course_id: material.sourceCourseId || null
+        source_course_id: material.sourceCourseId || null,
+        source_type: 'uploaded'
       }));
 
       if (materialsToInsert.length > 0) {
@@ -334,10 +391,27 @@ export default function CreateLecture() {
     }
   };
 
-  const changeMaterialType = (url: string, type: 'main' | 'background') => {
+  const changeMaterialType = async (url: string, type: 'main' | 'background') => {
     setAllMaterials(prev =>
       prev.map(m => (m.url === url ? { ...m, type } : m))
     );
+
+    if (lectureId) {
+      try {
+        const { error } = await supabase
+          .from('lecture_materials')
+          .update({
+            material_type: type
+          })
+          .eq('lecture_id', lectureId)
+          .eq('material_url', url);
+
+        if (error) throw error;
+      } catch (error) {
+        console.error('Error updating material type:', error);
+        toast.error('Failed to update material type');
+      }
+    }
   };
 
   const toggleContentStyle = (style: string) => {
