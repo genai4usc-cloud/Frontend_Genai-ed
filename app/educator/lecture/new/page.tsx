@@ -65,6 +65,7 @@ export default function CreateLecture() {
 
   const additionalFilesInputRef = useRef<HTMLInputElement>(null);
   const scriptFileInputRef = useRef<HTMLInputElement>(null);
+  const scriptSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -92,6 +93,14 @@ export default function CreateLecture() {
       setSelectedPreloadedMaterialUrls([]);
     }
   }, [selectedCourseIds]);
+
+  useEffect(() => {
+    return () => {
+      if (scriptSaveTimeoutRef.current) {
+        clearTimeout(scriptSaveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const checkAuth = async () => {
     try {
@@ -262,6 +271,31 @@ export default function CreateLecture() {
     } catch (error) {
       console.error('Error loading lecture data:', error);
     }
+  };
+
+  const saveScriptToDatabase = async (scriptText: string) => {
+    if (!lectureId) return;
+
+    try {
+      const { error } = await supabase
+        .from('lectures')
+        .update({ script_text: scriptText })
+        .eq('id', lectureId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error saving script:', error);
+    }
+  };
+
+  const debouncedSaveScript = (scriptText: string) => {
+    if (scriptSaveTimeoutRef.current) {
+      clearTimeout(scriptSaveTimeoutRef.current);
+    }
+
+    scriptSaveTimeoutRef.current = setTimeout(() => {
+      saveScriptToDatabase(scriptText);
+    }, 1000);
   };
 
   const toggleCourse = (courseId: string) => {
@@ -1062,7 +1096,14 @@ SLIDE 1: Untitled Lecture
     setExpandedStep(7);
   };
 
-  const handleRegenerateScript = () => {
+  const handleRegenerateScript = async () => {
+    if (scriptSaveTimeoutRef.current) {
+      clearTimeout(scriptSaveTimeoutRef.current);
+      scriptSaveTimeoutRef.current = null;
+    }
+
+    await saveScriptToDatabase(generatedScript);
+
     toast.info('Regenerating with changes...');
   };
 
@@ -1735,7 +1776,11 @@ SLIDE 1: Untitled Lecture
                           <h4 className="font-semibold text-gray-900 mb-4">Edit Script & Regenerate</h4>
                           <textarea
                             value={generatedScript}
-                            onChange={(e) => setGeneratedScript(e.target.value)}
+                            onChange={(e) => {
+                              const newValue = e.target.value;
+                              setGeneratedScript(newValue);
+                              debouncedSaveScript(newValue);
+                            }}
                             className="w-full h-48 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent bg-white"
                           />
                           <div className="mt-3 flex gap-3">
