@@ -1718,7 +1718,7 @@ SLIDE 1: Untitled Lecture
                             </div>
                             <div className="flex justify-between">
                               <span className="text-gray-600">Materials Added:</span>
-                              <span className="font-medium text-gray-900">{allMaterials.length + additionalFiles.length}</span>
+                              <span className="font-medium text-gray-900">{allMaterials.length}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-gray-600">Content Styles:</span>
