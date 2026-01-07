@@ -357,7 +357,8 @@ export default function CreateLecture() {
             material_type: 'main',
             source_type: 'uploaded',
             file_mime: file.type,
-            file_size_bytes: file.size
+            file_size_bytes: file.size,
+            storage_path: filePath
           });
 
         if (insertError) throw insertError;
@@ -392,16 +393,19 @@ export default function CreateLecture() {
 
     if (lectureId) {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        const { data: material, error: fetchError } = await supabase
+          .from('lecture_materials')
+          .select('storage_path')
+          .eq('lecture_id', lectureId)
+          .eq('material_url', materialToRemove.url)
+          .maybeSingle();
 
-        const urlParts = materialToRemove.url.split('/lecture-assets/');
-        if (urlParts.length === 2) {
-          const filePath = urlParts[1];
+        if (fetchError) throw fetchError;
 
+        if (material?.storage_path) {
           const { error: storageError } = await supabase.storage
             .from('lecture-assets')
-            .remove([filePath]);
+            .remove([material.storage_path]);
 
           if (storageError) {
             console.error('Error removing from storage:', storageError);
