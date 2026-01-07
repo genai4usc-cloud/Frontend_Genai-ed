@@ -428,7 +428,7 @@ export default function CreateLecture() {
     }
   };
 
-  const handleScriptFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleScriptFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -438,6 +438,46 @@ export default function CreateLecture() {
     }
 
     setScriptFile(file);
+
+    try {
+      const fileExtension = file.name.split('.').pop()?.toLowerCase();
+      let extractedText = '';
+
+      if (fileExtension === 'txt') {
+        extractedText = await file.text();
+      } else if (fileExtension === 'pdf') {
+        const pdfjsLib = await import('pdfjs-dist');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+        const textParts: string[] = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map((item: any) => item.str).join(' ');
+          textParts.push(pageText);
+        }
+        extractedText = textParts.join('\n\n');
+      } else if (fileExtension === 'docx') {
+        const mammoth = await import('mammoth');
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        extractedText = result.value;
+      } else {
+        toast.error('Unsupported script file type. Please use TXT, PDF, or DOCX.');
+        setScriptFile(null);
+        return;
+      }
+
+      setScriptDirect(extractedText);
+      toast.success(`Script extracted from ${file.name}`);
+    } catch (error) {
+      console.error('Error parsing script file:', error);
+      toast.error('Failed to parse script file');
+      setScriptFile(null);
+    }
   };
 
   const handleContinueToMaterials = async () => {
@@ -722,7 +762,7 @@ SLIDE 4: Summary & Key Takeaways
   };
 
   const handleContinueToAvatarSelection = async () => {
-    if (scriptMode === 'direct' && !scriptDirect && !scriptFile) {
+    if (scriptMode === 'direct' && !scriptDirect) {
       toast.error('Please enter a script or upload a script file');
       return;
     }
@@ -741,7 +781,7 @@ SLIDE 4: Summary & Key Takeaways
       let scriptTextFormatted = generatedScript;
 
       if (scriptMode === 'direct') {
-        const directScriptContent = scriptDirect || scriptFile?.name || '';
+        const directScriptContent = scriptDirect || '';
 
         const { data: materials } = await supabase
           .from('lecture_materials')
@@ -1456,7 +1496,10 @@ SLIDE 1: Untitled Lecture
                                 <span className="font-medium text-gray-900">{scriptFile.name}</span>
                               </div>
                               <button
-                                onClick={() => setScriptFile(null)}
+                                onClick={() => {
+                                  setScriptFile(null);
+                                  setScriptDirect('');
+                                }}
                                 className="text-red-600 hover:text-red-700 text-sm font-medium"
                               >
                                 Remove
@@ -1522,7 +1565,7 @@ SLIDE 1: Untitled Lecture
 
                     <button
                       onClick={handleContinueToAvatarSelection}
-                      disabled={scriptMode === 'direct' ? (!scriptDirect && !scriptFile) : !scriptGenerated}
+                      disabled={scriptMode === 'direct' ? !scriptDirect : !scriptGenerated}
                       className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-8 rounded-lg transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                     >
                       Continue to Avatar Selection
