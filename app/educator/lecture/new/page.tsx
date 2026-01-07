@@ -205,7 +205,7 @@ export default function CreateLecture() {
     try {
       const { data: lectureData, error } = await supabase
         .from('lectures')
-        .select('selected_course_ids, library_personal, library_usc, content_style, avatar_character, avatar_style, status')
+        .select('selected_course_ids, library_personal, library_usc, content_style, avatar_character, avatar_style, status, script_mode, script_text, script_prompt, video_length')
         .eq('id', lectureIdToLoad)
         .maybeSingle();
 
@@ -221,6 +221,30 @@ export default function CreateLecture() {
 
         if (lectureData.content_style && lectureData.content_style.length > 0) {
           setContentStyles(lectureData.content_style);
+        }
+
+        if (lectureData.script_mode) {
+          setScriptMode(lectureData.script_mode as 'direct' | 'ai');
+        }
+
+        if (lectureData.script_text) {
+          setGeneratedScript(lectureData.script_text);
+          setScriptGenerated(true);
+
+          if (lectureData.script_mode === 'direct') {
+            const videoScriptMatch = lectureData.script_text.match(/VIDEO SCRIPT:\n([\s\S]*?)(?:\n\nAUDIO SCRIPT:|$)/);
+            if (videoScriptMatch && videoScriptMatch[1]) {
+              setScriptDirect(videoScriptMatch[1].trim());
+            }
+          }
+        }
+
+        if (lectureData.script_prompt) {
+          setAiPrompt(lectureData.script_prompt);
+        }
+
+        if (lectureData.video_length) {
+          setVideoLength(lectureData.video_length);
         }
 
         if (lectureData.avatar_character) {
