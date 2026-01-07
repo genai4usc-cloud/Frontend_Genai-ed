@@ -625,11 +625,11 @@ export default function CreateLecture() {
 
       const { data: materials } = await supabase
         .from('lecture_materials')
-        .select('file_name, material_role')
+        .select('material_name, material_type')
         .eq('lecture_id', lectureId);
 
-      const mainMaterials = materials?.filter(m => m.material_role === 'main').map(m => m.file_name) || [];
-      const backgroundMaterials = materials?.filter(m => m.material_role === 'background').map(m => m.file_name) || [];
+      const mainMaterials = materials?.filter(m => m.material_type === 'main').map(m => m.material_name) || [];
+      const backgroundMaterials = materials?.filter(m => m.material_type === 'background').map(m => m.material_name) || [];
 
       const materialsSummary = `Main Materials: ${mainMaterials.length > 0 ? mainMaterials.join(', ') : 'None'}
 
@@ -741,11 +741,11 @@ SLIDE 4: Summary & Key Takeaways
 
         const { data: materials } = await supabase
           .from('lecture_materials')
-          .select('file_name, material_role')
+          .select('material_name, material_type')
           .eq('lecture_id', lectureId);
 
-        const mainMaterials = materials?.filter(m => m.material_role === 'main').map(m => m.file_name) || [];
-        const backgroundMaterials = materials?.filter(m => m.material_role === 'background').map(m => m.file_name) || [];
+        const mainMaterials = materials?.filter(m => m.material_type === 'main').map(m => m.material_name) || [];
+        const backgroundMaterials = materials?.filter(m => m.material_type === 'background').map(m => m.material_name) || [];
 
         const materialsSummary = `Main Materials: ${mainMaterials.length > 0 ? mainMaterials.join(', ') : 'None'}
 
