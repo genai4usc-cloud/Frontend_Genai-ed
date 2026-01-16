@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase, Profile, Course, CourseTeachingAssistant, CourseStudent, CourseTextbook } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
-import { ArrowLeft, GraduationCap, FileText, Users, BookOpen, FolderOpen, Upload, Plus, X, Save, File } from 'lucide-react';
+import { ArrowLeft, GraduationCap, FileText, Users, BookOpen, FolderOpen, Upload, Plus, X, Save, File, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { uploadCourseFile, uploadMultipleFiles, parseStudentCSV, validateFileSize, validateFileType } from '@/lib/fileUpload';
 
@@ -16,6 +16,8 @@ export default function ManageCourse() {
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [semester, setSemester] = useState('Fall 2025');
   const [courseNumber, setCourseNumber] = useState('');
@@ -346,6 +348,29 @@ export default function ManageCourse() {
     }
   };
 
+  const handleDeleteCourse = async () => {
+    if (!profile || !course) return;
+
+    setDeleting(true);
+    try {
+      const { error: deleteError } = await supabase
+        .from('courses')
+        .delete()
+        .eq('id', courseId)
+        .eq('educator_id', profile.id);
+
+      if (deleteError) throw deleteError;
+
+      toast.success('Course deleted successfully');
+      router.push('/educator/dashboard');
+    } catch (error) {
+      console.error('Error deleting course:', error);
+      toast.error('Failed to delete course. Please try again.');
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
   if (loading || !profile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -387,14 +412,24 @@ export default function ManageCourse() {
               <p className="text-gray-600 mt-1">Update course information and materials</p>
             </div>
           </div>
-          <button
-            onClick={handleUpdateCourse}
-            disabled={saving}
-            className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Save className="w-5 h-5" />
-            {saving ? 'Updating...' : 'Update Course'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={saving || deleting}
+              className="border-2 border-red-600 text-red-600 hover:bg-red-50 font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Trash2 className="w-5 h-5" />
+              Delete Course
+            </button>
+            <button
+              onClick={handleUpdateCourse}
+              disabled={saving || deleting}
+              className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Save className="w-5 h-5" />
+              {saving ? 'Updating...' : 'Update Course'}
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 space-y-8">
@@ -844,6 +879,48 @@ export default function ManageCourse() {
             )}
           </div>
         </div>
+
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-red-100 p-3 rounded-full">
+                  <Trash2 className="w-6 h-6 text-red-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900">Delete Course</h3>
+              </div>
+
+              <p className="text-gray-700">
+                Are you sure you want to delete <span className="font-semibold">{course?.title}</span>?
+                This action cannot be undone and will remove all associated data including students, teaching assistants, and materials.
+              </p>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteCourse}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {deleting ? (
+                    <>Deleting...</>
+                  ) : (
+                    <>
+                      <Trash2 className="w-5 h-5" />
+                      Delete
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </EducatorLayout>
   );
