@@ -28,6 +28,10 @@ type AvatarStyles = {
   harry: 'business' | 'casual' | 'youthful';
 };
 
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, '') ||
+  'https://backend-genai-ed.onrender.com';
+
 export default function CreateLecture() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -718,76 +722,39 @@ export default function CreateLecture() {
           lecture_id: lectureId,
           job_type: 'scripts',
           status: 'running',
-          progress: 0
+          progress: 10
         })
         .select()
         .single();
 
       if (jobError) throw jobError;
 
-      const { data: materials } = await supabase
-        .from('lecture_materials')
-        .select('material_name, material_type')
-        .eq('lecture_id', lectureId);
+      const resp = await fetch(`${BACKEND_URL}/api/lectures/${lectureId}/generate-script`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
 
-      const mainMaterials = materials?.filter(m => m.material_type === 'main').map(m => m.material_name) || [];
-      const backgroundMaterials = materials?.filter(m => m.material_type === 'background').map(m => m.material_name) || [];
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(`Backend error (${resp.status}): ${errText}`);
+      }
 
-      const materialsSummary = `Main Materials: ${mainMaterials.length > 0 ? mainMaterials.join(', ') : 'None'}
+      const result = await resp.json();
+      const realScript = result?.script;
 
-Background Materials: ${backgroundMaterials.length > 0 ? backgroundMaterials.join(', ') : 'None'}`;
+      if (!realScript || typeof realScript !== 'string') {
+        throw new Error('Backend returned an invalid script payload');
+      }
 
-      const placeholderScript = `TITLE:
-Untitled Lecture
-
-${materialsSummary}
-
-VIDEO SCRIPT:
-Welcome to today's lecture. Over the next ${videoLength} minutes, we'll explore the key concepts and ideas that you need to understand. This content has been carefully crafted based on your course materials to ensure comprehensive coverage of the subject matter.
-
-Let's begin by examining the fundamental principles. [Content continues based on AI prompt: ${aiPrompt}]
-
-Throughout this lecture, we'll reference the main materials you've provided and draw on background knowledge to give you a complete understanding.
-
-Thank you for your attention. Please review the materials and reach out if you have any questions.
-
-AUDIO SCRIPT:
-Welcome to today's lecture. Over the next ${videoLength} minutes, we'll explore the key concepts and ideas that you need to understand. This content has been carefully crafted based on your course materials to ensure comprehensive coverage of the subject matter.
-
-Let's begin by examining the fundamental principles. [Content continues based on AI prompt: ${aiPrompt}]
-
-Throughout this lecture, we'll reference the main materials you've provided and draw on background knowledge to give you a complete understanding.
-
-Thank you for your attention. Please review the materials and reach out if you have any questions.
-
-PPT SCRIPT:
-SLIDE 1: Untitled Lecture
-- Introduction to key concepts
-- Overview of learning objectives
-
-SLIDE 2: Fundamental Principles
-- Core concept 1
-- Core concept 2
-- Core concept 3
-
-SLIDE 3: Deep Dive
-- Detailed explanation
-- Examples and applications
-- Real-world context
-
-SLIDE 4: Summary & Key Takeaways
-- Main points recap
-- Important considerations
-- Next steps`;
-
-      const { error: scriptError } = await supabase
+      const { error: scriptSaveError } = await supabase
         .from('lectures')
         .update({
-          script_text: placeholderScript
+          script_text: realScript,
+          script_mode: 'ai'
         })
         .eq('id', lectureId);
 
-      if (scriptError) throw scriptError;
+      if (scriptSaveError) throw scriptSaveError;
 
       const { error: jobUpdateError } = await supabase
         .from('lecture_jobs')
@@ -799,7 +766,7 @@ SLIDE 4: Summary & Key Takeaways
 
       if (jobUpdateError) throw jobUpdateError;
 
-      setGeneratedScript(placeholderScript);
+      setGeneratedScript(realScript);
       setScriptGenerated(true);
       toast.success('Script generated successfully!');
     } catch (error) {
