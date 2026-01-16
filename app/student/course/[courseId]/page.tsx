@@ -18,7 +18,7 @@ import {
 
 interface Course {
   id: string;
-  code: string;
+  course_number: string;
   title: string;
   instructor_name: string;
   semester: string;
@@ -270,7 +270,7 @@ export default function StudentCourse() {
           <div className="flex items-start justify-between mb-2">
             <div>
               <h1 className="text-3xl font-bold text-foreground mb-2">
-                {course.code}: {course.title}
+                {course.course_number}: {course.title}
               </h1>
               <p className="text-muted-foreground">
                 {course.instructor_name} • {course.semester}
@@ -327,7 +327,7 @@ export default function StudentCourse() {
                     <LectureCard
                       key={lecture.id}
                       title={lecture.title}
-                      courseCode={course.code}
+                      courseCode={course.course_number}
                       instructorName={course.instructor_name}
                       duration={lecture.duration}
                       createdAt={formatTimeAgo(lecture.created_at)}
@@ -351,7 +351,7 @@ export default function StudentCourse() {
                     <LectureCard
                       key={lecture.id}
                       title={lecture.title}
-                      courseCode={course.code}
+                      courseCode={course.course_number}
                       instructorName="You"
                       duration={lecture.duration}
                       createdAt={formatTimeAgo(lecture.created_at)}

@@ -24,7 +24,7 @@ interface Lecture {
 }
 
 interface Course {
-  code: string;
+  course_number: string;
   title: string;
   instructor_name: string;
 }
@@ -183,7 +183,7 @@ export default function StudentLectureViewer() {
           </button>
           <h1 className="text-2xl font-bold text-foreground mb-1">{lecture.title}</h1>
           <p className="text-muted-foreground">
-            {course.code} • {course.instructor_name}
+            {course.course_number} • {course.instructor_name}
           </p>
         </div>
 

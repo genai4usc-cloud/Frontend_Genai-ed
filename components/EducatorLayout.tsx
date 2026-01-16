@@ -126,7 +126,7 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
                     <div className={`text-xs mt-0.5 truncate ${
                       isActive ? 'text-white/80' : 'text-gray-500'
                     }`}>
-                      {course.code} - {course.semester}
+                      {course.course_number} - {course.semester}
                     </div>
                   </button>
                 );

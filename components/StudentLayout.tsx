@@ -22,7 +22,7 @@ import { supabase, Profile } from '@/lib/supabase';
 
 interface Course {
   id: string;
-  code: string;
+  course_number: string;
   title: string;
   semester: string;
   newLecturesCount?: number;
@@ -56,9 +56,9 @@ export default function StudentLayout({ children, profile }: StudentLayoutProps)
       const courseIds = enrolledCourses.map(ec => ec.course_id);
       const { data: coursesData } = await supabase
         .from('courses')
-        .select('id, code, title, semester')
+        .select('id, course_number, title, semester')
         .in('id', courseIds)
-        .order('code');
+        .order('course_number');
 
       if (coursesData) {
         setCourses(coursesData);
@@ -169,7 +169,7 @@ export default function StudentLayout({ children, profile }: StudentLayoutProps)
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm truncate">{course.code}</div>
+                          <div className="font-medium text-sm truncate">{course.course_number}</div>
                           <div className={`text-xs mt-0.5 truncate ${
                             isActive ? 'text-white/80' : 'text-gray-500'
                           }`}>

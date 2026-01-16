@@ -19,7 +19,7 @@ import {
 
 interface Course {
   id: string;
-  code: string;
+  course_number: string;
   title: string;
   description: string;
   instructor_name: string;
@@ -158,7 +158,7 @@ export default function StudentDashboard() {
         formattedLectures = lecturesData.map((lecture: any) => ({
           id: lecture.id,
           title: lecture.title,
-          course_code: lecture.courses?.code || '',
+          course_code: lecture.courses?.course_number || '',
           instructor_name: lecture.courses?.instructor_name || '',
           duration: lecture.duration || 0,
           created_at: formatTimeAgo(lecture.created_at),
@@ -339,7 +339,7 @@ export default function StudentDashboard() {
               {courses.map((course) => (
                 <CourseCard
                   key={course.id}
-                  code={course.code}
+                  code={course.course_number}
                   title={course.title}
                   instructorName={course.instructor_name}
                   semester={course.semester}

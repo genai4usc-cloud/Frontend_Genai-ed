@@ -125,7 +125,7 @@ export default function CreateLecture() {
             url,
             name: `Material ${index + 1}`,
             courseTitle: course.title,
-            courseCode: course.code,
+            courseCode: course.course_number,
             sourceCourseId: course.id
           });
         });
@@ -135,7 +135,7 @@ export default function CreateLecture() {
             url,
             name: `Background Material ${index + 1}`,
             courseTitle: course.title,
-            courseCode: course.code,
+            courseCode: course.course_number,
             sourceCourseId: course.id
           });
         });
@@ -415,7 +415,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                               onChange={() => toggleCourse(course.id)}
                               className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon"
                             />
-                            <span className="font-medium text-gray-900">{course.code} - {course.title}</span>
+                            <span className="font-medium text-gray-900">{course.course_number} - {course.title}</span>
                           </label>
                         ))}
                       </div>
@@ -937,7 +937,7 @@ Thank you for watching. Please review the materials and complete the assignment.
                           {courses.filter(c => selectedCourseIds.includes(c.id)).map(course => (
                             <div key={course.id} className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
                               <CheckCircle className="w-5 h-5 text-green-600" />
-                              <span className="font-medium text-gray-900">{course.code} - {course.title}</span>
+                              <span className="font-medium text-gray-900">{course.course_number} - {course.title}</span>
                             </div>
                           ))}
                         </div>

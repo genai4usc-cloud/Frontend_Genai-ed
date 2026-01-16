@@ -18,7 +18,7 @@ export type Profile = {
 export type Course = {
   id: string;
   educator_id: string;
-  code: string;
+  course_number: string;
   title: string;
   description: string;
   student_count: number;

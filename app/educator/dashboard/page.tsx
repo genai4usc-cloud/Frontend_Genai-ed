@@ -200,7 +200,7 @@ export default function EducatorDashboard() {
               {courses.slice(0, 4).map((course) => (
                 <CourseCard
                   key={course.id}
-                  code={course.code}
+                  code={course.course_number}
                   title={course.title}
                   instructorName={course.instructor_name}
                   semester={course.semester}

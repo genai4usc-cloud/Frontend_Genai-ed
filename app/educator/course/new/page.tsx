@@ -229,7 +229,7 @@ export default function CreateCourse() {
         .from('courses')
         .insert({
           educator_id: profile.id,
-          code: courseNumber.trim(),
+          course_number: courseNumber.trim(),
           title: courseTitle.trim(),
           semester: semester,
           section: section.trim(),

@@ -82,7 +82,7 @@ export default function ManageCourse() {
       if (courseData) {
         setCourse(courseData);
         setSemester(courseData.semester);
-        setCourseNumber(courseData.code);
+        setCourseNumber(courseData.course_number);
         setSection(courseData.section);
         setCourseTitle(courseData.title);
         setInstructorName(courseData.instructor_name);
