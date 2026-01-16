@@ -19,7 +19,9 @@ type MaterialWithType = {
 
 type AvatarType = 'professional_male' | 'professional_female' | 'casual_male' | 'casual_female';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://backend-genai-ed.onrender.com";
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, '') ||
+  'https://backend-genai-ed.onrender.com';
 
 export default function CreateLecture() {
   const router = useRouter();
@@ -267,36 +269,20 @@ export default function CreateLecture() {
 
   const handleGenerateScript = async () => {
     if (!lectureId) {
-      toast.error('Lecture ID is required. Please create a lecture draft first.');
+      toast.error('No lecture draft found');
       return;
     }
 
-    if (!profile) {
-      toast.error('User not authenticated');
+    if (!aiPrompt.trim()) {
+      toast.error('Please enter an AI prompt');
       return;
     }
 
     setIsGenerating(true);
     toast.info('Generating script...');
 
-    let jobId: string | null = null;
-
     try {
-      const { data: insertedJob, error: jobInsertError } = await supabase
-        .from('lecture_jobs')
-        .insert({
-          lecture_id: lectureId,
-          job_type: 'scripts',
-          status: 'running',
-          progress: 0
-        })
-        .select()
-        .single();
-
-      if (jobInsertError) throw jobInsertError;
-      jobId = insertedJob.id;
-
-      const { error: updateLectureError } = await supabase
+      const { error: updateError } = await supabase
         .from('lectures')
         .update({
           script_mode: 'ai',
@@ -305,63 +291,75 @@ export default function CreateLecture() {
         })
         .eq('id', lectureId);
 
-      if (updateLectureError) throw updateLectureError;
+      if (updateError) throw updateError;
 
-      const response = await fetch(`${BACKEND_URL}/lectures/${lectureId}/generate-script`, {
+      const { data: jobData, error: jobError } = await supabase
+        .from('lecture_jobs')
+        .insert({
+          lecture_id: lectureId,
+          job_type: 'scripts',
+          status: 'running',
+          progress: 10
+        })
+        .select()
+        .single();
+
+      if (jobError) throw jobError;
+
+      const resp = await fetch(`${BACKEND_URL}/api/lectures/${lectureId}/generate-script`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Content-Type': 'application/json' }
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to generate script: ${response.status} ${errorText}`);
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(`Backend error (${resp.status}): ${errText}`);
       }
 
-      const data = await response.json();
+      const result = await resp.json();
+      const realScript = result?.script;
 
-      if (data.status !== 'success' || !data.script) {
-        throw new Error('Invalid response from backend');
+      if (!realScript || typeof realScript !== 'string') {
+        throw new Error('Backend returned an invalid script payload');
       }
 
-      setGeneratedScript(data.script);
-      setScriptGenerated(true);
-
-      const { error: scriptUpdateError } = await supabase
+      const { error: scriptSaveError } = await supabase
         .from('lectures')
         .update({
-          script_text: data.script
+          script_text: realScript,
+          script_mode: 'ai'
         })
         .eq('id', lectureId);
 
-      if (scriptUpdateError) throw scriptUpdateError;
+      if (scriptSaveError) throw scriptSaveError;
 
-      if (jobId) {
-        await supabase
-          .from('lecture_jobs')
-          .update({
-            status: 'succeeded',
-            progress: 100
-          })
-          .eq('id', jobId);
-      }
+      const { error: jobUpdateError } = await supabase
+        .from('lecture_jobs')
+        .update({
+          status: 'succeeded',
+          progress: 100
+        })
+        .eq('id', jobData.id);
 
+      if (jobUpdateError) throw jobUpdateError;
+
+      setGeneratedScript(realScript);
+      setScriptGenerated(true);
       toast.success('Script generated successfully!');
     } catch (error) {
       console.error('Error generating script:', error);
+      toast.error('Failed to generate script');
 
-      if (jobId) {
+      if (lectureId) {
         await supabase
           .from('lecture_jobs')
           .update({
             status: 'failed',
             result: { error: error instanceof Error ? error.message : 'Unknown error' }
           })
-          .eq('id', jobId);
+          .eq('lecture_id', lectureId)
+          .eq('job_type', 'scripts');
       }
-
-      toast.error('Failed to generate script. Please try again.');
     } finally {
       setIsGenerating(false);
     }
