@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import StudentLayout from '@/components/StudentLayout';
 import { ArrowLeft, Upload, File, Check, ChevronDown, ChevronUp, Info, Video, Mic, FileText, Sparkles, Download, Eye, Play, CheckCircle } from 'lucide-react';
@@ -19,8 +19,13 @@ type MaterialWithType = {
 
 type AvatarType = 'professional_male' | 'professional_female' | 'casual_male' | 'casual_female';
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://backend-genai-ed.onrender.com";
+
 export default function CreateLecture() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const lectureId = searchParams.get('lectureId');
+
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentStep, setCurrentStep] = useState(1);
@@ -261,16 +266,105 @@ export default function CreateLecture() {
   };
 
   const handleGenerateScript = async () => {
-    setScriptGenerated(true);
-    setGeneratedScript(`Introduction:
-Welcome to today's lecture. In this ${videoLength}-minute video, we'll explore Create an engaging educational video script about the topic.
+    if (!lectureId) {
+      toast.error('Lecture ID is required. Please create a lecture draft first.');
+      return;
+    }
 
-Main Content:
-[Generated content based on your prompt would appear here...]
+    if (!profile) {
+      toast.error('User not authenticated');
+      return;
+    }
 
-Conclusion:
-Thank you for watching. Please review the materials and complete the assignment.`);
-    toast.success('Script generated successfully!');
+    setIsGenerating(true);
+    toast.info('Generating script...');
+
+    let jobId: string | null = null;
+
+    try {
+      const { data: insertedJob, error: jobInsertError } = await supabase
+        .from('lecture_jobs')
+        .insert({
+          lecture_id: lectureId,
+          job_type: 'scripts',
+          status: 'running',
+          progress: 0
+        })
+        .select()
+        .single();
+
+      if (jobInsertError) throw jobInsertError;
+      jobId = insertedJob.id;
+
+      const { error: updateLectureError } = await supabase
+        .from('lectures')
+        .update({
+          script_mode: 'ai',
+          script_prompt: aiPrompt,
+          video_length: videoLength
+        })
+        .eq('id', lectureId);
+
+      if (updateLectureError) throw updateLectureError;
+
+      const response = await fetch(`${BACKEND_URL}/lectures/${lectureId}/generate-script`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to generate script: ${response.status} ${errorText}`);
+      }
+
+      const data = await response.json();
+
+      if (data.status !== 'success' || !data.script) {
+        throw new Error('Invalid response from backend');
+      }
+
+      setGeneratedScript(data.script);
+      setScriptGenerated(true);
+
+      const { error: scriptUpdateError } = await supabase
+        .from('lectures')
+        .update({
+          script_text: data.script
+        })
+        .eq('id', lectureId);
+
+      if (scriptUpdateError) throw scriptUpdateError;
+
+      if (jobId) {
+        await supabase
+          .from('lecture_jobs')
+          .update({
+            status: 'succeeded',
+            progress: 100
+          })
+          .eq('id', jobId);
+      }
+
+      toast.success('Script generated successfully!');
+    } catch (error) {
+      console.error('Error generating script:', error);
+
+      if (jobId) {
+        await supabase
+          .from('lecture_jobs')
+          .update({
+            status: 'failed',
+            result: { error: error instanceof Error ? error.message : 'Unknown error' }
+          })
+          .eq('id', jobId);
+      }
+
+      toast.error('Failed to generate script. Please try again.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleContinueToAvatarSelection = () => {
@@ -753,10 +847,11 @@ Thank you for watching. Please review the materials and complete the assignment.
 
                         <button
                           onClick={handleGenerateScript}
-                          className="bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 px-8 rounded-lg transition-colors flex items-center gap-2"
+                          disabled={isGenerating}
+                          className="bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 px-8 rounded-lg transition-colors flex items-center gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
                         >
                           <Sparkles className="w-5 h-5" />
-                          Generate Script with AI
+                          {isGenerating ? 'Generating...' : 'Generate Script with AI'}
                         </button>
 
                         {scriptGenerated && (
