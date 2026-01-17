@@ -32,6 +32,18 @@ const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, '') ||
   'https://backend-genai-ed.onrender.com';
 
+const STYLE_TO_JOB: Record<string, string> = {
+  audio: 'audio',
+  powerpoint: 'pptx',
+  video: 'video_avatar'
+};
+
+const JOB_TO_ARTIFACT: Record<string, string> = {
+  audio: 'audio_mp3',
+  pptx: 'pptx',
+  video_avatar: 'video_avatar_mp4'
+};
+
 export default function CreateLecture() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -722,19 +734,6 @@ export default function CreateLecture() {
 
       if (updateError) throw updateError;
 
-      const { data: jobData, error: jobError } = await supabase
-        .from('lecture_jobs')
-        .insert({
-          lecture_id: lectureId,
-          job_type: 'scripts',
-          status: 'running',
-          progress: 10
-        })
-        .select()
-        .single();
-
-      if (jobError) throw jobError;
-
       const resp = await fetch(`${BACKEND_URL}/api/lectures/${lectureId}/generate-script`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
@@ -762,33 +761,12 @@ export default function CreateLecture() {
 
       if (scriptSaveError) throw scriptSaveError;
 
-      const { error: jobUpdateError } = await supabase
-        .from('lecture_jobs')
-        .update({
-          status: 'succeeded',
-          progress: 100
-        })
-        .eq('id', jobData.id);
-
-      if (jobUpdateError) throw jobUpdateError;
-
       setGeneratedScript(realScript);
       setScriptGenerated(true);
       toast.success('Script generated successfully!');
     } catch (error) {
       console.error('Error generating script:', error);
       toast.error('Failed to generate script');
-
-      if (lectureId) {
-        await supabase
-          .from('lecture_jobs')
-          .update({
-            status: 'failed',
-            error_message: error instanceof Error ? error.message : 'Unknown error'
-          })
-          .eq('lecture_id', lectureId)
-          .eq('job_type', 'scripts');
-      }
     }
   };
 
@@ -935,10 +913,9 @@ SLIDE 1: Untitled Lecture
       setJobsByType(jobsMap);
       setArtifactsByType(artifactsMap);
 
-      const requiredJobs: string[] = [];
-      if (contentStyles.includes('audio')) requiredJobs.push('audio');
-      if (contentStyles.includes('powerpoint')) requiredJobs.push('pptx');
-      if (contentStyles.includes('video')) requiredJobs.push('video_avatar');
+      const requiredJobs: string[] = contentStyles
+        .map(style => STYLE_TO_JOB[style])
+        .filter(Boolean);
 
       const allJobsFinished = requiredJobs.every(jobType => {
         const job = jobsMap[jobType];
@@ -1634,10 +1611,16 @@ SLIDE 1: Untitled Lecture
                           </button>
                         </div>
 
-                        {isGenerating && Object.keys(jobsByType).length > 0 && (
+                        {isGenerating && (
                           <div className="border border-gray-200 rounded-xl p-6 space-y-4">
                             <h4 className="font-bold text-gray-900 mb-4">Generation Progress</h4>
-                            {contentStyles.includes('audio') && jobsByType['audio'] && (
+                            {Object.keys(jobsByType).length === 0 && (
+                              <div className="text-center py-8">
+                                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-brand-maroon mb-4"></div>
+                                <p className="text-gray-600">Starting generation... waiting for job updates</p>
+                              </div>
+                            )}
+                            {contentStyles.includes('audio') && jobsByType[STYLE_TO_JOB['audio']] && (
                               <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-2">
@@ -1645,30 +1628,30 @@ SLIDE 1: Untitled Lecture
                                     <span className="font-medium text-gray-900">Audio</span>
                                   </div>
                                   <span className={`text-sm font-medium ${
-                                    jobsByType['audio'].status === 'failed' ? 'text-red-600' :
-                                    jobsByType['audio'].status === 'succeeded' ? 'text-green-600' :
+                                    jobsByType[STYLE_TO_JOB['audio']].status === 'failed' ? 'text-red-600' :
+                                    jobsByType[STYLE_TO_JOB['audio']].status === 'succeeded' ? 'text-green-600' :
                                     'text-brand-maroon'
                                   }`}>
-                                    {jobsByType['audio'].status === 'succeeded' ? 'Complete' :
-                                     jobsByType['audio'].status === 'failed' ? 'Failed' :
-                                     jobsByType['audio'].status === 'running' ? `${jobsByType['audio'].progress}%` :
+                                    {jobsByType[STYLE_TO_JOB['audio']].status === 'succeeded' ? 'Complete' :
+                                     jobsByType[STYLE_TO_JOB['audio']].status === 'failed' ? 'Failed' :
+                                     jobsByType[STYLE_TO_JOB['audio']].status === 'running' ? `${jobsByType[STYLE_TO_JOB['audio']].progress}%` :
                                      'Queued'}
                                   </span>
                                 </div>
                                 <div className="w-full bg-gray-200 rounded-full h-2">
                                   <div
                                     className={`h-2 rounded-full transition-all ${
-                                      jobsByType['audio'].status === 'failed' ? 'bg-red-600' : 'bg-brand-maroon'
+                                      jobsByType[STYLE_TO_JOB['audio']].status === 'failed' ? 'bg-red-600' : 'bg-brand-maroon'
                                     }`}
-                                    style={{ width: `${jobsByType['audio'].progress}%` }}
+                                    style={{ width: `${jobsByType[STYLE_TO_JOB['audio']].progress}%` }}
                                   />
                                 </div>
-                                {jobsByType['audio'].error && (
-                                  <p className="text-sm text-red-600">{jobsByType['audio'].error}</p>
+                                {jobsByType[STYLE_TO_JOB['audio']].error && (
+                                  <p className="text-sm text-red-600">{jobsByType[STYLE_TO_JOB['audio']].error}</p>
                                 )}
                               </div>
                             )}
-                            {contentStyles.includes('powerpoint') && jobsByType['pptx'] && (
+                            {contentStyles.includes('powerpoint') && jobsByType[STYLE_TO_JOB['powerpoint']] && (
                               <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-2">
@@ -1676,30 +1659,30 @@ SLIDE 1: Untitled Lecture
                                     <span className="font-medium text-gray-900">PowerPoint</span>
                                   </div>
                                   <span className={`text-sm font-medium ${
-                                    jobsByType['pptx'].status === 'failed' ? 'text-red-600' :
-                                    jobsByType['pptx'].status === 'succeeded' ? 'text-green-600' :
+                                    jobsByType[STYLE_TO_JOB['powerpoint']].status === 'failed' ? 'text-red-600' :
+                                    jobsByType[STYLE_TO_JOB['powerpoint']].status === 'succeeded' ? 'text-green-600' :
                                     'text-brand-maroon'
                                   }`}>
-                                    {jobsByType['pptx'].status === 'succeeded' ? 'Complete' :
-                                     jobsByType['pptx'].status === 'failed' ? 'Failed' :
-                                     jobsByType['pptx'].status === 'running' ? `${jobsByType['pptx'].progress}%` :
+                                    {jobsByType[STYLE_TO_JOB['powerpoint']].status === 'succeeded' ? 'Complete' :
+                                     jobsByType[STYLE_TO_JOB['powerpoint']].status === 'failed' ? 'Failed' :
+                                     jobsByType[STYLE_TO_JOB['powerpoint']].status === 'running' ? `${jobsByType[STYLE_TO_JOB['powerpoint']].progress}%` :
                                      'Queued'}
                                   </span>
                                 </div>
                                 <div className="w-full bg-gray-200 rounded-full h-2">
                                   <div
                                     className={`h-2 rounded-full transition-all ${
-                                      jobsByType['pptx'].status === 'failed' ? 'bg-red-600' : 'bg-brand-maroon'
+                                      jobsByType[STYLE_TO_JOB['powerpoint']].status === 'failed' ? 'bg-red-600' : 'bg-brand-maroon'
                                     }`}
-                                    style={{ width: `${jobsByType['pptx'].progress}%` }}
+                                    style={{ width: `${jobsByType[STYLE_TO_JOB['powerpoint']].progress}%` }}
                                   />
                                 </div>
-                                {jobsByType['pptx'].error && (
-                                  <p className="text-sm text-red-600">{jobsByType['pptx'].error}</p>
+                                {jobsByType[STYLE_TO_JOB['powerpoint']].error && (
+                                  <p className="text-sm text-red-600">{jobsByType[STYLE_TO_JOB['powerpoint']].error}</p>
                                 )}
                               </div>
                             )}
-                            {contentStyles.includes('video') && jobsByType['video_avatar'] && (
+                            {contentStyles.includes('video') && jobsByType[STYLE_TO_JOB['video']] && (
                               <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-2">
@@ -1707,26 +1690,26 @@ SLIDE 1: Untitled Lecture
                                     <span className="font-medium text-gray-900">Video Avatar</span>
                                   </div>
                                   <span className={`text-sm font-medium ${
-                                    jobsByType['video_avatar'].status === 'failed' ? 'text-red-600' :
-                                    jobsByType['video_avatar'].status === 'succeeded' ? 'text-green-600' :
+                                    jobsByType[STYLE_TO_JOB['video']].status === 'failed' ? 'text-red-600' :
+                                    jobsByType[STYLE_TO_JOB['video']].status === 'succeeded' ? 'text-green-600' :
                                     'text-brand-maroon'
                                   }`}>
-                                    {jobsByType['video_avatar'].status === 'succeeded' ? 'Complete' :
-                                     jobsByType['video_avatar'].status === 'failed' ? 'Failed' :
-                                     jobsByType['video_avatar'].status === 'running' ? `${jobsByType['video_avatar'].progress}%` :
+                                    {jobsByType[STYLE_TO_JOB['video']].status === 'succeeded' ? 'Complete' :
+                                     jobsByType[STYLE_TO_JOB['video']].status === 'failed' ? 'Failed' :
+                                     jobsByType[STYLE_TO_JOB['video']].status === 'running' ? `${jobsByType[STYLE_TO_JOB['video']].progress}%` :
                                      'Queued'}
                                   </span>
                                 </div>
                                 <div className="w-full bg-gray-200 rounded-full h-2">
                                   <div
                                     className={`h-2 rounded-full transition-all ${
-                                      jobsByType['video_avatar'].status === 'failed' ? 'bg-red-600' : 'bg-brand-maroon'
+                                      jobsByType[STYLE_TO_JOB['video']].status === 'failed' ? 'bg-red-600' : 'bg-brand-maroon'
                                     }`}
-                                    style={{ width: `${jobsByType['video_avatar'].progress}%` }}
+                                    style={{ width: `${jobsByType[STYLE_TO_JOB['video']].progress}%` }}
                                   />
                                 </div>
-                                {jobsByType['video_avatar'].error && (
-                                  <p className="text-sm text-red-600">{jobsByType['video_avatar'].error}</p>
+                                {jobsByType[STYLE_TO_JOB['video']].error && (
+                                  <p className="text-sm text-red-600">{jobsByType[STYLE_TO_JOB['video']].error}</p>
                                 )}
                               </div>
                             )}
@@ -1773,32 +1756,32 @@ SLIDE 1: Untitled Lecture
                       </>
                     ) : (
                       <div className="space-y-6">
-                        {artifactsByType['video_avatar_mp4'] && (
+                        {artifactsByType[JOB_TO_ARTIFACT['video_avatar']] && (
                           <div>
                             <h4 className="font-semibold text-gray-900 mb-4">Video Preview</h4>
                             <div className="bg-gray-900 rounded-xl overflow-hidden">
-                              <video controls className="w-full" src={artifactsByType['video_avatar_mp4']} />
+                              <video controls className="w-full" src={artifactsByType[JOB_TO_ARTIFACT['video_avatar']]} />
                             </div>
                           </div>
                         )}
 
-                        {!artifactsByType['video_avatar_mp4'] && artifactsByType['audio_mp3'] && (
+                        {!artifactsByType[JOB_TO_ARTIFACT['video_avatar']] && artifactsByType[JOB_TO_ARTIFACT['audio']] && (
                           <div>
                             <h4 className="font-semibold text-gray-900 mb-4">Audio Preview</h4>
                             <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
-                              <audio controls className="w-full" src={artifactsByType['audio_mp3']} />
+                              <audio controls className="w-full" src={artifactsByType[JOB_TO_ARTIFACT['audio']]} />
                             </div>
                           </div>
                         )}
 
-                        {artifactsByType['pptx'] && (
+                        {artifactsByType[JOB_TO_ARTIFACT['pptx']] && (
                           <div>
                             <h4 className="font-semibold text-gray-900 mb-4">PowerPoint Presentation</h4>
                             <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
                               <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                               <p className="text-gray-700 font-medium mb-4">PowerPoint presentation ready</p>
                               <a
-                                href={artifactsByType['pptx']}
+                                href={artifactsByType[JOB_TO_ARTIFACT['pptx']]}
                                 download
                                 className="inline-flex items-center gap-2 bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-6 rounded-lg transition-colors"
                               >
