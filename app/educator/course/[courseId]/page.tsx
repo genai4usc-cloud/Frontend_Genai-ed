@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
-import { ArrowLeft, Settings, Video, Mic, FileText, Play, Download, Clock, Calendar } from 'lucide-react';
+import { ArrowLeft, Settings, Video, Mic, FileText, Play, Download, Clock, Calendar, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 type Lecture = {
@@ -17,10 +17,14 @@ type Lecture = {
   content_style: string[];
 };
 
+type LectureArtifact = {
+  id: string;
+  artifact_type: string;
+  file_url: string;
+};
+
 type LectureWithArtifacts = Lecture & {
-  video_url?: string;
-  audio_url?: string;
-  pptx_url?: string;
+  artifacts: LectureArtifact[];
 };
 
 export default function CourseLectures() {
@@ -31,6 +35,10 @@ export default function CourseLectures() {
   const [course, setCourse] = useState<Course | null>(null);
   const [lectures, setLectures] = useState<LectureWithArtifacts[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showDeleteLectureModal, setShowDeleteLectureModal] = useState<string | null>(null);
+  const [showDeleteArtifactModal, setShowDeleteArtifactModal] = useState<{ lectureId: string; artifactId: string; type: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [playingMedia, setPlayingMedia] = useState<{ lectureId: string; type: 'video' | 'audio'; url: string } | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -110,18 +118,12 @@ export default function CourseLectures() {
         lecturesData.map(async (lecture) => {
           const { data: artifacts } = await supabase
             .from('lecture_artifacts')
-            .select('artifact_type, file_url')
+            .select('id, artifact_type, file_url')
             .eq('lecture_id', lecture.id);
-
-          const videoArtifact = artifacts?.find(a => a.artifact_type === 'video_avatar');
-          const audioArtifact = artifacts?.find(a => a.artifact_type === 'audio');
-          const pptxArtifact = artifacts?.find(a => a.artifact_type === 'pptx');
 
           return {
             ...lecture,
-            video_url: videoArtifact?.file_url,
-            audio_url: audioArtifact?.file_url,
-            pptx_url: pptxArtifact?.file_url
+            artifacts: artifacts || []
           };
         })
       );
@@ -131,6 +133,84 @@ export default function CourseLectures() {
       console.error('Error loading lectures:', error);
       toast.error('Failed to load lectures');
     }
+  };
+
+  const handleDeleteArtifact = async () => {
+    if (!showDeleteArtifactModal) return;
+
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('lecture_artifacts')
+        .delete()
+        .eq('id', showDeleteArtifactModal.artifactId);
+
+      if (error) throw error;
+
+      toast.success('Content deleted successfully');
+      setShowDeleteArtifactModal(null);
+      await loadCourseLectures();
+    } catch (error) {
+      console.error('Error deleting artifact:', error);
+      toast.error('Failed to delete content');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteLecture = async () => {
+    if (!showDeleteLectureModal) return;
+
+    setDeleting(true);
+    try {
+      const { error: artifactsError } = await supabase
+        .from('lecture_artifacts')
+        .delete()
+        .eq('lecture_id', showDeleteLectureModal);
+
+      if (artifactsError) throw artifactsError;
+
+      const { error: coursesError } = await supabase
+        .from('lecture_courses')
+        .delete()
+        .eq('lecture_id', showDeleteLectureModal);
+
+      if (coursesError) throw coursesError;
+
+      const { error: materialsError } = await supabase
+        .from('lecture_materials')
+        .delete()
+        .eq('lecture_id', showDeleteLectureModal);
+
+      if (materialsError) throw materialsError;
+
+      const { error: jobsError } = await supabase
+        .from('lecture_jobs')
+        .delete()
+        .eq('lecture_id', showDeleteLectureModal);
+
+      if (jobsError) throw jobsError;
+
+      const { error: lectureError } = await supabase
+        .from('lectures')
+        .delete()
+        .eq('id', showDeleteLectureModal);
+
+      if (lectureError) throw lectureError;
+
+      toast.success('Lecture deleted successfully');
+      setShowDeleteLectureModal(null);
+      await loadCourseLectures();
+    } catch (error) {
+      console.error('Error deleting lecture:', error);
+      toast.error('Failed to delete lecture');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const getArtifactByType = (artifacts: LectureArtifact[], type: string) => {
+    return artifacts.find(a => a.artifact_type === type);
   };
 
   if (loading || !profile) {
@@ -216,134 +296,282 @@ export default function CourseLectures() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6">
-            {lectures.map((lecture) => (
-              <div key={lecture.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold text-gray-900 mb-2">{lecture.title}</h3>
-                      {lecture.description && (
-                        <p className="text-gray-600 text-sm mb-3">{lecture.description}</p>
-                      )}
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-4 h-4" />
-                          <span>{lecture.video_length} minutes</span>
+            {lectures.map((lecture) => {
+              const videoArtifact = getArtifactByType(lecture.artifacts, 'video_avatar');
+              const audioArtifact = getArtifactByType(lecture.artifacts, 'audio');
+              const pptxArtifact = getArtifactByType(lecture.artifacts, 'pptx');
+
+              return (
+                <div key={lecture.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+                  <div className="p-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">{lecture.title}</h3>
+                        {lecture.description && (
+                          <p className="text-gray-600 text-sm mb-3">{lecture.description}</p>
+                        )}
+                        <div className="flex items-center gap-4 text-sm text-gray-500">
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-4 h-4" />
+                            <span>{lecture.video_length} minutes</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-4 h-4" />
+                            <span>{new Date(lecture.created_at).toLocaleDateString()}</span>
+                          </div>
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            lecture.status === 'published' ? 'bg-green-100 text-green-700' :
+                            lecture.status === 'generated' ? 'bg-blue-100 text-blue-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {lecture.status.charAt(0).toUpperCase() + lecture.status.slice(1)}
+                          </span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          <span>{new Date(lecture.created_at).toLocaleDateString()}</span>
-                        </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          lecture.status === 'published' ? 'bg-green-100 text-green-700' :
-                          lecture.status === 'generated' ? 'bg-blue-100 text-blue-700' :
-                          'bg-gray-100 text-gray-700'
-                        }`}>
-                          {lecture.status.charAt(0).toUpperCase() + lecture.status.slice(1)}
-                        </span>
+                      </div>
+                      <button
+                        onClick={() => setShowDeleteLectureModal(lecture.id)}
+                        className="text-gray-400 hover:text-red-600 transition-colors p-2 rounded-lg hover:bg-red-50"
+                        title="Delete entire lecture"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="border-t border-gray-200 pt-4">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-3">Available Content</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {videoArtifact && (
+                          <div className="border-2 border-brand-maroon rounded-xl p-4 bg-red-50">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <div className="bg-brand-maroon p-2 rounded-lg">
+                                  <Video className="w-5 h-5 text-white" />
+                                </div>
+                                <span className="font-bold text-gray-900">Video</span>
+                              </div>
+                              <button
+                                onClick={() => setShowDeleteArtifactModal({ lectureId: lecture.id, artifactId: videoArtifact.id, type: 'video' })}
+                                className="text-gray-400 hover:text-red-600 transition-colors"
+                                title="Delete video"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => setPlayingMedia({ lectureId: lecture.id, type: 'video', url: videoArtifact.file_url })}
+                                className="flex-1 flex items-center justify-center gap-2 bg-brand-maroon hover:bg-brand-maroon-hover text-white font-medium py-2 px-3 rounded-lg transition-colors text-sm"
+                              >
+                                <Play className="w-4 h-4" />
+                                Play
+                              </button>
+                              <a
+                                href={videoArtifact.file_url}
+                                download
+                                className="flex items-center justify-center bg-white hover:bg-gray-50 border border-gray-300 p-2 rounded-lg transition-colors"
+                              >
+                                <Download className="w-4 h-4 text-gray-700" />
+                              </a>
+                            </div>
+                          </div>
+                        )}
+
+                        {audioArtifact && (
+                          <div className="border-2 border-blue-600 rounded-xl p-4 bg-blue-50">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <div className="bg-blue-600 p-2 rounded-lg">
+                                  <Mic className="w-5 h-5 text-white" />
+                                </div>
+                                <span className="font-bold text-gray-900">Audio</span>
+                              </div>
+                              <button
+                                onClick={() => setShowDeleteArtifactModal({ lectureId: lecture.id, artifactId: audioArtifact.id, type: 'audio' })}
+                                className="text-gray-400 hover:text-red-600 transition-colors"
+                                title="Delete audio"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => setPlayingMedia({ lectureId: lecture.id, type: 'audio', url: audioArtifact.file_url })}
+                                className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-3 rounded-lg transition-colors text-sm"
+                              >
+                                <Play className="w-4 h-4" />
+                                Play
+                              </button>
+                              <a
+                                href={audioArtifact.file_url}
+                                download
+                                className="flex items-center justify-center bg-white hover:bg-gray-50 border border-gray-300 p-2 rounded-lg transition-colors"
+                              >
+                                <Download className="w-4 h-4 text-gray-700" />
+                              </a>
+                            </div>
+                          </div>
+                        )}
+
+                        {pptxArtifact && (
+                          <div className="border-2 border-green-600 rounded-xl p-4 bg-green-50">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <div className="bg-green-600 p-2 rounded-lg">
+                                  <FileText className="w-5 h-5 text-white" />
+                                </div>
+                                <span className="font-bold text-gray-900">PowerPoint</span>
+                              </div>
+                              <button
+                                onClick={() => setShowDeleteArtifactModal({ lectureId: lecture.id, artifactId: pptxArtifact.id, type: 'pptx' })}
+                                className="text-gray-400 hover:text-red-600 transition-colors"
+                                title="Delete PowerPoint"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <a
+                              href={pptxArtifact.file_url}
+                              download
+                              className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-3 rounded-lg transition-colors text-sm"
+                            >
+                              <Download className="w-4 h-4" />
+                              Download
+                            </a>
+                          </div>
+                        )}
+
+                        {!videoArtifact && !audioArtifact && !pptxArtifact && (
+                          <div className="col-span-3 text-center py-6 text-gray-500">
+                            <p className="text-sm">No content artifacts available yet</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
-
-                  <div className="border-t border-gray-200 pt-4">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Available Content</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {lecture.video_url && (
-                        <div className="border-2 border-brand-maroon rounded-xl p-4 bg-red-50">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <div className="bg-brand-maroon p-2 rounded-lg">
-                                <Video className="w-5 h-5 text-white" />
-                              </div>
-                              <span className="font-bold text-gray-900">Video</span>
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <a
-                              href={lecture.video_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex-1 flex items-center justify-center gap-2 bg-brand-maroon hover:bg-brand-maroon-hover text-white font-medium py-2 px-3 rounded-lg transition-colors text-sm"
-                            >
-                              <Play className="w-4 h-4" />
-                              Play
-                            </a>
-                            <a
-                              href={lecture.video_url}
-                              download
-                              className="flex items-center justify-center bg-white hover:bg-gray-50 border border-gray-300 p-2 rounded-lg transition-colors"
-                            >
-                              <Download className="w-4 h-4 text-gray-700" />
-                            </a>
-                          </div>
-                        </div>
-                      )}
-
-                      {lecture.audio_url && (
-                        <div className="border-2 border-blue-600 rounded-xl p-4 bg-blue-50">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <div className="bg-blue-600 p-2 rounded-lg">
-                                <Mic className="w-5 h-5 text-white" />
-                              </div>
-                              <span className="font-bold text-gray-900">Audio</span>
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <a
-                              href={lecture.audio_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-3 rounded-lg transition-colors text-sm"
-                            >
-                              <Play className="w-4 h-4" />
-                              Play
-                            </a>
-                            <a
-                              href={lecture.audio_url}
-                              download
-                              className="flex items-center justify-center bg-white hover:bg-gray-50 border border-gray-300 p-2 rounded-lg transition-colors"
-                            >
-                              <Download className="w-4 h-4 text-gray-700" />
-                            </a>
-                          </div>
-                        </div>
-                      )}
-
-                      {lecture.pptx_url && (
-                        <div className="border-2 border-green-600 rounded-xl p-4 bg-green-50">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                              <div className="bg-green-600 p-2 rounded-lg">
-                                <FileText className="w-5 h-5 text-white" />
-                              </div>
-                              <span className="font-bold text-gray-900">PowerPoint</span>
-                            </div>
-                          </div>
-                          <a
-                            href={lecture.pptx_url}
-                            download
-                            className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-3 rounded-lg transition-colors text-sm"
-                          >
-                            <Download className="w-4 h-4" />
-                            Download
-                          </a>
-                        </div>
-                      )}
-
-                      {!lecture.video_url && !lecture.audio_url && !lecture.pptx_url && (
-                        <div className="col-span-3 text-center py-6 text-gray-500">
-                          <p className="text-sm">No content artifacts available yet</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+
+      {showDeleteArtifactModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-red-100 p-3 rounded-full">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900">Delete Content</h3>
+            </div>
+
+            <p className="text-gray-700">
+              Are you sure you want to delete this {showDeleteArtifactModal.type} content? This action cannot be undone.
+            </p>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                onClick={() => setShowDeleteArtifactModal(null)}
+                disabled={deleting}
+                className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteArtifact}
+                disabled={deleting}
+                className="flex-1 px-4 py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deleting ? (
+                  <>Deleting...</>
+                ) : (
+                  <>
+                    <Trash2 className="w-5 h-5" />
+                    Delete
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteLectureModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-red-100 p-3 rounded-full">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900">Delete Lecture</h3>
+            </div>
+
+            <p className="text-gray-700">
+              Are you sure you want to delete this entire lecture? This will remove all associated content including video, audio, and PowerPoint files. This action cannot be undone.
+            </p>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                onClick={() => setShowDeleteLectureModal(null)}
+                disabled={deleting}
+                className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteLecture}
+                disabled={deleting}
+                className="flex-1 px-4 py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deleting ? (
+                  <>Deleting...</>
+                ) : (
+                  <>
+                    <Trash2 className="w-5 h-5" />
+                    Delete
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {playingMedia && (
+        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
+          <div className="relative w-full max-w-5xl">
+            <button
+              onClick={() => setPlayingMedia(null)}
+              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
+            >
+              <X className="w-8 h-8" />
+            </button>
+            <div className="bg-black rounded-2xl overflow-hidden">
+              {playingMedia.type === 'video' ? (
+                <video
+                  src={playingMedia.url}
+                  controls
+                  autoPlay
+                  className="w-full max-h-[80vh]"
+                >
+                  Your browser does not support the video tag.
+                </video>
+              ) : (
+                <div className="p-8 flex items-center justify-center">
+                  <audio
+                    src={playingMedia.url}
+                    controls
+                    autoPlay
+                    className="w-full"
+                  >
+                    Your browser does not support the audio tag.
+                  </audio>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </EducatorLayout>
   );
 }
