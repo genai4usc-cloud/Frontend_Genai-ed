@@ -39,9 +39,9 @@ const STYLE_TO_JOB: Record<string, string> = {
 };
 
 const JOB_TO_ARTIFACT: Record<string, string> = {
-  audio: 'audio_mp3',
+  audio: 'audio',
   pptx: 'pptx',
-  video_avatar: 'video_avatar_mp4'
+  video_avatar: 'video_avatar'
 };
 
 export default function CreateLecture() {
@@ -72,6 +72,7 @@ export default function CreateLecture() {
   const [videoLength, setVideoLength] = useState(5);
   const [generatedScript, setGeneratedScript] = useState('');
   const [scriptGenerated, setScriptGenerated] = useState(false);
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false);
 
   const [selectedCharacter, setSelectedCharacter] = useState<AvatarCharacter | null>(null);
   const [selectedStyle, setSelectedStyle] = useState<string>('');
@@ -722,6 +723,7 @@ export default function CreateLecture() {
       return;
     }
 
+    setIsGeneratingScript(true);
     try {
       const { error: updateError } = await supabase
         .from('lectures')
@@ -767,6 +769,8 @@ export default function CreateLecture() {
     } catch (error) {
       console.error('Error generating script:', error);
       toast.error('Failed to generate script');
+    } finally {
+      setIsGeneratingScript(false);
     }
   };
 
@@ -1511,10 +1515,20 @@ SLIDE 1: Untitled Lecture
 
                         <button
                           onClick={handleGenerateScript}
-                          className="bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 px-8 rounded-lg transition-colors flex items-center gap-2"
+                          disabled={isGeneratingScript}
+                          className="bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 px-8 rounded-lg transition-colors flex items-center gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
                         >
-                          <Sparkles className="w-5 h-5" />
-                          Generate Script with AI
+                          {isGeneratingScript ? (
+                            <>
+                              <div className="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-black"></div>
+                              Generating Script...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-5 h-5" />
+                              Generate Script with AI
+                            </>
+                          )}
                         </button>
 
                         {scriptGenerated && (
@@ -1605,10 +1619,16 @@ SLIDE 1: Untitled Lecture
                           <button
                             onClick={handleGenerateContent}
                             disabled={isGenerating}
-                            className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-4 px-12 rounded-lg transition-colors text-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-4 px-12 rounded-lg transition-colors text-lg disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-3 mx-auto"
                           >
+                            {isGenerating && (
+                              <div className="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                            )}
                             {isGenerating ? 'Generating...' : 'Generate Content'}
                           </button>
+                          {isGenerating && (
+                            <p className="text-sm text-gray-600 mt-3">Starting jobs and polling status...</p>
+                          )}
                         </div>
 
                         {isGenerating && (
