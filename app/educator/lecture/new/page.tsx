@@ -66,10 +66,13 @@ export default function CreateLecture() {
 
   const [contentGenerated, setContentGenerated] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [jobsByType, setJobsByType] = useState<Record<string, { status: string; progress: number; error?: string }>>({});
+  const [artifactsByType, setArtifactsByType] = useState<Record<string, string>>({});
 
   const additionalFilesInputRef = useRef<HTMLInputElement>(null);
   const scriptFileInputRef = useRef<HTMLInputElement>(null);
   const scriptSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -102,6 +105,9 @@ export default function CreateLecture() {
     return () => {
       if (scriptSaveTimeoutRef.current) {
         clearTimeout(scriptSaveTimeoutRef.current);
+      }
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
       }
     };
   }, []);
@@ -894,6 +900,76 @@ SLIDE 1: Untitled Lecture
     }
   };
 
+  const pollJobsAndArtifacts = async (lectureIdToPoll: string) => {
+    try {
+      const { data: jobs, error: jobsError } = await supabase
+        .from('lecture_jobs')
+        .select('*')
+        .eq('lecture_id', lectureIdToPoll);
+
+      if (jobsError) throw jobsError;
+
+      const { data: artifacts, error: artifactsError } = await supabase
+        .from('lecture_artifacts')
+        .select('*')
+        .eq('lecture_id', lectureIdToPoll);
+
+      if (artifactsError) throw artifactsError;
+
+      const jobsMap: Record<string, { status: string; progress: number; error?: string }> = {};
+      jobs?.forEach(job => {
+        jobsMap[job.job_type] = {
+          status: job.status,
+          progress: job.progress || 0,
+          error: job.error_message || (job.result as any)?.error
+        };
+      });
+
+      const artifactsMap: Record<string, string> = {};
+      artifacts?.forEach(artifact => {
+        if (artifact.file_url) {
+          artifactsMap[artifact.artifact_type] = artifact.file_url;
+        }
+      });
+
+      setJobsByType(jobsMap);
+      setArtifactsByType(artifactsMap);
+
+      const requiredJobs: string[] = [];
+      if (contentStyles.includes('audio')) requiredJobs.push('audio');
+      if (contentStyles.includes('powerpoint')) requiredJobs.push('pptx');
+      if (contentStyles.includes('video')) requiredJobs.push('video_avatar');
+
+      const allJobsFinished = requiredJobs.every(jobType => {
+        const job = jobsMap[jobType];
+        return job && (job.status === 'succeeded' || job.status === 'failed');
+      });
+
+      if (allJobsFinished) {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+
+        setIsGenerating(false);
+
+        const anySucceeded = requiredJobs.some(jobType => jobsMap[jobType]?.status === 'succeeded');
+        if (anySucceeded && Object.keys(artifactsMap).length > 0) {
+          setContentGenerated(true);
+          await supabase
+            .from('lectures')
+            .update({ status: 'generated' })
+            .eq('id', lectureIdToPoll);
+          toast.success('Content generated successfully!');
+        } else {
+          toast.error('Content generation failed. Please check errors and try again.');
+        }
+      }
+    } catch (error) {
+      console.error('Error polling jobs and artifacts:', error);
+    }
+  };
+
   const handleGenerateContent = async () => {
     if (!lectureId) {
       toast.error('No lecture draft found');
@@ -901,160 +977,36 @@ SLIDE 1: Untitled Lecture
     }
 
     setIsGenerating(true);
-    toast.info('Generating content...');
+    setJobsByType({});
+    setArtifactsByType({});
+    toast.info('Starting content generation...');
 
     try {
-      const jobTypes: string[] = [];
+      const resp = await fetch(`${BACKEND_URL}/api/lectures/${lectureId}/generate-content`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
 
-      if (contentStyles.includes('audio')) {
-        jobTypes.push('audio');
-      }
-      if (contentStyles.includes('powerpoint')) {
-        jobTypes.push('pptx');
-      }
-      if (contentStyles.includes('video')) {
-        jobTypes.push('video_static', 'video_avatar');
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(`Backend error (${resp.status}): ${errText}`);
       }
 
-      if (jobTypes.length === 0) {
-        toast.error('No content styles selected');
-        setIsGenerating(false);
-        return;
+      toast.info('Backend processing started. Monitoring progress...');
+
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
       }
 
-      const jobIds: string[] = [];
-      for (const jobType of jobTypes) {
-        const { data: jobData, error: jobError } = await supabase
-          .from('lecture_jobs')
-          .insert({
-            lecture_id: lectureId,
-            job_type: jobType,
-            status: 'queued',
-            progress: 0
-          })
-          .select()
-          .single();
+      await pollJobsAndArtifacts(lectureId);
 
-        if (jobError) throw jobError;
-        if (jobData) jobIds.push(jobData.id);
-      }
-
-      for (let i = 0; i < jobIds.length; i++) {
-        const jobId = jobIds[i];
-        const jobType = jobTypes[i];
-
-        await supabase
-          .from('lecture_jobs')
-          .update({
-            status: 'running',
-            progress: 25
-          })
-          .eq('id', jobId);
-
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        await supabase
-          .from('lecture_jobs')
-          .update({
-            progress: 50
-          })
-          .eq('id', jobId);
-
-        const placeholderContent = `Placeholder ${jobType} content for lecture ${lectureId}`;
-        const fileName = `lecture-${lectureId}-${jobType}-${Date.now()}.txt`;
-        const blob = new Blob([placeholderContent], { type: 'text/plain' });
-
-        const { error: uploadError } = await supabase.storage
-          .from('lecture-assets')
-          .upload(`artifacts/${fileName}`, blob, {
-            contentType: 'text/plain',
-            upsert: true
-          });
-
-        if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage
-          .from('lecture-assets')
-          .getPublicUrl(`artifacts/${fileName}`);
-
-        const artifactTypeMap: Record<string, string> = {
-          'audio': 'audio_mp3',
-          'pptx': 'pptx',
-          'video_static': 'video_static_mp4',
-          'video_avatar': 'video_avatar_mp4'
-        };
-
-        const artifactType = artifactTypeMap[jobType];
-
-        const { data: existingArtifact } = await supabase
-          .from('lecture_artifacts')
-          .select('id')
-          .eq('lecture_id', lectureId)
-          .eq('artifact_type', artifactType)
-          .maybeSingle();
-
-        if (existingArtifact) {
-          await supabase
-            .from('lecture_artifacts')
-            .update({
-              file_url: urlData.publicUrl
-            })
-            .eq('id', existingArtifact.id);
-        } else {
-          await supabase
-            .from('lecture_artifacts')
-            .insert({
-              lecture_id: lectureId,
-              artifact_type: artifactType,
-              file_url: urlData.publicUrl
-            });
-        }
-
-        await supabase
-          .from('lecture_jobs')
-          .update({
-            progress: 75
-          })
-          .eq('id', jobId);
-
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        await supabase
-          .from('lecture_jobs')
-          .update({
-            status: 'succeeded',
-            progress: 100
-          })
-          .eq('id', jobId);
-      }
-
-      const { error: statusError } = await supabase
-        .from('lectures')
-        .update({
-          status: 'generated'
-        })
-        .eq('id', lectureId);
-
-      if (statusError) throw statusError;
-
-      setIsGenerating(false);
-      setContentGenerated(true);
-      toast.success('Content generated successfully!');
+      pollingIntervalRef.current = setInterval(() => {
+        pollJobsAndArtifacts(lectureId);
+      }, 2000);
     } catch (error) {
       console.error('Error generating content:', error);
-      toast.error('Failed to generate content');
+      toast.error('Failed to start content generation');
       setIsGenerating(false);
-
-      if (lectureId) {
-        await supabase
-          .from('lecture_jobs')
-          .update({
-            status: 'failed',
-            error_message: error instanceof Error ? error.message : 'Unknown error'
-          })
-          .eq('lecture_id', lectureId)
-          .in('status', ['queued', 'running']);
-      }
     }
   };
 
@@ -1087,13 +1039,19 @@ SLIDE 1: Untitled Lecture
     try {
       const { data: artifacts, error: artifactsError } = await supabase
         .from('lecture_artifacts')
-        .select('id')
+        .select('artifact_type, file_url')
         .eq('lecture_id', lectureId);
 
       if (artifactsError) throw artifactsError;
 
       if (!artifacts || artifacts.length === 0) {
         toast.error('Cannot publish: No content artifacts found. Please generate content first.');
+        return;
+      }
+
+      const validArtifacts = artifacts.filter(a => a.file_url && a.file_url.trim() !== '');
+      if (validArtifacts.length === 0) {
+        toast.error('Cannot publish: No valid content artifacts with URLs found. Please generate content first.');
         return;
       }
 
@@ -1676,6 +1634,105 @@ SLIDE 1: Untitled Lecture
                           </button>
                         </div>
 
+                        {isGenerating && Object.keys(jobsByType).length > 0 && (
+                          <div className="border border-gray-200 rounded-xl p-6 space-y-4">
+                            <h4 className="font-bold text-gray-900 mb-4">Generation Progress</h4>
+                            {contentStyles.includes('audio') && jobsByType['audio'] && (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Mic className="w-5 h-5 text-brand-maroon" />
+                                    <span className="font-medium text-gray-900">Audio</span>
+                                  </div>
+                                  <span className={`text-sm font-medium ${
+                                    jobsByType['audio'].status === 'failed' ? 'text-red-600' :
+                                    jobsByType['audio'].status === 'succeeded' ? 'text-green-600' :
+                                    'text-brand-maroon'
+                                  }`}>
+                                    {jobsByType['audio'].status === 'succeeded' ? 'Complete' :
+                                     jobsByType['audio'].status === 'failed' ? 'Failed' :
+                                     jobsByType['audio'].status === 'running' ? `${jobsByType['audio'].progress}%` :
+                                     'Queued'}
+                                  </span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div
+                                    className={`h-2 rounded-full transition-all ${
+                                      jobsByType['audio'].status === 'failed' ? 'bg-red-600' : 'bg-brand-maroon'
+                                    }`}
+                                    style={{ width: `${jobsByType['audio'].progress}%` }}
+                                  />
+                                </div>
+                                {jobsByType['audio'].error && (
+                                  <p className="text-sm text-red-600">{jobsByType['audio'].error}</p>
+                                )}
+                              </div>
+                            )}
+                            {contentStyles.includes('powerpoint') && jobsByType['pptx'] && (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <FileText className="w-5 h-5 text-brand-maroon" />
+                                    <span className="font-medium text-gray-900">PowerPoint</span>
+                                  </div>
+                                  <span className={`text-sm font-medium ${
+                                    jobsByType['pptx'].status === 'failed' ? 'text-red-600' :
+                                    jobsByType['pptx'].status === 'succeeded' ? 'text-green-600' :
+                                    'text-brand-maroon'
+                                  }`}>
+                                    {jobsByType['pptx'].status === 'succeeded' ? 'Complete' :
+                                     jobsByType['pptx'].status === 'failed' ? 'Failed' :
+                                     jobsByType['pptx'].status === 'running' ? `${jobsByType['pptx'].progress}%` :
+                                     'Queued'}
+                                  </span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div
+                                    className={`h-2 rounded-full transition-all ${
+                                      jobsByType['pptx'].status === 'failed' ? 'bg-red-600' : 'bg-brand-maroon'
+                                    }`}
+                                    style={{ width: `${jobsByType['pptx'].progress}%` }}
+                                  />
+                                </div>
+                                {jobsByType['pptx'].error && (
+                                  <p className="text-sm text-red-600">{jobsByType['pptx'].error}</p>
+                                )}
+                              </div>
+                            )}
+                            {contentStyles.includes('video') && jobsByType['video_avatar'] && (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Video className="w-5 h-5 text-brand-maroon" />
+                                    <span className="font-medium text-gray-900">Video Avatar</span>
+                                  </div>
+                                  <span className={`text-sm font-medium ${
+                                    jobsByType['video_avatar'].status === 'failed' ? 'text-red-600' :
+                                    jobsByType['video_avatar'].status === 'succeeded' ? 'text-green-600' :
+                                    'text-brand-maroon'
+                                  }`}>
+                                    {jobsByType['video_avatar'].status === 'succeeded' ? 'Complete' :
+                                     jobsByType['video_avatar'].status === 'failed' ? 'Failed' :
+                                     jobsByType['video_avatar'].status === 'running' ? `${jobsByType['video_avatar'].progress}%` :
+                                     'Queued'}
+                                  </span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div
+                                    className={`h-2 rounded-full transition-all ${
+                                      jobsByType['video_avatar'].status === 'failed' ? 'bg-red-600' : 'bg-brand-maroon'
+                                    }`}
+                                    style={{ width: `${jobsByType['video_avatar'].progress}%` }}
+                                  />
+                                </div>
+                                {jobsByType['video_avatar'].error && (
+                                  <p className="text-sm text-red-600">{jobsByType['video_avatar'].error}</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         <div className="border border-gray-200 rounded-xl p-6">
                           <h4 className="font-bold text-gray-900 mb-4">Summary</h4>
                           <div className="space-y-3 text-sm">
@@ -1716,25 +1773,38 @@ SLIDE 1: Untitled Lecture
                       </>
                     ) : (
                       <div className="space-y-6">
-                        {(contentStyles.includes('video') || contentStyles.includes('audio')) && (
+                        {artifactsByType['video_avatar_mp4'] && (
                           <div>
-                            <h4 className="font-semibold text-gray-900 mb-4">Content Preview</h4>
-                            <div className="bg-gray-900 rounded-xl p-20 flex items-center justify-center aspect-video">
-                              <div className="text-center">
-                                <Play className="w-20 h-20 text-gray-400 mx-auto mb-4" />
-                                <p className="text-white text-lg">Video/Audio Preview</p>
-                              </div>
+                            <h4 className="font-semibold text-gray-900 mb-4">Video Preview</h4>
+                            <div className="bg-gray-900 rounded-xl overflow-hidden">
+                              <video controls className="w-full" src={artifactsByType['video_avatar_mp4']} />
                             </div>
                           </div>
                         )}
 
-                        {contentStyles.includes('powerpoint') && (
+                        {!artifactsByType['video_avatar_mp4'] && artifactsByType['audio_mp3'] && (
                           <div>
-                            <h4 className="font-semibold text-gray-900 mb-4">PowerPoint Preview</h4>
-                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-12 text-center">
+                            <h4 className="font-semibold text-gray-900 mb-4">Audio Preview</h4>
+                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+                              <audio controls className="w-full" src={artifactsByType['audio_mp3']} />
+                            </div>
+                          </div>
+                        )}
+
+                        {artifactsByType['pptx'] && (
+                          <div>
+                            <h4 className="font-semibold text-gray-900 mb-4">PowerPoint Presentation</h4>
+                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
                               <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                              <p className="text-gray-700 font-medium">PowerPoint slides generated</p>
-                              <p className="text-gray-600 text-sm mt-1">12 slides created</p>
+                              <p className="text-gray-700 font-medium mb-4">PowerPoint presentation ready</p>
+                              <a
+                                href={artifactsByType['pptx']}
+                                download
+                                className="inline-flex items-center gap-2 bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                              >
+                                <Download className="w-5 h-5" />
+                                Download PPTX
+                              </a>
                             </div>
                           </div>
                         )}
