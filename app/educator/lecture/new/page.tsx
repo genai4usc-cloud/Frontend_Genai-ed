@@ -885,6 +885,8 @@ SLIDE 1: Untitled Lecture
   };
 
   const pollJobsAndArtifacts = async (lectureIdToPoll: string, jobIds: string[]) => {
+    if (!jobIds || jobIds.length === 0) return;
+
     try {
       const { data: jobs, error: jobsError } = await supabase
         .from('lecture_jobs')
@@ -974,6 +976,7 @@ SLIDE 1: Untitled Lecture
     }
 
     setIsGenerating(true);
+    setContentGenerated(false);
     setJobsByType({});
     setArtifactsByType({});
     finishedAtRef.current = null;
