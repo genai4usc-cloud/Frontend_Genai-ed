@@ -86,6 +86,8 @@ export default function CreateLecture() {
   const scriptFileInputRef = useRef<HTMLInputElement>(null);
   const scriptSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const jobIdsRef = useRef<string[]>([]);
+  const finishedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -882,12 +884,12 @@ SLIDE 1: Untitled Lecture
     }
   };
 
-  const pollJobsAndArtifacts = async (lectureIdToPoll: string) => {
+  const pollJobsAndArtifacts = async (lectureIdToPoll: string, jobIds: string[]) => {
     try {
       const { data: jobs, error: jobsError } = await supabase
         .from('lecture_jobs')
         .select('*')
-        .eq('lecture_id', lectureIdToPoll);
+        .in('id', jobIds);
 
       if (jobsError) throw jobsError;
 
@@ -927,6 +929,21 @@ SLIDE 1: Untitled Lecture
       });
 
       if (allJobsFinished) {
+        const anySucceeded = requiredJobs.some(jobType => jobsMap[jobType]?.status === 'succeeded');
+
+        // Grace window: give artifacts time to show up after job success
+        if (anySucceeded && Object.keys(artifactsMap).length === 0) {
+          if (!finishedAtRef.current) finishedAtRef.current = Date.now();
+
+          // wait up to 10 seconds for artifacts to appear
+          if (Date.now() - finishedAtRef.current < 10_000) {
+            return; // keep polling
+          }
+        }
+
+        // stop polling
+        finishedAtRef.current = null;
+
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
           pollingIntervalRef.current = null;
@@ -934,7 +951,6 @@ SLIDE 1: Untitled Lecture
 
         setIsGenerating(false);
 
-        const anySucceeded = requiredJobs.some(jobType => jobsMap[jobType]?.status === 'succeeded');
         if (anySucceeded && Object.keys(artifactsMap).length > 0) {
           setContentGenerated(true);
           await supabase
@@ -960,6 +976,9 @@ SLIDE 1: Untitled Lecture
     setIsGenerating(true);
     setJobsByType({});
     setArtifactsByType({});
+    finishedAtRef.current = null;
+    jobIdsRef.current = [];
+
     toast.info('Starting content generation...');
 
     try {
@@ -973,16 +992,27 @@ SLIDE 1: Untitled Lecture
         throw new Error(`Backend error (${resp.status}): ${errText}`);
       }
 
+      const started = await resp.json();
+
+      const jobIdsMap = started?.job_ids || {};
+      const jobIds = Object.values(jobIdsMap).filter(Boolean) as string[];
+
+      if (!Array.isArray(jobIds) || jobIds.length === 0) {
+        throw new Error(`Backend returned success but started no jobs: ${JSON.stringify(started)}`);
+      }
+
+      jobIdsRef.current = jobIds;
+
       toast.info('Backend processing started. Monitoring progress...');
 
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
       }
 
-      await pollJobsAndArtifacts(lectureId);
+      await pollJobsAndArtifacts(lectureId, jobIds);
 
       pollingIntervalRef.current = setInterval(() => {
-        pollJobsAndArtifacts(lectureId);
+        pollJobsAndArtifacts(lectureId, jobIdsRef.current);
       }, 2000);
     } catch (error) {
       console.error('Error generating content:', error);
