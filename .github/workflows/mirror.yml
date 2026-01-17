@@ -16,14 +16,21 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Push mirror
+      - name: Push main branch + tags to mirror
         env:
           MIRROR_TOKEN: ${{ secrets.MIRROR_TOKEN }}
         run: |
           set -e
+
           git config user.name "mirror-bot"
           git config user.email "mirror-bot@users.noreply.github.com"
 
+          # Always reset URL (avoid "remote already exists" or stale URL issues)
+          git remote remove mirror 2>/dev/null || true
           git remote add mirror "https://x-access-token:${MIRROR_TOKEN}@github.com/genai4usc-cloud/Frontend_Genai-ed.git"
 
-          git push --mirror mirror
+          # Push ONLY main (this is what Vercel will build from)
+          git push mirror HEAD:main --force
+
+          # Push tags (optional but usually desired)
+          git push mirror --tags --force
