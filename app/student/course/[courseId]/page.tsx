@@ -120,28 +120,39 @@ export default function StudentCourse() {
       setCourse(courseData);
     }
 
-    const { data: lecturesData } = await supabase
+    const { data: educatorLectures } = await supabase
       .from('lectures')
-      .select('id, title, duration, created_at, status')
+      .select('id, title, video_length, created_at, status, creator_role')
       .eq('course_id', courseId)
-      .eq('status', 'completed')
+      .eq('creator_role', 'educator')
       .order('created_at', { ascending: false });
 
-    if (lecturesData) {
-      setCourseLectures(lecturesData);
+    if (educatorLectures) {
+      const formattedLectures = educatorLectures.map((lecture: any) => ({
+        id: lecture.id,
+        title: lecture.title,
+        duration: lecture.video_length || 0,
+        created_at: lecture.created_at,
+        status: lecture.status
+      }));
+      setCourseLectures(formattedLectures);
     }
 
-    const { data: myLecturesData } = await supabase
-      .from('student_lectures')
-      .select('id, title, video_length, created_at, status')
-      .eq('student_id', userId)
+    const { data: studentLectures } = await supabase
+      .from('lectures')
+      .select('id, title, video_length, created_at, status, creator_role')
       .eq('course_id', courseId)
+      .eq('creator_role', 'student')
+      .eq('creator_user_id', userId)
       .order('created_at', { ascending: false });
 
-    if (myLecturesData) {
-      const formattedLectures = myLecturesData.map((lecture: any) => ({
-        ...lecture,
-        duration: lecture.video_length
+    if (studentLectures) {
+      const formattedLectures = studentLectures.map((lecture: any) => ({
+        id: lecture.id,
+        title: lecture.title,
+        duration: lecture.video_length || 0,
+        created_at: lecture.created_at,
+        status: lecture.status
       }));
       setMyLectures(formattedLectures);
     }
@@ -202,15 +213,16 @@ export default function StudentCourse() {
     setGenerating(true);
 
     const { data: newLecture, error } = await supabase
-      .from('student_lectures')
+      .from('lectures')
       .insert({
-        student_id: user.id,
+        creator_role: 'student',
+        creator_user_id: user.id,
+        educator_id: user.id,
         course_id: courseId,
         title: prompt.slice(0, 100),
-        prompt: prompt,
+        script_prompt: prompt,
         video_length: videoLength,
-        status: 'generating',
-        context_sources: contextSources
+        status: 'generating'
       })
       .select()
       .single();

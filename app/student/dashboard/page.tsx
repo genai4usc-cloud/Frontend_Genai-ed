@@ -134,6 +134,8 @@ export default function StudentDashboard() {
         setCourses(coursesData);
       }
 
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+
       const { data: lecturesData } = await supabase
         .from('lectures')
         .select(`
@@ -142,6 +144,8 @@ export default function StudentDashboard() {
           duration,
           created_at,
           course_id,
+          creator_role,
+          creator_user_id,
           courses (
             code,
             instructor_name
@@ -149,6 +153,7 @@ export default function StudentDashboard() {
         `)
         .in('course_id', courseIds)
         .eq('status', 'completed')
+        .or(`creator_role.eq.educator,and(creator_role.eq.student,creator_user_id.eq.${currentUser?.id})`)
         .order('created_at', { ascending: false })
         .limit(3);
 

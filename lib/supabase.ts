@@ -36,6 +36,8 @@ export type Lecture = {
   id: string;
   course_id: string | null;
   educator_id: string;
+  creator_role: 'educator' | 'student';
+  creator_user_id: string;
   title: string;
   description: string;
   video_url: string | null;

@@ -105,6 +105,7 @@ export default function CourseLectures() {
         .from('lectures')
         .select('*')
         .in('id', lectureIds)
+        .eq('creator_role', 'educator')
         .order('created_at', { ascending: false });
 
       if (lecturesError) throw lecturesError;
