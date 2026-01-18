@@ -98,9 +98,9 @@ export default function CreateLecture() {
       setProfile(profileData);
 
       const { data: enrollmentsData } = await supabase
-        .from('enrollments')
+        .from('course_students')
         .select('course_id')
-        .eq('student_id', user.id);
+        .eq('email', user.email!);
 
       if (enrollmentsData && enrollmentsData.length > 0) {
         const courseIds = enrollmentsData.map(e => e.course_id);
@@ -228,10 +228,49 @@ export default function CreateLecture() {
     setScriptFile(file);
   };
 
-  const handleContinueToMaterials = () => {
+  const handleContinueToMaterials = async () => {
     if (selectedCourseIds.length === 0 && !addToPersonalLibrary && !addToUSCLibrary) {
       toast.error('Please select at least one course or library');
       return;
+    }
+
+    if (!lectureId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('You must be logged in');
+        return;
+      }
+
+      const primaryCourseId = selectedCourseIds[0];
+      if (!primaryCourseId) {
+        toast.error('Please select at least one course');
+        return;
+      }
+
+      const { data: draftLecture, error } = await supabase
+        .from('lectures')
+        .insert({
+          creator_role: 'student',
+          creator_user_id: user.id,
+          educator_id: user.id,
+          course_id: primaryCourseId,
+          selected_course_ids: selectedCourseIds,
+          title: 'Draft Lecture',
+          status: 'draft'
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating draft:', error);
+        toast.error('Failed to save draft');
+        return;
+      }
+
+      if (draftLecture) {
+        router.push(`/student/create-lecture?lectureId=${draftLecture.id}`);
+        return;
+      }
     }
 
     setCurrentStep(2);
