@@ -11,6 +11,7 @@ import { validateFileSize } from '@/lib/fileUpload';
 type MaterialWithType = {
   url: string;
   name: string;
+  displayName: string;
   type: 'main' | 'background';
   sourceCourseId?: string;
   courseTitle?: string;
@@ -57,6 +58,7 @@ export default function CreateLecture() {
   const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([]);
   const [addToPersonalLibrary, setAddToPersonalLibrary] = useState(false);
   const [addToUSCLibrary, setAddToUSCLibrary] = useState(false);
+  const [lectureTitle, setLectureTitle] = useState('');
 
   const [preloadedMaterials, setPreloadedMaterials] = useState<Array<{ url: string; name: string; courseTitle: string; courseCode: string; sourceCourseId: string; defaultType: 'main' | 'background' }>>([]);
   const [selectedPreloadedMaterialUrls, setSelectedPreloadedMaterialUrls] = useState<string[]>([]);
@@ -172,10 +174,11 @@ export default function CreateLecture() {
     selectedCourseIds.forEach(courseId => {
       const course = courses.find(c => c.id === courseId);
       if (course) {
-        course.course_materials_urls.forEach((url, index) => {
+        course.course_materials_urls.forEach((url) => {
+          const fileName = extractFileName(url);
           materials.push({
             url,
-            name: `Material ${index + 1}`,
+            name: fileName,
             courseTitle: course.title,
             courseCode: course.course_number,
             sourceCourseId: course.id,
@@ -183,10 +186,11 @@ export default function CreateLecture() {
           });
         });
 
-        course.background_materials_urls.forEach((url, index) => {
+        course.background_materials_urls.forEach((url) => {
+          const fileName = extractFileName(url);
           materials.push({
             url,
-            name: `Background Material ${index + 1}`,
+            name: fileName,
             courseTitle: course.title,
             courseCode: course.course_number,
             sourceCourseId: course.id,
@@ -213,9 +217,12 @@ export default function CreateLecture() {
         const preloadedUrls: string[] = [];
 
         materialsData.forEach(material => {
+          const fileName = extractFileName(material.material_url);
+          const displayName = material.material_name || extractFileNameWithoutExtension(material.material_url);
           const newMaterial: MaterialWithType = {
             url: material.material_url,
-            name: material.material_name,
+            name: fileName,
+            displayName: displayName,
             type: material.material_type as 'main' | 'background',
             sourceCourseId: material.source_course_id
           };
@@ -239,7 +246,7 @@ export default function CreateLecture() {
     try {
       const { data: lectureData, error } = await supabase
         .from('lectures')
-        .select('selected_course_ids, library_personal, library_usc, content_style, avatar_character, avatar_style, status, script_mode, script_text, script_prompt, video_length')
+        .select('title, selected_course_ids, library_personal, library_usc, content_style, avatar_character, avatar_style, status, script_mode, script_text, script_prompt, video_length')
         .eq('id', lectureIdToLoad)
         .maybeSingle();
 
@@ -252,6 +259,10 @@ export default function CreateLecture() {
 
         setAddToPersonalLibrary(lectureData.library_personal || false);
         setAddToUSCLibrary(lectureData.library_usc || false);
+
+        if ((lectureData as any).title) {
+          setLectureTitle((lectureData as any).title);
+        }
 
         if (lectureData.content_style && lectureData.content_style.length > 0) {
           setContentStyles(lectureData.content_style);
@@ -358,9 +369,11 @@ export default function CreateLecture() {
     } else {
       setSelectedPreloadedMaterialUrls(prev => [...prev, url]);
 
+      const displayName = extractFileNameWithoutExtension(material.url);
       const newMaterial = {
         url: material.url,
         name: material.name,
+        displayName: displayName,
         type: material.defaultType,
         sourceCourseId: material.sourceCourseId,
         courseTitle: material.courseTitle,
@@ -448,9 +461,11 @@ export default function CreateLecture() {
 
         validFiles.push(file);
 
+        const displayName = extractFileNameWithoutExtension(publicUrl);
         setAllMaterials(prev => [...prev, {
           url: publicUrl,
           name: file.name,
+          displayName: displayName,
           type: 'main'
         }]);
 
@@ -569,6 +584,16 @@ export default function CreateLecture() {
       return;
     }
 
+    if (!lectureTitle.trim()) {
+      toast.error('Please enter a lecture title');
+      return;
+    }
+
+    if (lectureTitle.length > 120) {
+      toast.error('Lecture title must be 120 characters or less');
+      return;
+    }
+
     if (!profile) return;
 
     try {
@@ -579,7 +604,7 @@ export default function CreateLecture() {
           .from('lectures')
           .insert({
             educator_id: profile.id,
-            title: 'Untitled Lecture',
+            title: lectureTitle,
             description: '',
             selected_course_ids: selectedCourseIds,
             library_personal: addToPersonalLibrary,
@@ -600,6 +625,7 @@ export default function CreateLecture() {
         const { error: updateError } = await supabase
           .from('lectures')
           .update({
+            title: lectureTitle,
             selected_course_ids: selectedCourseIds,
             library_personal: addToPersonalLibrary,
             library_usc: addToUSCLibrary
@@ -672,6 +698,29 @@ export default function CreateLecture() {
       } catch (error) {
         console.error('Error updating material type:', error);
         toast.error('Failed to update material type');
+      }
+    }
+  };
+
+  const updateMaterialDisplayName = async (url: string, newDisplayName: string) => {
+    setAllMaterials(prev =>
+      prev.map(m => (m.url === url ? { ...m, displayName: newDisplayName } : m))
+    );
+
+    if (lectureId) {
+      try {
+        const { error } = await supabase
+          .from('lecture_materials')
+          .update({
+            material_name: newDisplayName
+          })
+          .eq('lecture_id', lectureId)
+          .eq('material_url', url);
+
+        if (error) throw error;
+      } catch (error) {
+        console.error('Error updating material name:', error);
+        toast.error('Failed to update material name');
       }
     }
   };
@@ -1089,6 +1138,25 @@ SLIDE 1: Untitled Lecture
     }
   };
 
+  const extractFileName = (url: string): string => {
+    try {
+      const decodedUrl = decodeURIComponent(url);
+      const urlWithoutQuery = decodedUrl.split('?')[0];
+      const pathParts = urlWithoutQuery.split('/');
+      const fileNameWithExt = pathParts[pathParts.length - 1] || 'Unknown File';
+      return fileNameWithExt;
+    } catch {
+      return 'Unknown File';
+    }
+  };
+
+  const extractFileNameWithoutExtension = (url: string): string => {
+    const fileName = extractFileName(url);
+    const lastDotIndex = fileName.lastIndexOf('.');
+    if (lastDotIndex === -1) return fileName;
+    return fileName.substring(0, lastDotIndex);
+  };
+
   const getFileExtension = (filename: string) => {
     const ext = filename.split('.').pop()?.toUpperCase();
     return ext || 'FILE';
@@ -1196,44 +1264,69 @@ SLIDE 1: Untitled Lecture
 
                 {isExpanded && step.number === 1 && (
                   <div className="p-6 pt-0 space-y-6">
-                    <div>
-                      <h4 className="font-semibold text-gray-900 mb-4">Select Course(s)</h4>
-                      <div className="space-y-2">
-                        {courses.map(course => (
-                          <label key={course.id} className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selectedCourseIds.includes(course.id)}
-                              onChange={() => toggleCourse(course.id)}
-                              className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon"
-                            />
-                            <span className="font-medium text-gray-900">{course.course_number} - {course.title}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <div>
+                        <h4 className="font-semibold text-gray-900 mb-4">Select Course(s)</h4>
+                        <div className="space-y-2">
+                          {courses.map(course => (
+                            <label key={course.id} className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedCourseIds.includes(course.id)}
+                                onChange={() => toggleCourse(course.id)}
+                                className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon"
+                              />
+                              <span className="font-medium text-gray-900">{course.course_number} - {course.title}</span>
+                            </label>
+                          ))}
+                        </div>
 
-                    <div>
-                      <h4 className="font-semibold text-gray-900 mb-4">Add to Library</h4>
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={addToPersonalLibrary}
-                            onChange={(e) => setAddToPersonalLibrary(e.target.checked)}
-                            className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon"
-                          />
-                          <span className="font-medium text-gray-900">Personal Library</span>
-                        </label>
-                        <label className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={addToUSCLibrary}
-                            onChange={(e) => setAddToUSCLibrary(e.target.checked)}
-                            className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon"
-                          />
-                          <span className="font-medium text-gray-900">USC Library</span>
-                        </label>
+                        <div className="mt-6">
+                          <h4 className="font-semibold text-gray-900 mb-4">Add to Library</h4>
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={addToPersonalLibrary}
+                                onChange={(e) => setAddToPersonalLibrary(e.target.checked)}
+                                className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon"
+                              />
+                              <span className="font-medium text-gray-900">Personal Library</span>
+                            </label>
+                            <label className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={addToUSCLibrary}
+                                onChange={(e) => setAddToUSCLibrary(e.target.checked)}
+                                className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon"
+                              />
+                              <span className="font-medium text-gray-900">USC Library</span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="font-semibold text-gray-900 mb-4">Lecture Title <span className="text-red-600">*</span></h4>
+                        <input
+                          type="text"
+                          value={lectureTitle}
+                          onChange={(e) => setLectureTitle(e.target.value)}
+                          placeholder="Enter lecture title (max 120 characters)"
+                          maxLength={120}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
+                        />
+                        <p className="text-sm text-gray-500 mt-2">
+                          {lectureTitle.length}/120 characters
+                        </p>
+                        {lectureTitle.trim() && (
+                          <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                            <p className="text-sm text-green-900">
+                              <span className="font-semibold">Lecture Title: </span>
+                              {lectureTitle}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1262,19 +1355,22 @@ SLIDE 1: Untitled Lecture
                         <p className="text-sm text-gray-600 mb-4">Select materials from your courses:</p>
                         <div className="space-y-2">
                           {preloadedMaterials.map((material, index) => (
-                            <label key={index} className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <label key={index} className="flex items-start gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
                               <input
                                 type="checkbox"
                                 checked={selectedPreloadedMaterialUrls.includes(material.url)}
                                 onChange={() => togglePreloadedMaterial(material.url)}
-                                className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon"
+                                className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon mt-0.5"
                               />
-                              <File className="w-5 h-5 text-gray-400" />
-                              <div className="flex-1">
-                                <p className="font-medium text-gray-900">{material.name}</p>
-                                <p className="text-sm text-gray-600">{material.courseCode}</p>
+                              <File className="w-5 h-5 text-gray-400 mt-0.5" />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-gray-900 break-words">{material.name}</p>
+                                <p className="text-xs text-gray-600 mt-1">{material.courseCode}</p>
+                                <p className="text-xs text-gray-500 mt-0.5 italic">
+                                  Type: {material.defaultType === 'main' ? 'Main Material' : 'Background Material'}
+                                </p>
                               </div>
-                              <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                              <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded shrink-0">
                                 {getFileExtension(material.url)}
                               </span>
                             </label>
@@ -1327,37 +1423,61 @@ SLIDE 1: Untitled Lecture
                     {allMaterials.length > 0 && (
                       <div>
                         <h4 className="font-semibold text-gray-900 mb-4">All Added Materials</h4>
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           {allMaterials.map((material, index) => (
-                            <div key={index} className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg">
-                              <File className="w-5 h-5 text-gray-400" />
-                              <div className="flex-1">
-                                <p className="font-medium text-gray-900">{material.name}</p>
-                                {material.courseCode && (
-                                  <p className="text-sm text-gray-600">{material.courseCode}</p>
-                                )}
-                              </div>
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => changeMaterialType(material.url, 'main')}
-                                  className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                                    material.type === 'main'
-                                      ? 'bg-brand-maroon text-white'
-                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                  }`}
-                                >
-                                  Main
-                                </button>
-                                <button
-                                  onClick={() => changeMaterialType(material.url, 'background')}
-                                  className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
-                                    material.type === 'background'
-                                      ? 'bg-brand-yellow text-black'
-                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                  }`}
-                                >
-                                  Background
-                                </button>
+                            <div key={index} className="p-4 border border-gray-200 rounded-lg space-y-3">
+                              <div className="flex items-start gap-3">
+                                <File className="w-5 h-5 text-gray-400 mt-1" />
+                                <div className="flex-1 space-y-2">
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Display Name (editable)
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={material.displayName}
+                                      onChange={(e) => updateMaterialDisplayName(material.url, e.target.value)}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent text-sm"
+                                      placeholder="Enter display name"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      File Name
+                                    </label>
+                                    <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700">
+                                      <span className="flex-1">{material.name}</span>
+                                      <span className="text-xs font-semibold text-gray-500 bg-gray-200 px-2 py-1 rounded">
+                                        {getFileExtension(material.name)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {material.courseCode && (
+                                    <p className="text-xs text-gray-600">From: {material.courseCode}</p>
+                                  )}
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                  <button
+                                    onClick={() => changeMaterialType(material.url, 'main')}
+                                    className={`px-3 py-1.5 rounded-lg font-medium text-xs transition-colors ${
+                                      material.type === 'main'
+                                        ? 'bg-brand-maroon text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                  >
+                                    Main
+                                  </button>
+                                  <button
+                                    onClick={() => changeMaterialType(material.url, 'background')}
+                                    className={`px-3 py-1.5 rounded-lg font-medium text-xs transition-colors ${
+                                      material.type === 'background'
+                                        ? 'bg-brand-yellow text-black'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                  >
+                                    Background
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           ))}
