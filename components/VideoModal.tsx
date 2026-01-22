@@ -9,7 +9,11 @@ interface VideoModalProps {
   videoUrl: string;
 }
 
-export default function VideoModal({ isOpen, onClose, videoUrl }: VideoModalProps) {
+export default function VideoModal({
+  isOpen,
+  onClose,
+  videoUrl,
+}: VideoModalProps) {
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -27,6 +31,8 @@ export default function VideoModal({ isOpen, onClose, videoUrl }: VideoModalProp
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
+
+  const isYouTube = videoUrl.includes('youtube.com/embed');
 
   return (
     <div
@@ -48,13 +54,23 @@ export default function VideoModal({ isOpen, onClose, videoUrl }: VideoModalProp
         </button>
 
         <div className="relative pt-[56.25%]">
-          <iframe
-            src={videoUrl}
-            className="absolute inset-0 w-full h-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            title="Demo video"
-          />
+          {isYouTube ? (
+            <iframe
+              src={videoUrl}
+              className="absolute inset-0 w-full h-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              title="Demo video"
+            />
+          ) : (
+            <video
+              className="absolute inset-0 w-full h-full"
+              src={videoUrl}
+              controls
+              autoPlay
+              playsInline
+            />
+          )}
         </div>
       </div>
     </div>
