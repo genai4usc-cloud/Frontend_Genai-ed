@@ -500,14 +500,14 @@ export default function CreateLecture() {
       try {
         const { data: material, error: fetchError } = await supabase
           .from('lecture_materials')
-          .select('storage_path')
+          .select('storage_path, source_type')
           .eq('lecture_id', lectureId)
           .eq('material_url', materialToRemove.url)
           .maybeSingle();
 
         if (fetchError) throw fetchError;
 
-        if (material?.storage_path) {
+        if (material?.storage_path && material.source_type === 'uploaded') {
           const { error: storageError } = await supabase.storage
             .from('course-files')
             .remove([material.storage_path]);
