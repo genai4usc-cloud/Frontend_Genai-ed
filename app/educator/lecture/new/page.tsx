@@ -409,12 +409,12 @@ export default function CreateLecture() {
     if (!files || files.length === 0) return;
 
     if (!lectureId) {
-      toast.error('Please save draft first');
+      toast.error('Save draft first');
       return;
     }
 
     if (selectedCourseIds.length === 0) {
-      toast.error('Please select at least one course first');
+      toast.error('Select at least one course in Step 1 to upload files');
       return;
     }
 
@@ -479,7 +479,10 @@ export default function CreateLecture() {
         toast.success(`${file.name} uploaded`);
       } catch (error) {
         console.error('Error uploading file:', error);
-        toast.error(`Failed to upload ${file.name}`);
+        const errorMessage = error && typeof error === 'object' && 'message' in error
+          ? String(error.message)
+          : 'Unknown error';
+        toast.error(`${file.name}: ${errorMessage}`);
       }
     }
 
