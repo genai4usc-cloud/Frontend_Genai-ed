@@ -798,9 +798,8 @@ export default function CreateLecture() {
       if (updateError) throw updateError;
 
       const { data: { session } } = await supabase.auth.getSession();
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-      const resp = await fetch(`${supabaseUrl}/functions/v1/generate-lecture-script/api/lectures/${lectureId}/generate-script`, {
+      const resp = await fetch(`${BACKEND_URL}/api/lectures/${lectureId}/generate-script`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
