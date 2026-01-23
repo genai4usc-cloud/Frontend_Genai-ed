@@ -413,12 +413,18 @@ export default function CreateLecture() {
       return;
     }
 
+    if (selectedCourseIds.length === 0) {
+      toast.error('Please select at least one course first');
+      return;
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       toast.error('Not authenticated');
       return;
     }
 
+    const courseIdForPath = selectedCourseIds[0];
     const validFiles: File[] = [];
 
     for (const file of Array.from(files)) {
@@ -429,10 +435,10 @@ export default function CreateLecture() {
 
       try {
         const timestamp = Date.now();
-        const filePath = `${user.id}/${lectureId}/materials/${timestamp}-${file.name}`;
+        const filePath = `${courseIdForPath}/materials/${timestamp}-${file.name}`;
 
         const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('lecture-assets')
+          .from('course-files')
           .upload(filePath, file, {
             cacheControl: '3600',
             upsert: false
@@ -441,7 +447,7 @@ export default function CreateLecture() {
         if (uploadError) throw uploadError;
 
         const { data: { publicUrl } } = supabase.storage
-          .from('lecture-assets')
+          .from('course-files')
           .getPublicUrl(filePath);
 
         const { error: insertError } = await supabase
@@ -452,6 +458,7 @@ export default function CreateLecture() {
             material_name: file.name,
             material_type: 'main',
             source_type: 'uploaded',
+            source_course_id: courseIdForPath,
             file_mime: file.type,
             file_size_bytes: file.size,
             storage_path: filePath
@@ -502,7 +509,7 @@ export default function CreateLecture() {
 
         if (material?.storage_path) {
           const { error: storageError } = await supabase.storage
-            .from('lecture-assets')
+            .from('course-files')
             .remove([material.storage_path]);
 
           if (storageError) {
