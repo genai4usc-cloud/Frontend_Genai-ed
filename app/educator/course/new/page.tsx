@@ -312,8 +312,10 @@ export default function CreateCourse() {
       router.push(`/educator/course/${courseData.id}`);
     } catch (error: any) {
       console.error('Error creating course:', error);
-      const errorMessage = error?.message || 'Failed to create course. Please try again.';
-      toast.error(errorMessage);
+      console.error('Supabase error message:', error?.message);
+      console.error('Supabase error details:', error?.details);
+      console.error('Supabase error hint:', error?.hint);
+      toast.error(error?.message || 'Failed to create course. Please try again.');
     } finally {
       setSaving(false);
     }

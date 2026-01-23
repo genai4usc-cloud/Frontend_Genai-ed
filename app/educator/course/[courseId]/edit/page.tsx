@@ -323,21 +323,27 @@ export default function EditCourse() {
         })));
       }
 
+      const payload = {
+        course_number: courseNumber.trim(),
+        title: courseTitle.trim(),
+        semester,
+        section: section.trim() || null,
+        instructor_name: instructorName.trim(),
+        syllabus_url: syllabusUrl || null,
+        course_materials_data: courseMaterialsData,
+        background_materials_data: backgroundMaterialsData,
+      };
+
       const { error: updateError } = await supabase
         .from('courses')
-        .update({
-          code: courseNumber.trim(),
-          title: courseTitle.trim(),
-          semester: semester,
-          section: section.trim(),
-          instructor_name: instructorName.trim(),
-          syllabus_url: syllabusUrl,
-          course_materials_data: courseMaterialsData,
-          background_materials_data: backgroundMaterialsData,
-        })
-        .eq('id', courseId);
+        .update(payload)
+        .eq('id', courseId)
+        .eq('educator_id', profile.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error("Update error details:", updateError);
+        throw updateError;
+      }
 
       await supabase.from('course_teaching_assistants').delete().eq('course_id', courseId);
       if (teachingAssistants.length > 0) {
@@ -368,9 +374,12 @@ export default function EditCourse() {
 
       toast.success('Course updated successfully!');
       router.push(`/educator/course/${courseId}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating course:', error);
-      toast.error('Failed to update course. Please try again.');
+      console.error('Supabase error message:', error?.message);
+      console.error('Supabase error details:', error?.details);
+      console.error('Supabase error hint:', error?.hint);
+      toast.error(error?.message || 'Failed to update course. Please try again.');
     } finally {
       setSaving(false);
     }
