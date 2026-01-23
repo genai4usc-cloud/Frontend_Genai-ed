@@ -174,11 +174,17 @@ export default function CreateLecture() {
     selectedCourseIds.forEach(courseId => {
       const course = courses.find(c => c.id === courseId);
       if (course) {
-        course.course_materials_urls.forEach((url) => {
-          const fileName = extractFileName(url);
-          materials.push({
+        const courseMaterials = course.course_materials_data ||
+          (course.course_materials_urls?.map(url => ({
             url,
-            name: fileName,
+            displayName: extractFileName(url),
+            fileName: extractFileName(url)
+          })) || []);
+
+        courseMaterials.forEach((material) => {
+          materials.push({
+            url: material.url,
+            name: material.displayName,
             courseTitle: course.title,
             courseCode: course.course_number,
             sourceCourseId: course.id,
@@ -186,11 +192,17 @@ export default function CreateLecture() {
           });
         });
 
-        course.background_materials_urls.forEach((url) => {
-          const fileName = extractFileName(url);
-          materials.push({
+        const backgroundMaterials = course.background_materials_data ||
+          (course.background_materials_urls?.map(url => ({
             url,
-            name: fileName,
+            displayName: extractFileName(url),
+            fileName: extractFileName(url)
+          })) || []);
+
+        backgroundMaterials.forEach((material) => {
+          materials.push({
+            url: material.url,
+            name: material.displayName,
             courseTitle: course.title,
             courseCode: course.course_number,
             sourceCourseId: course.id,
