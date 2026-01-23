@@ -389,7 +389,7 @@ export default function CreateLecture() {
             .insert({
               lecture_id: lectureId,
               material_url: material.url,
-              material_name: material.name,
+              material_name: extractFileNameWithoutExtension(material.url),
               material_type: material.defaultType,
               source_course_id: material.sourceCourseId,
               source_type: 'course_preloaded'
@@ -455,7 +455,7 @@ export default function CreateLecture() {
           .insert({
             lecture_id: lectureId,
             material_url: publicUrl,
-            material_name: file.name,
+            material_name: extractFileNameWithoutExtension(publicUrl),
             material_type: 'main',
             source_type: 'uploaded',
             source_course_id: courseIdForPath,
