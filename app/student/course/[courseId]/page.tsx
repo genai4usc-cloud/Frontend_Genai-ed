@@ -144,7 +144,7 @@ export default function StudentCourse() {
           status: lecture.status
         };
 
-        if (lecture.creator_role === 'educator') {
+        if (lecture.creator_role === 'educator' && (lecture.status === 'completed' || lecture.status === 'published')) {
           educatorLectures.push(formattedLecture);
         } else if (lecture.creator_role === 'student' && lecture.creator_user_id === userId) {
           studentLectures.push(formattedLecture);

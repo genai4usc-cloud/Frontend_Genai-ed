@@ -97,21 +97,48 @@ export default function StudentLectureViewer() {
 
     setProfile(profileData);
 
-    const { data: lectureData } = await supabase
-      .from('lectures')
-      .select('*')
-      .eq('id', lectureId)
+    const { data: enrollmentCheck } = await supabase
+      .from('course_students')
+      .select('course_id')
+      .eq('email', user.email!)
+      .eq('course_id', courseId)
       .maybeSingle();
 
-    if (!lectureData) {
+    if (!enrollmentCheck) {
       router.push('/student/dashboard');
       return;
     }
 
+    const { data: lectureCourseCheck } = await supabase
+      .from('lecture_courses')
+      .select('lecture_id')
+      .eq('course_id', courseId)
+      .eq('lecture_id', lectureId)
+      .maybeSingle();
+
+    if (!lectureCourseCheck) {
+      router.push(`/student/course/${courseId}`);
+      return;
+    }
+
+    const { data: lectureData } = await supabase
+      .from('lectures')
+      .select('*')
+      .eq('id', lectureId)
+      .eq('creator_role', 'educator')
+      .maybeSingle();
+
+    if (!lectureData || (lectureData.status !== 'completed' && lectureData.status !== 'published')) {
+      router.push(`/student/course/${courseId}`);
+      return;
+    }
+
+    setLecture(lectureData);
+
     const { data: courseData } = await supabase
       .from('courses')
       .select('course_number, title, instructor_name')
-      .eq('id', lectureData.course_id)
+      .eq('id', courseId)
       .maybeSingle();
 
     if (courseData) {
@@ -135,8 +162,6 @@ export default function StudentLectureViewer() {
         setActiveTab('presentation');
       }
     }
-
-    setLecture(lectureData);
 
     const { data: viewData } = await supabase
       .from('student_lecture_views')
