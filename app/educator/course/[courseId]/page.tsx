@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
-import { ArrowLeft, Settings, Video, Mic, FileText, Play, Download, Clock, Calendar, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Settings, Video, Mic, FileText, Play, Download, Clock, Calendar, Trash2, X, Edit } from 'lucide-react';
 import { toast } from 'sonner';
 
 type Lecture = {
@@ -329,13 +329,22 @@ export default function CourseLectures() {
                           </span>
                         </div>
                       </div>
-                      <button
-                        onClick={() => setShowDeleteLectureModal(lecture.id)}
-                        className="text-gray-400 hover:text-red-600 transition-colors p-2 rounded-lg hover:bg-red-50"
-                        title="Delete entire lecture"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => router.push(`/educator/lecture/new?id=${lecture.id}&mode=edit`)}
+                          className="text-gray-400 hover:text-blue-600 transition-colors p-2 rounded-lg hover:bg-blue-50"
+                          title="Edit lecture"
+                        >
+                          <Edit className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => setShowDeleteLectureModal(lecture.id)}
+                          className="text-gray-400 hover:text-red-600 transition-colors p-2 rounded-lg hover:bg-red-50"
+                          title="Delete entire lecture"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
                     </div>
 
                     <div className="border-t border-gray-200 pt-4">
