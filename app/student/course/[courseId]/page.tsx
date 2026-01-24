@@ -120,41 +120,42 @@ export default function StudentCourse() {
       setCourse(courseData);
     }
 
-    const { data: educatorLectures } = await supabase
-      .from('lectures')
-      .select('id, title, video_length, created_at, status, creator_role')
-      .eq('course_id', courseId)
-      .eq('creator_role', 'educator')
-      .order('created_at', { ascending: false });
+    const { data: lectureCourses } = await supabase
+      .from('lecture_courses')
+      .select(`
+        lecture_id,
+        lectures!inner(id, title, video_length, created_at, status, creator_role, creator_user_id)
+      `)
+      .eq('course_id', courseId);
 
-    if (educatorLectures) {
-      const formattedLectures = educatorLectures.map((lecture: any) => ({
-        id: lecture.id,
-        title: lecture.title,
-        duration: lecture.video_length || 0,
-        created_at: lecture.created_at,
-        status: lecture.status
-      }));
-      setCourseLectures(formattedLectures);
-    }
+    if (lectureCourses) {
+      const educatorLectures: Lecture[] = [];
+      const studentLectures: StudentLecture[] = [];
 
-    const { data: studentLectures } = await supabase
-      .from('lectures')
-      .select('id, title, video_length, created_at, status, creator_role')
-      .eq('course_id', courseId)
-      .eq('creator_role', 'student')
-      .eq('creator_user_id', userId)
-      .order('created_at', { ascending: false });
+      lectureCourses.forEach((lc: any) => {
+        const lecture = lc.lectures;
+        if (!lecture) return;
 
-    if (studentLectures) {
-      const formattedLectures = studentLectures.map((lecture: any) => ({
-        id: lecture.id,
-        title: lecture.title,
-        duration: lecture.video_length || 0,
-        created_at: lecture.created_at,
-        status: lecture.status
-      }));
-      setMyLectures(formattedLectures);
+        const formattedLecture = {
+          id: lecture.id,
+          title: lecture.title,
+          duration: lecture.video_length || 0,
+          created_at: lecture.created_at,
+          status: lecture.status
+        };
+
+        if (lecture.creator_role === 'educator' && (lecture.status === 'completed' || lecture.status === 'published')) {
+          educatorLectures.push(formattedLecture);
+        } else if (lecture.creator_role === 'student' && lecture.creator_user_id === userId) {
+          studentLectures.push(formattedLecture);
+        }
+      });
+
+      educatorLectures.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      studentLectures.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      setCourseLectures(educatorLectures);
+      setMyLectures(studentLectures);
     }
 
     const { data: uploadsData } = await supabase
@@ -343,6 +344,7 @@ export default function StudentCourse() {
                       instructorName={course.instructor_name}
                       duration={lecture.duration}
                       createdAt={formatTimeAgo(lecture.created_at)}
+                      isEducatorLecture={true}
                       onClick={() => router.push(`/student/course/${courseId}/lecture/${lecture.id}`)}
                     />
                   ))}

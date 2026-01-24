@@ -10,7 +10,12 @@ import {
   Send,
   CheckSquare,
   Clock,
-  User
+  User,
+  Video,
+  Music,
+  Presentation,
+  Download,
+  FileText
 } from 'lucide-react';
 
 interface Lecture {
@@ -18,9 +23,11 @@ interface Lecture {
   title: string;
   description: string;
   video_url: string | null;
-  duration: number;
+  video_length: number;
   course_id: string;
   status: string;
+  script_text: string | null;
+  creator_role: string;
 }
 
 interface Course {
@@ -35,6 +42,13 @@ interface Message {
   content: string;
 }
 
+interface Artifact {
+  id: string;
+  artifact_type: 'audio_mp3' | 'audio' | 'pptx' | 'ppt' | 'video_static_mp4' | 'video_avatar_mp4' | 'video_avatar';
+  file_url: string;
+  created_at: string;
+}
+
 export default function StudentLectureViewer() {
   const router = useRouter();
   const params = useParams();
@@ -45,6 +59,8 @@ export default function StudentLectureViewer() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [lecture, setLecture] = useState<Lecture | null>(null);
   const [course, setCourse] = useState<Course | null>(null);
+  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const [activeTab, setActiveTab] = useState<'video' | 'audio' | 'presentation'>('video');
   const [messages, setMessages] = useState<Message[]>([]);
   const [prompt, setPrompt] = useState('');
   const [sending, setSending] = useState(false);
@@ -81,26 +97,71 @@ export default function StudentLectureViewer() {
 
     setProfile(profileData);
 
-    const { data: lectureData } = await supabase
-      .from('lectures')
-      .select(`
-        *,
-        courses (
-          code,
-          title,
-          instructor_name
-        )
-      `)
-      .eq('id', lectureId)
+    const { data: enrollmentCheck } = await supabase
+      .from('course_students')
+      .select('course_id')
+      .eq('email', user.email!)
+      .eq('course_id', courseId)
       .maybeSingle();
 
-    if (!lectureData) {
+    if (!enrollmentCheck) {
       router.push('/student/dashboard');
       return;
     }
 
+    const { data: lectureCourseCheck } = await supabase
+      .from('lecture_courses')
+      .select('lecture_id')
+      .eq('course_id', courseId)
+      .eq('lecture_id', lectureId)
+      .maybeSingle();
+
+    if (!lectureCourseCheck) {
+      router.push(`/student/course/${courseId}`);
+      return;
+    }
+
+    const { data: lectureData } = await supabase
+      .from('lectures')
+      .select('*')
+      .eq('id', lectureId)
+      .eq('creator_role', 'educator')
+      .maybeSingle();
+
+    if (!lectureData || (lectureData.status !== 'completed' && lectureData.status !== 'published')) {
+      router.push(`/student/course/${courseId}`);
+      return;
+    }
+
     setLecture(lectureData);
-    setCourse(lectureData.courses as unknown as Course);
+
+    const { data: courseData } = await supabase
+      .from('courses')
+      .select('course_number, title, instructor_name')
+      .eq('id', courseId)
+      .maybeSingle();
+
+    if (courseData) {
+      setCourse(courseData);
+    }
+
+    const { data: artifactsData } = await supabase
+      .from('lecture_artifacts')
+      .select('*')
+      .eq('lecture_id', lectureId)
+      .order('created_at', { ascending: false });
+
+    if (artifactsData) {
+      setArtifacts(artifactsData);
+
+      if (artifactsData.some(a => a.artifact_type === 'video_avatar_mp4' || a.artifact_type === 'video_static_mp4' || a.artifact_type === 'video_avatar')) {
+        setActiveTab('video');
+      } else if (artifactsData.some(a => a.artifact_type === 'audio_mp3' || a.artifact_type === 'audio')) {
+        setActiveTab('audio');
+      } else if (artifactsData.some(a => a.artifact_type === 'pptx' || a.artifact_type === 'ppt')) {
+        setActiveTab('presentation');
+      }
+    }
 
     const { data: viewData } = await supabase
       .from('student_lecture_views')
@@ -181,54 +242,199 @@ export default function StudentLectureViewer() {
             <ArrowLeft className="w-4 h-4" />
             Back to Course
           </button>
-          <h1 className="text-2xl font-bold text-foreground mb-1">{lecture.title}</h1>
-          <p className="text-muted-foreground">
-            {course.course_number} • {course.instructor_name}
-          </p>
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <h1 className="text-2xl font-bold text-foreground">{lecture.title}</h1>
+              <span className="px-2 py-1 bg-brand-maroon text-white text-xs font-bold rounded-full">
+                Educator
+              </span>
+            </div>
+            <p className="text-muted-foreground">
+              {course.course_number} • {course.instructor_name}
+            </p>
+          </div>
         </div>
 
         <div className="flex-1 overflow-hidden">
           <div className="h-full grid grid-cols-1 lg:grid-cols-2 gap-0">
-            <div className="bg-background border-r border-border p-6 overflow-y-auto">
-              <div className="max-w-3xl mx-auto space-y-6">
+            <div className="bg-background border-r border-border overflow-y-auto">
+              <div className="p-6 border-b border-border">
+                <div className="flex gap-4">
+                  {(artifacts.some(a => a.artifact_type === 'video_avatar_mp4' || a.artifact_type === 'video_static_mp4' || a.artifact_type === 'video_avatar')) && (
+                    <button
+                      onClick={() => setActiveTab('video')}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                        activeTab === 'video'
+                          ? 'bg-brand-maroon text-white'
+                          : 'bg-card text-foreground hover:bg-accent'
+                      }`}
+                    >
+                      <Video className="w-4 h-4" />
+                      Video
+                    </button>
+                  )}
+                  {artifacts.some(a => a.artifact_type === 'audio_mp3' || a.artifact_type === 'audio') && (
+                    <button
+                      onClick={() => setActiveTab('audio')}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                        activeTab === 'audio'
+                          ? 'bg-brand-maroon text-white'
+                          : 'bg-card text-foreground hover:bg-accent'
+                      }`}
+                    >
+                      <Music className="w-4 h-4" />
+                      Audio
+                    </button>
+                  )}
+                  {artifacts.some(a => a.artifact_type === 'pptx' || a.artifact_type === 'ppt') && (
+                    <button
+                      onClick={() => setActiveTab('presentation')}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                        activeTab === 'presentation'
+                          ? 'bg-brand-maroon text-white'
+                          : 'bg-card text-foreground hover:bg-accent'
+                      }`}
+                    >
+                      <Presentation className="w-4 h-4" />
+                      Slides
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-6 space-y-6">
                 {lecture.status === 'generating' ? (
                   <div className="aspect-video bg-card border border-border rounded-xl flex items-center justify-center">
                     <div className="text-center">
                       <div className="w-16 h-16 border-4 border-brand-maroon border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                      <p className="text-muted-foreground">Generating lecture video...</p>
+                      <p className="text-muted-foreground">Generating lecture content...</p>
                     </div>
-                  </div>
-                ) : lecture.video_url ? (
-                  <div className="aspect-video bg-black rounded-xl overflow-hidden">
-                    <video
-                      controls
-                      className="w-full h-full"
-                      src={lecture.video_url}
-                    >
-                      Your browser does not support the video tag.
-                    </video>
                   </div>
                 ) : (
-                  <div className="aspect-video bg-card border border-border rounded-xl flex items-center justify-center">
-                    <p className="text-muted-foreground">No video available</p>
-                  </div>
+                  <>
+                    {activeTab === 'video' && (
+                      <>
+                        {(() => {
+                          const videoArtifact = artifacts.find(a => a.artifact_type === 'video_avatar_mp4' || a.artifact_type === 'video_static_mp4' || a.artifact_type === 'video_avatar');
+                          return videoArtifact ? (
+                            <div className="aspect-video bg-black rounded-xl overflow-hidden">
+                              <video
+                                controls
+                                className="w-full h-full"
+                                src={videoArtifact.file_url}
+                              >
+                                Your browser does not support the video tag.
+                              </video>
+                            </div>
+                          ) : (
+                            <div className="aspect-video bg-card border border-border rounded-xl flex items-center justify-center">
+                              <p className="text-muted-foreground">No video available</p>
+                            </div>
+                          );
+                        })()}
+                      </>
+                    )}
+
+                    {activeTab === 'audio' && (
+                      <>
+                        {(() => {
+                          const audioArtifact = artifacts.find(a => a.artifact_type === 'audio_mp3' || a.artifact_type === 'audio');
+                          return audioArtifact ? (
+                            <div className="bg-card border border-border rounded-xl p-8">
+                              <div className="flex items-center justify-center mb-6">
+                                <div className="w-24 h-24 bg-brand-maroon/10 rounded-full flex items-center justify-center">
+                                  <Music className="w-12 h-12 text-brand-maroon" />
+                                </div>
+                              </div>
+                              <audio
+                                controls
+                                className="w-full"
+                                src={audioArtifact.file_url}
+                              >
+                                Your browser does not support the audio tag.
+                              </audio>
+                              <div className="mt-4 text-center">
+                                <a
+                                  href={audioArtifact.file_url}
+                                  download
+                                  className="inline-flex items-center gap-2 text-brand-maroon hover:text-brand-maroon-hover transition-colors"
+                                >
+                                  <Download className="w-4 h-4" />
+                                  Download Audio
+                                </a>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="aspect-video bg-card border border-border rounded-xl flex items-center justify-center">
+                              <p className="text-muted-foreground">No audio available</p>
+                            </div>
+                          );
+                        })()}
+                      </>
+                    )}
+
+                    {activeTab === 'presentation' && (
+                      <>
+                        {(() => {
+                          const pptxArtifact = artifacts.find(a => a.artifact_type === 'pptx' || a.artifact_type === 'ppt');
+                          return pptxArtifact ? (
+                            <div className="bg-card border border-border rounded-xl p-8">
+                              <div className="flex items-center justify-center mb-6">
+                                <div className="w-24 h-24 bg-brand-maroon/10 rounded-full flex items-center justify-center">
+                                  <Presentation className="w-12 h-12 text-brand-maroon" />
+                                </div>
+                              </div>
+                              <div className="text-center space-y-4">
+                                <h3 className="text-xl font-bold text-foreground">Presentation Slides</h3>
+                                <p className="text-muted-foreground">Download the presentation to view the slides</p>
+                                <a
+                                  href={pptxArtifact.file_url}
+                                  download
+                                  className="inline-flex items-center gap-2 bg-brand-maroon hover:bg-brand-maroon-hover text-white px-6 py-3 rounded-lg transition-colors"
+                                >
+                                  <Download className="w-5 h-5" />
+                                  Download Presentation
+                                </a>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="aspect-video bg-card border border-border rounded-xl flex items-center justify-center">
+                              <p className="text-muted-foreground">No presentation available</p>
+                            </div>
+                          );
+                        })()}
+                      </>
+                    )}
+
+                    <div className="bg-card border border-border rounded-xl p-6">
+                      <div className="flex items-center gap-4 mb-4 pb-4 border-b border-border">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Clock className="w-4 h-4" />
+                          <span className="text-sm">{lecture.video_length} min</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <User className="w-4 h-4" />
+                          <span className="text-sm">{course.instructor_name}</span>
+                        </div>
+                      </div>
+
+                      <h3 className="font-bold text-foreground mb-2">About this lecture</h3>
+                      <p className="text-muted-foreground">{lecture.description || 'No description available.'}</p>
+                    </div>
+
+                    {lecture.script_text && (
+                      <div className="bg-card border border-border rounded-xl p-6">
+                        <h3 className="font-bold text-foreground mb-4 flex items-center gap-2">
+                          <FileText className="w-5 h-5" />
+                          Lecture Script
+                        </h3>
+                        <div className="prose prose-sm max-w-none text-muted-foreground">
+                          <p className="whitespace-pre-wrap">{lecture.script_text}</p>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
-
-                <div className="bg-card border border-border rounded-xl p-6">
-                  <div className="flex items-center gap-4 mb-4 pb-4 border-b border-border">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Clock className="w-4 h-4" />
-                      <span className="text-sm">{lecture.duration} min</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <User className="w-4 h-4" />
-                      <span className="text-sm">{course.instructor_name}</span>
-                    </div>
-                  </div>
-
-                  <h3 className="font-bold text-foreground mb-2">About this lecture</h3>
-                  <p className="text-muted-foreground">{lecture.description || 'No description available.'}</p>
-                </div>
               </div>
             </div>
 

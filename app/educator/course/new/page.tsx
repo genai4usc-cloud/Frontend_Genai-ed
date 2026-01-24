@@ -245,8 +245,8 @@ export default function CreateCourse() {
       }
 
       let syllabusUrl: string | null = null;
-      const courseMaterialsUrls: string[] = [];
-      const backgroundMaterialsUrls: string[] = [];
+      const courseMaterialsData: Array<{url: string, displayName: string, fileName: string}> = [];
+      const backgroundMaterialsData: Array<{url: string, displayName: string, fileName: string}> = [];
 
       if (syllabusFile) {
         toast.info('Uploading syllabus...');
@@ -256,21 +256,29 @@ export default function CreateCourse() {
       if (courseMaterialsFiles.length > 0) {
         toast.info(`Uploading ${courseMaterialsFiles.length} course materials...`);
         const urls = await uploadMultipleFiles(courseData.id, 'materials', courseMaterialsFiles);
-        courseMaterialsUrls.push(...urls);
+        courseMaterialsData.push(...urls.map(url => ({
+          url,
+          displayName: url.split('/').pop()?.replace(/\.[^.]+$/, '') || 'Material',
+          fileName: url.split('/').pop() || 'file'
+        })));
       }
 
       if (backgroundMaterialsFiles.length > 0) {
         toast.info(`Uploading ${backgroundMaterialsFiles.length} background materials...`);
         const urls = await uploadMultipleFiles(courseData.id, 'background', backgroundMaterialsFiles);
-        backgroundMaterialsUrls.push(...urls);
+        backgroundMaterialsData.push(...urls.map(url => ({
+          url,
+          displayName: url.split('/').pop()?.replace(/\.[^.]+$/, '') || 'Material',
+          fileName: url.split('/').pop() || 'file'
+        })));
       }
 
       const { error: updateError } = await supabase
         .from('courses')
         .update({
           syllabus_url: syllabusUrl,
-          course_materials_urls: courseMaterialsUrls,
-          background_materials_urls: backgroundMaterialsUrls,
+          course_materials_data: courseMaterialsData,
+          background_materials_data: backgroundMaterialsData,
         })
         .eq('id', courseData.id);
 
@@ -304,8 +312,10 @@ export default function CreateCourse() {
       router.push(`/educator/course/${courseData.id}`);
     } catch (error: any) {
       console.error('Error creating course:', error);
-      const errorMessage = error?.message || 'Failed to create course. Please try again.';
-      toast.error(errorMessage);
+      console.error('Supabase error message:', error?.message);
+      console.error('Supabase error details:', error?.details);
+      console.error('Supabase error hint:', error?.hint);
+      toast.error(error?.message || 'Failed to create course. Please try again.');
     } finally {
       setSaving(false);
     }

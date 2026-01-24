@@ -54,6 +54,7 @@ export default function CreateLecture() {
   const [expandedStep, setExpandedStep] = useState(1);
 
   const [lectureId, setLectureId] = useState<string | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([]);
   const [addToPersonalLibrary, setAddToPersonalLibrary] = useState(false);
@@ -97,8 +98,10 @@ export default function CreateLecture() {
 
   useEffect(() => {
     const idFromUrl = searchParams.get('id');
+    const modeFromUrl = searchParams.get('mode');
     if (idFromUrl) {
       setLectureId(idFromUrl);
+      setIsEditMode(modeFromUrl === 'edit');
     }
   }, [searchParams]);
 
@@ -174,11 +177,17 @@ export default function CreateLecture() {
     selectedCourseIds.forEach(courseId => {
       const course = courses.find(c => c.id === courseId);
       if (course) {
-        course.course_materials_urls.forEach((url) => {
-          const fileName = extractFileName(url);
-          materials.push({
+        const courseMaterials = course.course_materials_data ||
+          (course.course_materials_urls?.map(url => ({
             url,
-            name: fileName,
+            displayName: extractFileName(url),
+            fileName: extractFileName(url)
+          })) || []);
+
+        courseMaterials.forEach((material) => {
+          materials.push({
+            url: material.url,
+            name: material.displayName,
             courseTitle: course.title,
             courseCode: course.course_number,
             sourceCourseId: course.id,
@@ -186,11 +195,17 @@ export default function CreateLecture() {
           });
         });
 
-        course.background_materials_urls.forEach((url) => {
-          const fileName = extractFileName(url);
-          materials.push({
+        const backgroundMaterials = course.background_materials_data ||
+          (course.background_materials_urls?.map(url => ({
             url,
-            name: fileName,
+            displayName: extractFileName(url),
+            fileName: extractFileName(url)
+          })) || []);
+
+        backgroundMaterials.forEach((material) => {
+          materials.push({
+            url: material.url,
+            name: material.displayName,
             courseTitle: course.title,
             courseCode: course.course_number,
             sourceCourseId: course.id,
@@ -302,10 +317,127 @@ export default function CreateLecture() {
 
         if (lectureData.status === 'generated' || lectureData.status === 'published') {
           setContentGenerated(true);
+
+          const { data: artifacts, error: artifactsError } = await supabase
+            .from('lecture_artifacts')
+            .select('*')
+            .eq('lecture_id', lectureIdToLoad);
+
+          if (!artifactsError && artifacts && artifacts.length > 0) {
+            const artifactMap: Record<string, string> = {};
+            artifacts.forEach(artifact => {
+              artifactMap[artifact.artifact_type] = artifact.file_url;
+            });
+            setArtifactsByType(artifactMap);
+          }
         }
       }
     } catch (error) {
       console.error('Error loading lecture data:', error);
+    }
+  };
+
+  const cloneLecture = async () => {
+    if (!lectureId || !profile) {
+      toast.error('Cannot clone lecture - missing data');
+      return;
+    }
+
+    try {
+      const { data: originalLecture, error: fetchError } = await supabase
+        .from('lectures')
+        .select('*')
+        .eq('id', lectureId)
+        .maybeSingle();
+
+      if (fetchError || !originalLecture) {
+        throw new Error('Failed to fetch original lecture');
+      }
+
+      const newTitle = `${originalLecture.title} (Copy)`;
+
+      const { data: newLecture, error: createError } = await supabase
+        .from('lectures')
+        .insert({
+          educator_id: profile.id,
+          creator_role: 'educator',
+          creator_user_id: profile.id,
+          title: newTitle,
+          description: originalLecture.description,
+          selected_course_ids: originalLecture.selected_course_ids,
+          library_personal: originalLecture.library_personal,
+          library_usc: originalLecture.library_usc,
+          content_style: originalLecture.content_style,
+          avatar_character: originalLecture.avatar_character,
+          avatar_style: originalLecture.avatar_style,
+          script_mode: originalLecture.script_mode,
+          script_text: originalLecture.script_text,
+          script_prompt: originalLecture.script_prompt,
+          video_length: originalLecture.video_length,
+          status: 'draft'
+        })
+        .select()
+        .single();
+
+      if (createError || !newLecture) {
+        throw new Error('Failed to create new lecture');
+      }
+
+      const { data: materials, error: materialsError } = await supabase
+        .from('lecture_materials')
+        .select('*')
+        .eq('lecture_id', lectureId);
+
+      if (!materialsError && materials && materials.length > 0) {
+        const newMaterials = materials.map(m => ({
+          lecture_id: newLecture.id,
+          material_url: m.material_url,
+          material_name: m.material_name,
+          material_type: m.material_type,
+          source_type: m.source_type,
+          source_course_id: m.source_course_id,
+          file_name: m.file_name,
+          file_size_bytes: m.file_size_bytes,
+          mime_type: m.mime_type
+        }));
+
+        await supabase.from('lecture_materials').insert(newMaterials);
+      }
+
+      const { data: lectureCourses, error: coursesError } = await supabase
+        .from('lecture_courses')
+        .select('*')
+        .eq('lecture_id', lectureId);
+
+      if (!coursesError && lectureCourses && lectureCourses.length > 0) {
+        const newLectureCourses = lectureCourses.map(lc => ({
+          lecture_id: newLecture.id,
+          course_id: lc.course_id
+        }));
+
+        await supabase.from('lecture_courses').insert(newLectureCourses);
+      }
+
+      setLectureId(newLecture.id);
+      setLectureTitle(newTitle);
+      setIsEditMode(true);
+      setContentGenerated(false);
+      setJobsByType({});
+      setArtifactsByType({});
+      jobIdsRef.current = [];
+      finishedAtRef.current = null;
+
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+
+      router.push(`/educator/lecture/new?id=${newLecture.id}&mode=edit`);
+      toast.success('Lecture cloned successfully! You can now regenerate content.');
+    } catch (error: any) {
+      console.error('Error cloning lecture:', error);
+      console.error('Clone error details:', error?.message);
+      toast.error(error?.message || 'Failed to clone lecture');
     }
   };
 
@@ -389,7 +521,7 @@ export default function CreateLecture() {
             .insert({
               lecture_id: lectureId,
               material_url: material.url,
-              material_name: material.name,
+              material_name: extractFileNameWithoutExtension(material.url),
               material_type: material.defaultType,
               source_course_id: material.sourceCourseId,
               source_type: 'course_preloaded'
@@ -409,7 +541,12 @@ export default function CreateLecture() {
     if (!files || files.length === 0) return;
 
     if (!lectureId) {
-      toast.error('Please save draft first');
+      toast.error('Save draft first');
+      return;
+    }
+
+    if (selectedCourseIds.length === 0) {
+      toast.error('Select at least one course in Step 1 to upload files');
       return;
     }
 
@@ -419,6 +556,7 @@ export default function CreateLecture() {
       return;
     }
 
+    const courseIdForPath = selectedCourseIds[0];
     const validFiles: File[] = [];
 
     for (const file of Array.from(files)) {
@@ -429,10 +567,10 @@ export default function CreateLecture() {
 
       try {
         const timestamp = Date.now();
-        const filePath = `${user.id}/${lectureId}/materials/${timestamp}-${file.name}`;
+        const filePath = `${courseIdForPath}/materials/${timestamp}-${file.name}`;
 
         const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('lecture-assets')
+          .from('course-files')
           .upload(filePath, file, {
             cacheControl: '3600',
             upsert: false
@@ -441,7 +579,7 @@ export default function CreateLecture() {
         if (uploadError) throw uploadError;
 
         const { data: { publicUrl } } = supabase.storage
-          .from('lecture-assets')
+          .from('course-files')
           .getPublicUrl(filePath);
 
         const { error: insertError } = await supabase
@@ -449,9 +587,10 @@ export default function CreateLecture() {
           .insert({
             lecture_id: lectureId,
             material_url: publicUrl,
-            material_name: file.name,
+            material_name: extractFileNameWithoutExtension(publicUrl),
             material_type: 'main',
             source_type: 'uploaded',
+            source_course_id: courseIdForPath,
             file_mime: file.type,
             file_size_bytes: file.size,
             storage_path: filePath
@@ -472,7 +611,10 @@ export default function CreateLecture() {
         toast.success(`${file.name} uploaded`);
       } catch (error) {
         console.error('Error uploading file:', error);
-        toast.error(`Failed to upload ${file.name}`);
+        const errorMessage = error && typeof error === 'object' && 'message' in error
+          ? String(error.message)
+          : 'Unknown error';
+        toast.error(`${file.name}: ${errorMessage}`);
       }
     }
 
@@ -493,16 +635,16 @@ export default function CreateLecture() {
       try {
         const { data: material, error: fetchError } = await supabase
           .from('lecture_materials')
-          .select('storage_path')
+          .select('storage_path, source_type')
           .eq('lecture_id', lectureId)
           .eq('material_url', materialToRemove.url)
           .maybeSingle();
 
         if (fetchError) throw fetchError;
 
-        if (material?.storage_path) {
+        if (material?.storage_path && material.source_type === 'uploaded') {
           const { error: storageError } = await supabase.storage
-            .from('lecture-assets')
+            .from('course-files')
             .remove([material.storage_path]);
 
           if (storageError) {
@@ -787,9 +929,14 @@ export default function CreateLecture() {
 
       if (updateError) throw updateError;
 
+      const { data: { session } } = await supabase.auth.getSession();
+
       const resp = await fetch(`${BACKEND_URL}/api/lectures/${lectureId}/generate-script`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        }
       });
 
       if (!resp.ok) {
@@ -1219,18 +1366,29 @@ SLIDE 1: Untitled Lecture
   return (
     <EducatorLayout profile={profile}>
       <div className="max-w-5xl mx-auto space-y-8">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.push('/educator/dashboard')}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors px-4 py-2 rounded-lg hover:bg-gray-100"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            <span className="font-medium">Back</span>
-          </button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Create Lecture</h1>
-            <p className="text-gray-600 mt-1">Follow the steps below to create your AI-powered lecture content</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.push('/educator/dashboard')}
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors px-4 py-2 rounded-lg hover:bg-gray-100"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span className="font-medium">Back</span>
+            </button>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">{isEditMode ? 'Edit Lecture' : 'Create Lecture'}</h1>
+              <p className="text-gray-600 mt-1">{isEditMode ? 'Update your lecture and regenerate content as needed' : 'Follow the steps below to create your AI-powered lecture content'}</p>
+            </div>
           </div>
+          {isEditMode && lectureId && (
+            <button
+              onClick={cloneLecture}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2"
+            >
+              <FileText className="w-5 h-5" />
+              Save as New Lecture
+            </button>
+          )}
         </div>
 
         <div className="bg-brand-maroon text-white rounded-2xl p-8">
@@ -1966,7 +2124,18 @@ SLIDE 1: Untitled Lecture
                         )}
 
                         <div>
-                          <h4 className="font-semibold text-gray-900 mb-4">Edit Script & Regenerate</h4>
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="font-semibold text-gray-900">Edit Script & Regenerate</h4>
+                            {isEditMode && lectureId && (
+                              <button
+                                onClick={cloneLecture}
+                                className="text-sm bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
+                              >
+                                <FileText className="w-4 h-4" />
+                                Save as New Lecture
+                              </button>
+                            )}
+                          </div>
                           <textarea
                             value={generatedScript}
                             onChange={(e) => {

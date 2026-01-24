@@ -32,6 +32,7 @@ interface Lecture {
   id: string;
   title: string;
   course_code: string;
+  course_id: string;
   instructor_name: string;
   duration: number;
   created_at: string;
@@ -134,41 +135,54 @@ export default function StudentDashboard() {
         setCourses(coursesData);
       }
 
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-
-      const { data: lecturesData } = await supabase
-        .from('lectures')
+      const { data: lectureCourses } = await supabase
+        .from('lecture_courses')
         .select(`
-          id,
-          title,
-          duration,
-          created_at,
+          lecture_id,
           course_id,
-          creator_role,
-          creator_user_id,
-          courses (
-            code,
+          lectures!inner(
+            id,
+            title,
+            video_length,
+            created_at,
+            status,
+            creator_role
+          ),
+          courses!inner(
+            course_number,
             instructor_name
           )
         `)
         .in('course_id', courseIds)
-        .eq('status', 'completed')
-        .or(`creator_role.eq.educator,and(creator_role.eq.student,creator_user_id.eq.${currentUser?.id})`)
-        .order('created_at', { ascending: false })
-        .limit(3);
+        .order('lectures(created_at)', { ascending: false });
 
       let formattedLectures: Lecture[] = [];
 
-      if (lecturesData) {
-        formattedLectures = lecturesData.map((lecture: any) => ({
-          id: lecture.id,
-          title: lecture.title,
-          course_code: lecture.courses?.course_number || '',
-          instructor_name: lecture.courses?.instructor_name || '',
-          duration: lecture.duration || 0,
-          created_at: formatTimeAgo(lecture.created_at),
-          isNew: isWithinDays(lecture.created_at, 2)
-        }));
+      if (lectureCourses) {
+        const educatorLectures = lectureCourses
+          .filter((lc: any) => {
+            const lecture = lc.lectures;
+            return lecture &&
+                   lecture.creator_role === 'educator' &&
+                   (lecture.status === 'completed' || lecture.status === 'published');
+          })
+          .slice(0, 3)
+          .map((lc: any) => {
+            const lecture = lc.lectures;
+            const course = lc.courses;
+            return {
+              id: lecture.id,
+              title: lecture.title,
+              course_code: course.course_number || '',
+              course_id: lc.course_id,
+              instructor_name: course.instructor_name || '',
+              duration: lecture.video_length || 0,
+              created_at: formatTimeAgo(lecture.created_at),
+              isNew: isWithinDays(lecture.created_at, 2)
+            };
+          });
+
+        formattedLectures = educatorLectures;
         setRecentLectures(formattedLectures);
       }
 
@@ -330,7 +344,7 @@ export default function StudentDashboard() {
                   duration={lecture.duration}
                   createdAt={lecture.created_at}
                   isNew={lecture.isNew}
-                  onClick={() => router.push(`/student/lecture/${lecture.id}`)}
+                  onClick={() => router.push(`/student/course/${lecture.course_id}/lecture/${lecture.id}`)}
                 />
               ))}
             </div>

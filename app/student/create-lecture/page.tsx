@@ -127,20 +127,34 @@ export default function CreateLecture() {
     selectedCourseIds.forEach(courseId => {
       const course = courses.find(c => c.id === courseId);
       if (course) {
-        course.course_materials_urls.forEach((url, index) => {
-          materials.push({
+        const courseMaterials = course.course_materials_data ||
+          (course.course_materials_urls?.map(url => ({
             url,
-            name: `Material ${index + 1}`,
+            displayName: url.split('/').pop()?.replace(/\.[^.]+$/, '') || 'Material',
+            fileName: url.split('/').pop() || 'file'
+          })) || []);
+
+        courseMaterials.forEach((material) => {
+          materials.push({
+            url: material.url,
+            name: material.displayName,
             courseTitle: course.title,
             courseCode: course.course_number,
             sourceCourseId: course.id
           });
         });
 
-        course.background_materials_urls.forEach((url, index) => {
-          materials.push({
+        const backgroundMaterials = course.background_materials_data ||
+          (course.background_materials_urls?.map(url => ({
             url,
-            name: `Background Material ${index + 1}`,
+            displayName: url.split('/').pop()?.replace(/\.[^.]+$/, '') || 'Material',
+            fileName: url.split('/').pop() || 'file'
+          })) || []);
+
+        backgroundMaterials.forEach((material) => {
+          materials.push({
+            url: material.url,
+            name: material.displayName,
             courseTitle: course.title,
             courseCode: course.course_number,
             sourceCourseId: course.id
@@ -345,9 +359,15 @@ export default function CreateLecture() {
 
       if (jobError) throw jobError;
 
-      const resp = await fetch(`${BACKEND_URL}/api/lectures/${lectureId}/generate-script`, {
+      const { data: { session } } = await supabase.auth.getSession();
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/generate-lecture-script/api/lectures/${lectureId}/generate-script`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        }
       });
 
       if (!resp.ok) {

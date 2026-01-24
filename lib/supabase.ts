@@ -15,6 +15,12 @@ export type Profile = {
   updated_at: string;
 };
 
+export type CourseMaterial = {
+  url: string;
+  displayName: string;
+  fileName: string;
+};
+
 export type Course = {
   id: string;
   educator_id: string;
@@ -26,8 +32,10 @@ export type Course = {
   section: string;
   instructor_name: string;
   syllabus_url: string | null;
-  course_materials_urls: string[];
-  background_materials_urls: string[];
+  course_materials_urls?: string[];
+  background_materials_urls?: string[];
+  course_materials_data?: CourseMaterial[];
+  background_materials_data?: CourseMaterial[];
   created_at: string;
   updated_at: string;
 };

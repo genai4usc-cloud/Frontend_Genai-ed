@@ -38,9 +38,9 @@ export default function EditCourse() {
   const [existingSyllabusUrl, setExistingSyllabusUrl] = useState<string | null>(null);
   const [studentRosterFile, setStudentRosterFile] = useState<File | null>(null);
   const [courseMaterialsFiles, setCourseMaterialsFiles] = useState<File[]>([]);
-  const [existingCourseMaterials, setExistingCourseMaterials] = useState<string[]>([]);
+  const [existingCourseMaterials, setExistingCourseMaterials] = useState<Array<{url: string, displayName: string, fileName: string}>>([]);
   const [backgroundMaterialsFiles, setBackgroundMaterialsFiles] = useState<File[]>([]);
-  const [existingBackgroundMaterials, setExistingBackgroundMaterials] = useState<string[]>([]);
+  const [existingBackgroundMaterials, setExistingBackgroundMaterials] = useState<Array<{url: string, displayName: string, fileName: string}>>([]);
 
   const syllabusInputRef = useRef<HTMLInputElement>(null);
   const studentRosterInputRef = useRef<HTMLInputElement>(null);
@@ -89,8 +89,29 @@ export default function EditCourse() {
         setCourseTitle(courseData.title);
         setInstructorName(courseData.instructor_name);
         setExistingSyllabusUrl(courseData.syllabus_url);
-        setExistingCourseMaterials(courseData.course_materials_urls || []);
-        setExistingBackgroundMaterials(courseData.background_materials_urls || []);
+
+        const courseMats = courseData.course_materials_data || courseData.course_materials_urls || [];
+        const bgMats = courseData.background_materials_data || courseData.background_materials_urls || [];
+
+        setExistingCourseMaterials(
+          Array.isArray(courseMats) && courseMats.length > 0 && typeof courseMats[0] === 'object'
+            ? courseMats
+            : courseMats.map((url: string) => ({
+                url,
+                displayName: url.split('/').pop()?.replace(/\.[^.]+$/, '') || 'Material',
+                fileName: url.split('/').pop() || 'file'
+              }))
+        );
+
+        setExistingBackgroundMaterials(
+          Array.isArray(bgMats) && bgMats.length > 0 && typeof bgMats[0] === 'object'
+            ? bgMats
+            : bgMats.map((url: string) => ({
+                url,
+                displayName: url.split('/').pop()?.replace(/\.[^.]+$/, '') || 'Material',
+                fileName: url.split('/').pop() || 'file'
+              }))
+        );
 
         const { data: tasData } = await supabase
           .from('course_teaching_assistants')
@@ -274,8 +295,8 @@ export default function EditCourse() {
     setSaving(true);
     try {
       let syllabusUrl = existingSyllabusUrl;
-      const courseMaterialsUrls = [...existingCourseMaterials];
-      const backgroundMaterialsUrls = [...existingBackgroundMaterials];
+      const courseMaterialsData = [...existingCourseMaterials];
+      const backgroundMaterialsData = [...existingBackgroundMaterials];
 
       if (syllabusFile) {
         toast.info('Uploading syllabus...');
@@ -285,30 +306,44 @@ export default function EditCourse() {
       if (courseMaterialsFiles.length > 0) {
         toast.info(`Uploading ${courseMaterialsFiles.length} course materials...`);
         const urls = await uploadMultipleFiles(courseId, 'materials', courseMaterialsFiles);
-        courseMaterialsUrls.push(...urls);
+        courseMaterialsData.push(...urls.map(url => ({
+          url,
+          displayName: url.split('/').pop()?.replace(/\.[^.]+$/, '') || 'Material',
+          fileName: url.split('/').pop() || 'file'
+        })));
       }
 
       if (backgroundMaterialsFiles.length > 0) {
         toast.info(`Uploading ${backgroundMaterialsFiles.length} background materials...`);
         const urls = await uploadMultipleFiles(courseId, 'background', backgroundMaterialsFiles);
-        backgroundMaterialsUrls.push(...urls);
+        backgroundMaterialsData.push(...urls.map(url => ({
+          url,
+          displayName: url.split('/').pop()?.replace(/\.[^.]+$/, '') || 'Material',
+          fileName: url.split('/').pop() || 'file'
+        })));
       }
+
+      const payload = {
+        course_number: courseNumber.trim(),
+        title: courseTitle.trim(),
+        semester,
+        section: section.trim() || null,
+        instructor_name: instructorName.trim(),
+        syllabus_url: syllabusUrl || null,
+        course_materials_data: courseMaterialsData,
+        background_materials_data: backgroundMaterialsData,
+      };
 
       const { error: updateError } = await supabase
         .from('courses')
-        .update({
-          code: courseNumber.trim(),
-          title: courseTitle.trim(),
-          semester: semester,
-          section: section.trim(),
-          instructor_name: instructorName.trim(),
-          syllabus_url: syllabusUrl,
-          course_materials_urls: courseMaterialsUrls,
-          background_materials_urls: backgroundMaterialsUrls,
-        })
-        .eq('id', courseId);
+        .update(payload)
+        .eq('id', courseId)
+        .eq('educator_id', profile.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error("Update error details:", updateError);
+        throw updateError;
+      }
 
       await supabase.from('course_teaching_assistants').delete().eq('course_id', courseId);
       if (teachingAssistants.length > 0) {
@@ -339,9 +374,12 @@ export default function EditCourse() {
 
       toast.success('Course updated successfully!');
       router.push(`/educator/course/${courseId}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating course:', error);
-      toast.error('Failed to update course. Please try again.');
+      console.error('Supabase error message:', error?.message);
+      console.error('Supabase error details:', error?.details);
+      console.error('Supabase error hint:', error?.hint);
+      toast.error(error?.message || 'Failed to update course. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -755,25 +793,43 @@ export default function EditCourse() {
             {existingCourseMaterials.length > 0 && (
               <div className="space-y-2 mb-4">
                 <p className="text-sm font-semibold text-gray-700 mb-2">Current Materials:</p>
-                {existingCourseMaterials.map((url, index) => (
-                  <div key={index} className="flex items-center justify-between bg-blue-50 px-4 py-3 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <File className="w-5 h-5 text-blue-600" />
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-gray-900 font-medium hover:text-blue-600"
+                {existingCourseMaterials.map((material, index) => (
+                  <div key={index} className="bg-blue-50 px-4 py-3 rounded-lg">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 flex-1">
+                        <File className="w-5 h-5 text-blue-600 mt-1" />
+                        <div className="flex-1 space-y-2">
+                          <input
+                            type="text"
+                            value={material.displayName}
+                            onChange={(e) => {
+                              const updated = [...existingCourseMaterials];
+                              updated[index] = { ...material, displayName: e.target.value };
+                              setExistingCourseMaterials(updated);
+                            }}
+                            className="w-full px-3 py-1.5 text-gray-900 font-medium bg-white border border-gray-300 rounded focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
+                            placeholder="Display name"
+                          />
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">File:</span>
+                            <a
+                              href={material.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              {material.fileName}
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeExistingCourseMaterial(index)}
+                        className="text-gray-400 hover:text-red-600 transition-colors"
                       >
-                        Material {index + 1}
-                      </a>
+                        <X className="w-5 h-5" />
+                      </button>
                     </div>
-                    <button
-                      onClick={() => removeExistingCourseMaterial(index)}
-                      className="text-gray-400 hover:text-red-600 transition-colors"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
                   </div>
                 ))}
               </div>
@@ -830,25 +886,43 @@ export default function EditCourse() {
             {existingBackgroundMaterials.length > 0 && (
               <div className="space-y-2 mb-4">
                 <p className="text-sm font-semibold text-gray-700 mb-2">Current Materials:</p>
-                {existingBackgroundMaterials.map((url, index) => (
-                  <div key={index} className="flex items-center justify-between bg-blue-50 px-4 py-3 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <File className="w-5 h-5 text-blue-600" />
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-gray-900 font-medium hover:text-blue-600"
+                {existingBackgroundMaterials.map((material, index) => (
+                  <div key={index} className="bg-blue-50 px-4 py-3 rounded-lg">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 flex-1">
+                        <File className="w-5 h-5 text-blue-600 mt-1" />
+                        <div className="flex-1 space-y-2">
+                          <input
+                            type="text"
+                            value={material.displayName}
+                            onChange={(e) => {
+                              const updated = [...existingBackgroundMaterials];
+                              updated[index] = { ...material, displayName: e.target.value };
+                              setExistingBackgroundMaterials(updated);
+                            }}
+                            className="w-full px-3 py-1.5 text-gray-900 font-medium bg-white border border-gray-300 rounded focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
+                            placeholder="Display name"
+                          />
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">File:</span>
+                            <a
+                              href={material.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              {material.fileName}
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeExistingBackgroundMaterial(index)}
+                        className="text-gray-400 hover:text-red-600 transition-colors"
                       >
-                        Material {index + 1}
-                      </a>
+                        <X className="w-5 h-5" />
+                      </button>
                     </div>
-                    <button
-                      onClick={() => removeExistingBackgroundMaterial(index)}
-                      className="text-gray-400 hover:text-red-600 transition-colors"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
                   </div>
                 ))}
               </div>
