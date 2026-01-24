@@ -10,6 +10,7 @@ interface LectureCardProps {
   createdAt?: string;
   isNew?: boolean;
   status?: string;
+  isEducatorLecture?: boolean;
   onClick: () => void;
 }
 
@@ -21,6 +22,7 @@ export default function LectureCard({
   createdAt,
   isNew = false,
   status,
+  isEducatorLecture = false,
   onClick
 }: LectureCardProps) {
   const getStatusBadge = () => {
@@ -29,6 +31,13 @@ export default function LectureCard({
         <span className="px-2 py-1 bg-brand-yellow text-brand-maroon text-xs font-bold rounded-full flex items-center gap-1">
           <Loader2 className="w-3 h-3 animate-spin" />
           Generating
+        </span>
+      );
+    }
+    if (isEducatorLecture) {
+      return (
+        <span className="px-2 py-1 bg-brand-maroon text-white text-xs font-bold rounded-full">
+          Educator
         </span>
       );
     }
