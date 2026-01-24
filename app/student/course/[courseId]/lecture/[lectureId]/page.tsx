@@ -44,7 +44,7 @@ interface Message {
 
 interface Artifact {
   id: string;
-  artifact_type: 'audio_mp3' | 'pptx' | 'video_static_mp4' | 'video_avatar_mp4';
+  artifact_type: 'audio_mp3' | 'audio' | 'pptx' | 'ppt' | 'video_static_mp4' | 'video_avatar_mp4' | 'video_avatar';
   file_url: string;
   created_at: string;
 }
@@ -154,11 +154,11 @@ export default function StudentLectureViewer() {
     if (artifactsData) {
       setArtifacts(artifactsData);
 
-      if (artifactsData.some(a => a.artifact_type === 'video_avatar_mp4' || a.artifact_type === 'video_static_mp4')) {
+      if (artifactsData.some(a => a.artifact_type === 'video_avatar_mp4' || a.artifact_type === 'video_static_mp4' || a.artifact_type === 'video_avatar')) {
         setActiveTab('video');
-      } else if (artifactsData.some(a => a.artifact_type === 'audio_mp3')) {
+      } else if (artifactsData.some(a => a.artifact_type === 'audio_mp3' || a.artifact_type === 'audio')) {
         setActiveTab('audio');
-      } else if (artifactsData.some(a => a.artifact_type === 'pptx')) {
+      } else if (artifactsData.some(a => a.artifact_type === 'pptx' || a.artifact_type === 'ppt')) {
         setActiveTab('presentation');
       }
     }
@@ -260,7 +260,7 @@ export default function StudentLectureViewer() {
             <div className="bg-background border-r border-border overflow-y-auto">
               <div className="p-6 border-b border-border">
                 <div className="flex gap-4">
-                  {(artifacts.some(a => a.artifact_type === 'video_avatar_mp4' || a.artifact_type === 'video_static_mp4')) && (
+                  {(artifacts.some(a => a.artifact_type === 'video_avatar_mp4' || a.artifact_type === 'video_static_mp4' || a.artifact_type === 'video_avatar')) && (
                     <button
                       onClick={() => setActiveTab('video')}
                       className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
@@ -273,7 +273,7 @@ export default function StudentLectureViewer() {
                       Video
                     </button>
                   )}
-                  {artifacts.some(a => a.artifact_type === 'audio_mp3') && (
+                  {artifacts.some(a => a.artifact_type === 'audio_mp3' || a.artifact_type === 'audio') && (
                     <button
                       onClick={() => setActiveTab('audio')}
                       className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
@@ -286,7 +286,7 @@ export default function StudentLectureViewer() {
                       Audio
                     </button>
                   )}
-                  {artifacts.some(a => a.artifact_type === 'pptx') && (
+                  {artifacts.some(a => a.artifact_type === 'pptx' || a.artifact_type === 'ppt') && (
                     <button
                       onClick={() => setActiveTab('presentation')}
                       className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
@@ -315,7 +315,7 @@ export default function StudentLectureViewer() {
                     {activeTab === 'video' && (
                       <>
                         {(() => {
-                          const videoArtifact = artifacts.find(a => a.artifact_type === 'video_avatar_mp4' || a.artifact_type === 'video_static_mp4');
+                          const videoArtifact = artifacts.find(a => a.artifact_type === 'video_avatar_mp4' || a.artifact_type === 'video_static_mp4' || a.artifact_type === 'video_avatar');
                           return videoArtifact ? (
                             <div className="aspect-video bg-black rounded-xl overflow-hidden">
                               <video
@@ -338,7 +338,7 @@ export default function StudentLectureViewer() {
                     {activeTab === 'audio' && (
                       <>
                         {(() => {
-                          const audioArtifact = artifacts.find(a => a.artifact_type === 'audio_mp3');
+                          const audioArtifact = artifacts.find(a => a.artifact_type === 'audio_mp3' || a.artifact_type === 'audio');
                           return audioArtifact ? (
                             <div className="bg-card border border-border rounded-xl p-8">
                               <div className="flex items-center justify-center mb-6">
@@ -376,7 +376,7 @@ export default function StudentLectureViewer() {
                     {activeTab === 'presentation' && (
                       <>
                         {(() => {
-                          const pptxArtifact = artifacts.find(a => a.artifact_type === 'pptx');
+                          const pptxArtifact = artifacts.find(a => a.artifact_type === 'pptx' || a.artifact_type === 'ppt');
                           return pptxArtifact ? (
                             <div className="bg-card border border-border rounded-xl p-8">
                               <div className="flex items-center justify-center mb-6">

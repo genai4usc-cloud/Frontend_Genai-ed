@@ -211,6 +211,13 @@ export default function CourseLectures() {
   };
 
   const getArtifactByType = (artifacts: LectureArtifact[], type: string) => {
+    if (type === 'video_avatar') {
+      return artifacts.find(a => a.artifact_type === 'video_avatar_mp4' || a.artifact_type === 'video_static_mp4' || a.artifact_type === 'video_avatar');
+    } else if (type === 'audio') {
+      return artifacts.find(a => a.artifact_type === 'audio_mp3' || a.artifact_type === 'audio');
+    } else if (type === 'pptx') {
+      return artifacts.find(a => a.artifact_type === 'pptx' || a.artifact_type === 'ppt');
+    }
     return artifacts.find(a => a.artifact_type === type);
   };
 
