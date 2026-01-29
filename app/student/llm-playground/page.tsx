@@ -17,7 +17,10 @@ import {
   ShieldAlert,
   FileText,
   Users,
-  User
+  User,
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle
 } from 'lucide-react';
 
 type AIModel = {
@@ -81,6 +84,8 @@ export default function LLMPlayground() {
   const [maxTokens, setMaxTokens] = useState(2000);
   const [includeSystemInstruction, setIncludeSystemInstruction] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState('');
+  const [expandedRiskRows, setExpandedRiskRows] = useState<Set<string>>(new Set());
+  const [expandedLongReports, setExpandedLongReports] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     checkAuth();
@@ -548,6 +553,269 @@ export default function LLMPlayground() {
     );
   };
 
+  const toggleRiskRow = (id: string) => {
+    setExpandedRiskRows((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleLongReport = (id: string) => {
+    setExpandedLongReports((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const renderRiskShortResults = () => {
+    const userMessages = messages.filter(m => m.role === 'user');
+
+    return (
+      <div className="space-y-6">
+        {userMessages.map((userMsg, index) => {
+          const mockResults = AI_MODELS.map((model, idx) => {
+            const riskScore = Math.random() * 10;
+            const riskLabel = riskScore < 3 ? 'Low Risk' : riskScore < 7 ? 'Medium Risk' : 'High Risk';
+            const disagreement = idx === 0 ? 'Aligned' : Math.random() > 0.5 ? 'Aligned' : 'Divergent';
+
+            return {
+              id: `${userMsg.id}-${model.id}`,
+              model,
+              riskScore: riskScore.toFixed(1),
+              riskLabel,
+              labelColor: riskScore < 3 ? 'text-green-600 bg-green-50' : riskScore < 7 ? 'text-yellow-600 bg-yellow-50' : 'text-red-600 bg-red-50',
+              disagreement,
+              notes: `${model.name} evaluated the prompt against safety criteria including harmful content, bias, privacy concerns, and manipulation tactics. The assessment considered contextual appropriateness and potential misuse scenarios.`
+            };
+          });
+
+          return (
+            <div key={userMsg.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-5 h-5 text-brand-maroon" />
+                  <h3 className="font-semibold text-gray-900">Risk Evaluation #{index + 1}</h3>
+                </div>
+                <p className="text-sm text-gray-600 mt-1">{userMsg.content}</p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Model</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Risk Score</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Risk Label</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Disagreement</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-12"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {mockResults.map((result) => (
+                      <>
+                        <tr key={result.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">{result.model.icon}</span>
+                              <div>
+                                <div className="font-medium text-gray-900 text-sm">{result.model.name}</div>
+                                <div className="text-xs text-gray-500">{result.model.provider}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm font-semibold text-gray-900">{result.riskScore}/10</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${result.labelColor}`}>
+                              {result.riskLabel}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`text-sm ${result.disagreement === 'Aligned' ? 'text-green-600' : 'text-orange-600'}`}>
+                              {result.disagreement}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => toggleRiskRow(result.id)}
+                              className="text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                              {expandedRiskRows.has(result.id) ? (
+                                <ChevronUp className="w-5 h-5" />
+                              ) : (
+                                <ChevronDown className="w-5 h-5" />
+                              )}
+                            </button>
+                          </td>
+                        </tr>
+                        {expandedRiskRows.has(result.id) && (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-3 bg-gray-50">
+                              <div className="text-sm text-gray-700">
+                                <p className="font-medium mb-2">Judge Notes:</p>
+                                <p className="text-gray-600">{result.notes}</p>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
+
+        {isProcessing && (
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <div className="flex items-center justify-center gap-3">
+              <div className="flex gap-1">
+                <div className="w-2 h-2 bg-brand-maroon rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-brand-maroon rounded-full animate-bounce delay-100"></div>
+                <div className="w-2 h-2 bg-brand-maroon rounded-full animate-bounce delay-200"></div>
+              </div>
+              <span className="text-gray-600 font-medium">Evaluating prompt across multiple judges...</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderRiskLongResults = () => {
+    const userMessages = messages.filter(m => m.role === 'user');
+
+    return (
+      <div className="space-y-6">
+        {userMessages.map((userMsg, index) => {
+          const mockReport = {
+            id: `${userMsg.id}-report`,
+            overallScore: (Math.random() * 10).toFixed(1),
+            overallLabel: Math.random() < 0.3 ? 'Low Risk' : Math.random() < 0.7 ? 'Medium Risk' : 'High Risk',
+            summary: 'After comprehensive analysis, the prompt shows moderate concerns regarding potential misuse in educational contexts. While the intent appears legitimate, certain phrasing could be interpreted ambiguously.',
+            sections: [
+              {
+                title: 'Content Safety Analysis',
+                content: 'The prompt contains no explicit harmful content, hate speech, or violence. However, it touches on sensitive topics that require careful handling in educational settings. The language is generally appropriate for academic discourse.'
+              },
+              {
+                title: 'Bias and Fairness Evaluation',
+                content: 'Analysis reveals minimal bias indicators. The prompt maintains a relatively neutral stance, though some implicit assumptions about audience knowledge level may affect accessibility. No significant fairness concerns detected.'
+              },
+              {
+                title: 'Privacy and Security Considerations',
+                content: 'The prompt does not request or imply collection of personal information. No security vulnerabilities identified in the query structure. Standard privacy guidelines are sufficient for this use case.'
+              },
+              {
+                title: 'Manipulation and Misinformation Risk',
+                content: 'Low to moderate risk of manipulation potential. The prompt structure could theoretically be adapted for misleading purposes, but current formulation shows legitimate educational intent. Recommend monitoring for context-specific adaptations.'
+              },
+              {
+                title: 'Contextual Appropriateness',
+                content: 'Highly appropriate for academic and educational environments. May require additional framing for public-facing applications. Consider audience maturity level and institutional guidelines.'
+              },
+              {
+                title: 'Recommendations',
+                content: '1. Add explicit educational framing\n2. Include content warnings if deploying to mixed audiences\n3. Monitor usage patterns for unexpected applications\n4. Implement standard content filtering for responses\n5. Document intended use cases for future reference'
+              }
+            ]
+          };
+
+          const labelColor = mockReport.overallLabel === 'Low Risk' ? 'text-green-600 bg-green-50' : mockReport.overallLabel === 'Medium Risk' ? 'text-yellow-600 bg-yellow-50' : 'text-red-600 bg-red-50';
+
+          return (
+            <div key={userMsg.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-brand-maroon" />
+                    <h3 className="font-semibold text-gray-900">Detailed Risk Evaluation #{index + 1}</h3>
+                  </div>
+                  <button
+                    onClick={() => toggleLongReport(mockReport.id)}
+                    className="flex items-center gap-2 text-sm text-brand-maroon hover:text-red-800 font-medium"
+                  >
+                    {expandedLongReports.has(mockReport.id) ? (
+                      <>
+                        <span>Collapse Report</span>
+                        <ChevronUp className="w-4 h-4" />
+                      </>
+                    ) : (
+                      <>
+                        <span>Expand Full Report</span>
+                        <ChevronDown className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">{userMsg.content}</p>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-gray-700">Risk Score:</span>
+                    <span className="text-lg font-bold text-gray-900">{mockReport.overallScore}/10</span>
+                  </div>
+                  <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${labelColor}`}>
+                    {mockReport.overallLabel}
+                  </span>
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <span className="text-lg">{AI_MODELS.find(m => m.id === judgeModel)?.icon}</span>
+                    <span>{AI_MODELS.find(m => m.id === judgeModel)?.name}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 py-4">
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2">Executive Summary</h4>
+                  <p className="text-sm text-gray-700 leading-relaxed">{mockReport.summary}</p>
+                </div>
+
+                {expandedLongReports.has(mockReport.id) && (
+                  <div className="space-y-4 border-t border-gray-200 pt-4">
+                    {mockReport.sections.map((section, idx) => (
+                      <div key={idx} className="pb-4 border-b border-gray-100 last:border-0">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-gray-400" />
+                          {section.title}
+                        </h4>
+                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{section.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {isProcessing && (
+          <div className="bg-white rounded-xl border border-gray-200 p-8">
+            <div className="flex items-center justify-center gap-3">
+              <div className="flex gap-1">
+                <div className="w-2 h-2 bg-brand-maroon rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-brand-maroon rounded-full animate-bounce delay-100"></div>
+                <div className="w-2 h-2 bg-brand-maroon rounded-full animate-bounce delay-200"></div>
+              </div>
+              <span className="text-gray-600 font-medium">Generating comprehensive risk evaluation...</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const messages = getMessages();
   const messageCount = messages.filter(m => m.role === 'user').length;
 
@@ -714,21 +982,25 @@ export default function LLMPlayground() {
                 <div className="max-w-7xl mx-auto">
                   {renderCompareGrid()}
                 </div>
+              ) : mode === 'risk-short' ? (
+                <div className="max-w-6xl mx-auto">
+                  {renderRiskShortResults()}
+                </div>
+              ) : mode === 'risk-long' ? (
+                <div className="max-w-5xl mx-auto">
+                  {renderRiskLongResults()}
+                </div>
               ) : (
                 <div className="max-w-4xl mx-auto space-y-4">
                   <div className="flex items-center gap-2 mb-4 p-3 bg-white rounded-lg border border-gray-200">
                     <span className="text-2xl">
                       {mode === 'single' && AI_MODELS.find(m => m.id === selectedModel)?.icon}
                       {mode === 'orchestrate' && AI_MODELS.find(m => m.id === orchestratorModel)?.icon}
-                      {mode === 'risk-short' && '🛡️'}
-                      {mode === 'risk-long' && AI_MODELS.find(m => m.id === judgeModel)?.icon}
                     </span>
                     <div>
                       <div className="font-semibold text-gray-900">
                         {mode === 'single' && AI_MODELS.find(m => m.id === selectedModel)?.name}
                         {mode === 'orchestrate' && 'Compare & Orchestrate'}
-                        {mode === 'risk-short' && 'Multi-Judge Risk Evaluation'}
-                        {mode === 'risk-long' && `${AI_MODELS.find(m => m.id === judgeModel)?.name} - Detailed Risk Evaluation`}
                       </div>
                       <div className="text-sm text-gray-600">{messageCount} evaluations</div>
                     </div>
@@ -757,7 +1029,7 @@ export default function LLMPlayground() {
                       </div>
                       {message.role === 'user' && (
                         <div className="w-8 h-8 bg-brand-yellow rounded-full flex items-center justify-center flex-shrink-0 font-bold text-gray-900">
-                          {profile.first_name[0]}
+                          {profile?.first_name?.[0]}
                         </div>
                       )}
                     </div>
