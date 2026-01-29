@@ -8,11 +8,8 @@ import LectureCard from '@/components/LectureCard';
 import { supabase, Profile } from '@/lib/supabase';
 import {
   Video,
-  TrendingUp,
   Lightbulb,
   ClipboardCheck,
-  BookOpen,
-  Pencil,
   Clock,
   MessageSquare
 } from 'lucide-react';
@@ -53,13 +50,9 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [userName, setUserName] = useState('');
-  const [stats, setStats] = useState({
-    enrolledCourses: 0,
-    newLectures: 0,
-    hoursWatched: 0
-  });
   const [courses, setCourses] = useState<Course[]>([]);
   const [recentLectures, setRecentLectures] = useState<Lecture[]>([]);
+  const [myLectures, setMyLectures] = useState<Lecture[]>([]);
   const [libraryResources] = useState<LibraryResource[]>([
     {
       id: '1',
@@ -188,25 +181,43 @@ export default function StudentDashboard() {
 
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: viewsData } = await supabase
-          .from('student_lecture_views')
-          .select('duration_watched')
-          .eq('student_id', user.id);
+        const { data: studentLecturesData } = await supabase
+          .from('lectures')
+          .select(`
+            id,
+            title,
+            video_length,
+            created_at,
+            status,
+            lecture_courses!inner(
+              course_id,
+              courses(
+                course_number,
+                instructor_name
+              )
+            )
+          `)
+          .eq('creator_id', user.id)
+          .eq('creator_role', 'student')
+          .order('created_at', { ascending: false })
+          .limit(6);
 
-        if (viewsData) {
-          const totalSeconds = viewsData.reduce((sum, view) => sum + (view.duration_watched || 0), 0);
-          const hours = (totalSeconds / 3600).toFixed(1);
-          setStats({
-            enrolledCourses: coursesData?.length || 0,
-            newLectures: formattedLectures.filter(l => l.isNew).length,
-            hoursWatched: parseFloat(hours)
+        if (studentLecturesData) {
+          const formattedMyLectures = studentLecturesData.map((lecture: any) => {
+            const lectureCourse = lecture.lecture_courses[0];
+            const course = lectureCourse?.courses;
+            return {
+              id: lecture.id,
+              title: lecture.title,
+              course_code: course?.course_number || '',
+              course_id: lectureCourse?.course_id || '',
+              instructor_name: course?.instructor_name || '',
+              duration: lecture.video_length || 0,
+              created_at: formatTimeAgo(lecture.created_at),
+              isNew: isWithinDays(lecture.created_at, 2)
+            };
           });
-        } else {
-          setStats({
-            enrolledCourses: coursesData?.length || 0,
-            newLectures: formattedLectures.filter(l => l.isNew).length,
-            hoursWatched: 0
-          });
+          setMyLectures(formattedMyLectures);
         }
       }
     }
@@ -291,22 +302,7 @@ export default function StudentDashboard() {
       <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
         <div className="bg-gradient-to-r from-brand-maroon to-brand-maroon-hover rounded-2xl p-8 text-white shadow-lg">
           <h1 className="text-3xl font-bold mb-2">Hi, {userName}!</h1>
-          <p className="text-xl text-white/90 mb-6">Welcome back to your USC Student Portal</p>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-              <div className="text-sm text-white/80 mb-1">Enrolled Courses</div>
-              <div className="text-3xl font-bold">{stats.enrolledCourses}</div>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-              <div className="text-sm text-white/80 mb-1">New Lectures</div>
-              <div className="text-3xl font-bold">{stats.newLectures}</div>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-              <div className="text-sm text-white/80 mb-1">Hours Watched</div>
-              <div className="text-3xl font-bold">{stats.hoursWatched}</div>
-            </div>
-          </div>
+          <p className="text-xl text-white/90">Welcome back to your USC Student Portal</p>
         </div>
 
         <section>
@@ -330,6 +326,26 @@ export default function StudentDashboard() {
             })}
           </div>
         </section>
+
+        {myLectures.length > 0 && (
+          <section>
+            <h2 className="text-2xl font-bold text-foreground mb-4">My Lectures</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {myLectures.map((lecture) => (
+                <LectureCard
+                  key={lecture.id}
+                  title={lecture.title}
+                  courseCode={lecture.course_code}
+                  instructorName={lecture.instructor_name}
+                  duration={lecture.duration}
+                  createdAt={lecture.created_at}
+                  isNew={lecture.isNew}
+                  onClick={() => router.push(`/student/course/${lecture.course_id}/my/lecture/${lecture.id}`)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
 
         {recentLectures.length > 0 && (
           <section>
