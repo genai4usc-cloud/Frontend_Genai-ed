@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, Profile } from '@/lib/supabase';
 import StudentLayout from '@/components/StudentLayout';
+import GenerationSettings from '@/components/GenerationSettings';
 import {
   Bot,
   Send,
@@ -76,6 +77,10 @@ export default function LLMPlayground() {
   const [riskLongMessages, setRiskLongMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [temperature, setTemperature] = useState(0.2);
+  const [maxTokens, setMaxTokens] = useState(2000);
+  const [includeSystemInstruction, setIncludeSystemInstruction] = useState(false);
+  const [systemPrompt, setSystemPrompt] = useState('');
 
   useEffect(() => {
     checkAuth();
@@ -163,14 +168,25 @@ export default function LLMPlayground() {
     setIsProcessing(true);
 
     setTimeout(() => {
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'This is a demo response. In production, this would connect to actual LLM APIs.',
-        model: mode === 'single' ? selectedModel : undefined,
-        timestamp: new Date()
-      };
-      setMessages([...currentMessages, userMessage, assistantMessage]);
+      if (mode === 'compare') {
+        const responses = AI_MODELS.map((model, index) => ({
+          id: (Date.now() + index + 1).toString(),
+          role: 'assistant' as const,
+          content: `This is a demo response from ${model.name}. In production, this would connect to the actual ${model.provider} API.`,
+          model: model.id,
+          timestamp: new Date()
+        }));
+        setMessages([...currentMessages, userMessage, ...responses]);
+      } else {
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: 'This is a demo response. In production, this would connect to actual LLM APIs.',
+          model: mode === 'single' ? selectedModel : undefined,
+          timestamp: new Date()
+        };
+        setMessages([...currentMessages, userMessage, assistantMessage]);
+      }
       setIsProcessing(false);
     }, 1000);
   };
@@ -206,31 +222,46 @@ export default function LLMPlayground() {
   };
 
   const renderSingleSidebar = () => (
-    <div>
-      <h3 className="font-semibold text-gray-900 mb-3">Select AI Model</h3>
-      <div className="space-y-2">
-        {AI_MODELS.map((model) => (
-          <button
-            key={model.id}
-            onClick={() => setSelectedModel(model.id)}
-            className={`w-full p-4 rounded-xl text-left transition-all ${
-              selectedModel === model.id
-                ? 'bg-red-50 border-2 border-brand-maroon'
-                : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
-            }`}
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <span className="text-2xl">{model.icon}</span>
-              <div className="flex-1">
-                <div className="font-semibold text-gray-900">{model.name}</div>
-                <div className="text-sm text-gray-600">{model.provider}</div>
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-semibold text-gray-900 mb-3">Select AI Model</h3>
+        <div className="space-y-2">
+          {AI_MODELS.map((model) => (
+            <button
+              key={model.id}
+              onClick={() => setSelectedModel(model.id)}
+              className={`w-full p-4 rounded-xl text-left transition-all ${
+                selectedModel === model.id
+                  ? 'bg-red-50 border-2 border-brand-maroon'
+                  : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-2xl">{model.icon}</span>
+                <div className="flex-1">
+                  <div className="font-semibold text-gray-900">{model.name}</div>
+                  <div className="text-sm text-gray-600">{model.provider}</div>
+                </div>
               </div>
-            </div>
-            {selectedModel === model.id && (
-              <div className="w-full h-1 bg-green-500 rounded-full"></div>
-            )}
-          </button>
-        ))}
+              {selectedModel === model.id && (
+                <div className="w-full h-1 bg-green-500 rounded-full"></div>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="pt-4 border-t border-gray-200">
+        <h3 className="font-semibold text-gray-900 mb-3">Generation Settings</h3>
+        <GenerationSettings
+          temperature={temperature}
+          maxTokens={maxTokens}
+          includeSystemInstruction={includeSystemInstruction}
+          systemPrompt={systemPrompt}
+          onTemperatureChange={setTemperature}
+          onMaxTokensChange={setMaxTokens}
+          onIncludeSystemInstructionChange={setIncludeSystemInstruction}
+          onSystemPromptChange={setSystemPrompt}
+        />
       </div>
     </div>
   );
@@ -256,102 +287,147 @@ export default function LLMPlayground() {
   );
 
   const renderOrchestrateSidebar = () => (
-    <div>
-      <h3 className="font-semibold text-gray-900 mb-2">Compare & Orchestrate</h3>
-      <p className="text-sm text-gray-600 mb-4">
-        All three models will respond, then your selected orchestrator will combine them into one comprehensive answer.
-      </p>
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Select Orchestrator
-        </label>
-        <select
-          value={orchestratorModel}
-          onChange={(e) => setOrchestratorModel(e.target.value)}
-          className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
-        >
-          {AI_MODELS.map((model) => (
-            <option key={model.id} value={model.id}>
-              {model.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-        <p className="text-sm text-gray-700">
-          <strong>{AI_MODELS.find(m => m.id === orchestratorModel)?.name}</strong> will synthesize responses from all models.
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-semibold text-gray-900 mb-2">Compare & Orchestrate</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          All three models will respond, then your selected orchestrator will combine them into one comprehensive answer.
         </p>
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Select Orchestrator
+          </label>
+          <select
+            value={orchestratorModel}
+            onChange={(e) => setOrchestratorModel(e.target.value)}
+            className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
+          >
+            {AI_MODELS.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+          <p className="text-sm text-gray-700">
+            <strong>{AI_MODELS.find(m => m.id === orchestratorModel)?.name}</strong> will synthesize responses from all models.
+          </p>
+        </div>
+      </div>
+      <div className="pt-4 border-t border-gray-200">
+        <h3 className="font-semibold text-gray-900 mb-3">Generation Settings</h3>
+        <GenerationSettings
+          temperature={temperature}
+          maxTokens={maxTokens}
+          includeSystemInstruction={includeSystemInstruction}
+          systemPrompt={systemPrompt}
+          onTemperatureChange={setTemperature}
+          onMaxTokensChange={setMaxTokens}
+          onIncludeSystemInstructionChange={setIncludeSystemInstruction}
+          onSystemPromptChange={setSystemPrompt}
+        />
       </div>
     </div>
   );
 
   const renderRiskShortSidebar = () => (
-    <div>
-      <h3 className="font-semibold text-gray-900 mb-2">Risk Evaluation (Short)</h3>
-      <p className="text-sm text-gray-600 mb-4">
-        Multiple AI judges will evaluate your prompt for safety risks using short, focused criteria. Faster but less detailed evaluation.
-      </p>
-      <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
-        <div className="flex items-start gap-2">
-          <ShieldAlert className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-red-900 mb-1">Multi-Judge Evaluation</p>
-            <p className="text-xs text-red-700">
-              All three models will independently assess the prompt against safety criteria.
-            </p>
-          </div>
-        </div>
-      </div>
-      <div className="space-y-2">
-        <div className="text-sm font-medium text-gray-700 mb-2">Active Judges:</div>
-        {AI_MODELS.map((model) => (
-          <div
-            key={model.id}
-            className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
-          >
-            <span className="text-xl">{model.icon}</span>
-            <div className="flex-1">
-              <div className="font-medium text-gray-900 text-sm">{model.name}</div>
-              <div className="text-xs text-gray-600">Independent Judge</div>
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-semibold text-gray-900 mb-2">Risk Evaluation (Short)</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          Multiple AI judges will evaluate your prompt for safety risks using short, focused criteria. Faster but less detailed evaluation.
+        </p>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+          <div className="flex items-start gap-2">
+            <ShieldAlert className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-red-900 mb-1">Multi-Judge Evaluation</p>
+              <p className="text-xs text-red-700">
+                All three models will independently assess the prompt against safety criteria.
+              </p>
             </div>
           </div>
-        ))}
+        </div>
+        <div className="space-y-2">
+          <div className="text-sm font-medium text-gray-700 mb-2">Active Judges:</div>
+          {AI_MODELS.map((model) => (
+            <div
+              key={model.id}
+              className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
+            >
+              <span className="text-xl">{model.icon}</span>
+              <div className="flex-1">
+                <div className="font-medium text-gray-900 text-sm">{model.name}</div>
+                <div className="text-xs text-gray-600">Independent Judge</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="pt-4 border-t border-gray-200">
+        <h3 className="font-semibold text-gray-900 mb-3">Generation Settings</h3>
+        <GenerationSettings
+          temperature={temperature}
+          maxTokens={maxTokens}
+          includeSystemInstruction={includeSystemInstruction}
+          systemPrompt={systemPrompt}
+          onTemperatureChange={setTemperature}
+          onMaxTokensChange={setMaxTokens}
+          onIncludeSystemInstructionChange={setIncludeSystemInstruction}
+          onSystemPromptChange={setSystemPrompt}
+        />
       </div>
     </div>
   );
 
   const renderRiskLongSidebar = () => (
-    <div>
-      <h3 className="font-semibold text-gray-900 mb-2">Risk Evaluation (Long)</h3>
-      <p className="text-sm text-gray-600 mb-4">
-        A single AI judge will provide a comprehensive, detailed evaluation of your prompt against extensive safety criteria.
-      </p>
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Select Judge Model
-        </label>
-        <select
-          value={judgeModel}
-          onChange={(e) => setJudgeModel(e.target.value)}
-          className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
-        >
-          {AI_MODELS.map((model) => (
-            <option key={model.id} value={model.id}>
-              {model.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <div className="flex items-start gap-2">
-          <FileText className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-blue-900 mb-1">Detailed Analysis</p>
-            <p className="text-xs text-blue-700">
-              <strong>{AI_MODELS.find(m => m.id === judgeModel)?.name}</strong> will provide comprehensive safety assessment.
-            </p>
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-semibold text-gray-900 mb-2">Risk Evaluation (Long)</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          A single AI judge will provide a comprehensive, detailed evaluation of your prompt against extensive safety criteria.
+        </p>
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Select Judge Model
+          </label>
+          <select
+            value={judgeModel}
+            onChange={(e) => setJudgeModel(e.target.value)}
+            className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
+          >
+            {AI_MODELS.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="flex items-start gap-2">
+            <FileText className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-blue-900 mb-1">Detailed Analysis</p>
+              <p className="text-xs text-blue-700">
+                <strong>{AI_MODELS.find(m => m.id === judgeModel)?.name}</strong> will provide comprehensive safety assessment.
+              </p>
+            </div>
           </div>
         </div>
+      </div>
+      <div className="pt-4 border-t border-gray-200">
+        <h3 className="font-semibold text-gray-900 mb-3">Generation Settings</h3>
+        <GenerationSettings
+          temperature={temperature}
+          maxTokens={maxTokens}
+          includeSystemInstruction={includeSystemInstruction}
+          systemPrompt={systemPrompt}
+          onTemperatureChange={setTemperature}
+          onMaxTokensChange={setMaxTokens}
+          onIncludeSystemInstructionChange={setIncludeSystemInstruction}
+          onSystemPromptChange={setSystemPrompt}
+        />
       </div>
     </div>
   );
@@ -371,6 +447,105 @@ export default function LLMPlayground() {
       default:
         return null;
     }
+  };
+
+  const renderCompareGrid = () => {
+    const userMessages = messages.filter(m => m.role === 'user');
+    const assistantMessages = messages.filter(m => m.role === 'assistant');
+
+    const groupedByPrompt = userMessages.map((userMsg, index) => {
+      const responsesForThisPrompt = assistantMessages.filter(
+        (msg, idx) => Math.floor(idx / 3) === index
+      );
+      return {
+        userMessage: userMsg,
+        responses: responsesForThisPrompt
+      };
+    });
+
+    return (
+      <div className="space-y-6">
+        {groupedByPrompt.map((group, groupIndex) => (
+          <div key={group.userMessage.id} className="space-y-4">
+            <div className="flex justify-end">
+              <div className="flex gap-3 items-start max-w-2xl">
+                <div className="bg-brand-maroon text-white rounded-2xl px-4 py-3">
+                  <p className="whitespace-pre-wrap">{group.userMessage.content}</p>
+                </div>
+                <div className="w-8 h-8 bg-brand-yellow rounded-full flex items-center justify-center flex-shrink-0 font-bold text-gray-900">
+                  {profile?.first_name?.[0]}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {AI_MODELS.map((model) => {
+                const response = group.responses.find(r => r.model === model.id);
+                return (
+                  <div
+                    key={model.id}
+                    className="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col"
+                  >
+                    <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xl">{model.icon}</span>
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-900 text-sm">{model.name}</div>
+                          <div className="text-xs text-gray-600">{model.provider}</div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Latency: ~{Math.floor(Math.random() * 500 + 500)}ms
+                      </div>
+                    </div>
+                    <div className="p-4 flex-1 overflow-y-auto max-h-96">
+                      {response ? (
+                        <p className="text-sm text-gray-900 whitespace-pre-wrap">{response.content}</p>
+                      ) : (
+                        <div className="flex items-center justify-center h-full">
+                          <div className="text-center text-gray-400">
+                            <Bot className="w-8 h-8 mx-auto mb-2" />
+                            <p className="text-xs">No response yet</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+
+        {isProcessing && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {AI_MODELS.map((model) => (
+              <div
+                key={model.id}
+                className="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col"
+              >
+                <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{model.icon}</span>
+                    <div className="flex-1">
+                      <div className="font-semibold text-gray-900 text-sm">{model.name}</div>
+                      <div className="text-xs text-gray-600">{model.provider}</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 flex items-center justify-center h-32">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100"></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const messages = getMessages();
@@ -535,12 +710,15 @@ export default function LLMPlayground() {
                     {mode === 'risk-long' && `${AI_MODELS.find(m => m.id === judgeModel)?.name} will provide detailed safety evaluation`}
                   </p>
                 </div>
+              ) : mode === 'compare' ? (
+                <div className="max-w-7xl mx-auto">
+                  {renderCompareGrid()}
+                </div>
               ) : (
                 <div className="max-w-4xl mx-auto space-y-4">
                   <div className="flex items-center gap-2 mb-4 p-3 bg-white rounded-lg border border-gray-200">
                     <span className="text-2xl">
                       {mode === 'single' && AI_MODELS.find(m => m.id === selectedModel)?.icon}
-                      {mode === 'compare' && '🔄'}
                       {mode === 'orchestrate' && AI_MODELS.find(m => m.id === orchestratorModel)?.icon}
                       {mode === 'risk-short' && '🛡️'}
                       {mode === 'risk-long' && AI_MODELS.find(m => m.id === judgeModel)?.icon}
@@ -548,7 +726,6 @@ export default function LLMPlayground() {
                     <div>
                       <div className="font-semibold text-gray-900">
                         {mode === 'single' && AI_MODELS.find(m => m.id === selectedModel)?.name}
-                        {mode === 'compare' && 'Compare All Models'}
                         {mode === 'orchestrate' && 'Compare & Orchestrate'}
                         {mode === 'risk-short' && 'Multi-Judge Risk Evaluation'}
                         {mode === 'risk-long' && `${AI_MODELS.find(m => m.id === judgeModel)?.name} - Detailed Risk Evaluation`}
