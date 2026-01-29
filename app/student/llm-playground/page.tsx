@@ -205,6 +205,174 @@ export default function LLMPlayground() {
     }
   };
 
+  const renderSingleSidebar = () => (
+    <div>
+      <h3 className="font-semibold text-gray-900 mb-3">Select AI Model</h3>
+      <div className="space-y-2">
+        {AI_MODELS.map((model) => (
+          <button
+            key={model.id}
+            onClick={() => setSelectedModel(model.id)}
+            className={`w-full p-4 rounded-xl text-left transition-all ${
+              selectedModel === model.id
+                ? 'bg-red-50 border-2 border-brand-maroon'
+                : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
+            }`}
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-2xl">{model.icon}</span>
+              <div className="flex-1">
+                <div className="font-semibold text-gray-900">{model.name}</div>
+                <div className="text-sm text-gray-600">{model.provider}</div>
+              </div>
+            </div>
+            {selectedModel === model.id && (
+              <div className="w-full h-1 bg-green-500 rounded-full"></div>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderCompareSidebar = () => (
+    <div>
+      <h3 className="font-semibold text-gray-900 mb-2">Compare Mode</h3>
+      <p className="text-sm text-gray-600 mb-4">
+        Your question will be sent to all three models simultaneously, and you can compare their responses side-by-side.
+      </p>
+      <div className="space-y-2">
+        {AI_MODELS.map((model) => (
+          <div
+            key={model.id}
+            className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
+          >
+            <span className="text-xl">{model.icon}</span>
+            <span className="font-medium text-gray-900">{model.name}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderOrchestrateSidebar = () => (
+    <div>
+      <h3 className="font-semibold text-gray-900 mb-2">Compare & Orchestrate</h3>
+      <p className="text-sm text-gray-600 mb-4">
+        All three models will respond, then your selected orchestrator will combine them into one comprehensive answer.
+      </p>
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Select Orchestrator
+        </label>
+        <select
+          value={orchestratorModel}
+          onChange={(e) => setOrchestratorModel(e.target.value)}
+          className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
+        >
+          {AI_MODELS.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+        <p className="text-sm text-gray-700">
+          <strong>{AI_MODELS.find(m => m.id === orchestratorModel)?.name}</strong> will synthesize responses from all models.
+        </p>
+      </div>
+    </div>
+  );
+
+  const renderRiskShortSidebar = () => (
+    <div>
+      <h3 className="font-semibold text-gray-900 mb-2">Risk Evaluation (Short)</h3>
+      <p className="text-sm text-gray-600 mb-4">
+        Multiple AI judges will evaluate your prompt for safety risks using short, focused criteria. Faster but less detailed evaluation.
+      </p>
+      <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+        <div className="flex items-start gap-2">
+          <ShieldAlert className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-900 mb-1">Multi-Judge Evaluation</p>
+            <p className="text-xs text-red-700">
+              All three models will independently assess the prompt against safety criteria.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <div className="text-sm font-medium text-gray-700 mb-2">Active Judges:</div>
+        {AI_MODELS.map((model) => (
+          <div
+            key={model.id}
+            className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
+          >
+            <span className="text-xl">{model.icon}</span>
+            <div className="flex-1">
+              <div className="font-medium text-gray-900 text-sm">{model.name}</div>
+              <div className="text-xs text-gray-600">Independent Judge</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderRiskLongSidebar = () => (
+    <div>
+      <h3 className="font-semibold text-gray-900 mb-2">Risk Evaluation (Long)</h3>
+      <p className="text-sm text-gray-600 mb-4">
+        A single AI judge will provide a comprehensive, detailed evaluation of your prompt against extensive safety criteria.
+      </p>
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Select Judge Model
+        </label>
+        <select
+          value={judgeModel}
+          onChange={(e) => setJudgeModel(e.target.value)}
+          className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
+        >
+          {AI_MODELS.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <div className="flex items-start gap-2">
+          <FileText className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-blue-900 mb-1">Detailed Analysis</p>
+            <p className="text-xs text-blue-700">
+              <strong>{AI_MODELS.find(m => m.id === judgeModel)?.name}</strong> will provide comprehensive safety assessment.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderSidebarForMode = (currentMode: Mode) => {
+    switch (currentMode) {
+      case 'single':
+        return renderSingleSidebar();
+      case 'compare':
+        return renderCompareSidebar();
+      case 'orchestrate':
+        return renderOrchestrateSidebar();
+      case 'risk-short':
+        return renderRiskShortSidebar();
+      case 'risk-long':
+        return renderRiskLongSidebar();
+      default:
+        return null;
+    }
+  };
+
   const messages = getMessages();
   const messageCount = messages.filter(m => m.role === 'user').length;
 
@@ -292,156 +460,7 @@ export default function LLMPlayground() {
         <div className="flex-1 flex overflow-hidden">
           <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto">
             <div className="p-4 space-y-4">
-              {mode === 'single' && (
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-3">Select AI Model</h3>
-                  <div className="space-y-2">
-                    {AI_MODELS.map((model) => (
-                      <button
-                        key={model.id}
-                        onClick={() => setSelectedModel(model.id)}
-                        className={`w-full p-4 rounded-xl text-left transition-all ${
-                          selectedModel === model.id
-                            ? 'bg-red-50 border-2 border-brand-maroon'
-                            : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="text-2xl">{model.icon}</span>
-                          <div className="flex-1">
-                            <div className="font-semibold text-gray-900">{model.name}</div>
-                            <div className="text-sm text-gray-600">{model.provider}</div>
-                          </div>
-                        </div>
-                        {selectedModel === model.id && (
-                          <div className="w-full h-1 bg-green-500 rounded-full"></div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {mode === 'compare' && (
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-2">Compare Mode</h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Your question will be sent to all three models simultaneously, and you can compare their responses side-by-side.
-                  </p>
-                  <div className="space-y-2">
-                    {AI_MODELS.map((model) => (
-                      <div
-                        key={model.id}
-                        className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
-                      >
-                        <span className="text-xl">{model.icon}</span>
-                        <span className="font-medium text-gray-900">{model.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {mode === 'orchestrate' && (
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-2">Compare & Orchestrate</h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    All three models will respond, then your selected orchestrator will combine them into one comprehensive answer.
-                  </p>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Select Orchestrator
-                    </label>
-                    <select
-                      value={orchestratorModel}
-                      onChange={(e) => setOrchestratorModel(e.target.value)}
-                      className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
-                    >
-                      {AI_MODELS.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                    <p className="text-sm text-gray-700">
-                      <strong>{AI_MODELS.find(m => m.id === orchestratorModel)?.name}</strong> will synthesize responses from all models.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {mode === 'risk-short' && (
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-2">Risk Evaluation (Short)</h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Multiple AI judges will evaluate your prompt for safety risks using short, focused criteria. Faster but less detailed evaluation.
-                  </p>
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
-                    <div className="flex items-start gap-2">
-                      <ShieldAlert className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-red-900 mb-1">Multi-Judge Evaluation</p>
-                        <p className="text-xs text-red-700">
-                          All three models will independently assess the prompt against safety criteria.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-sm font-medium text-gray-700 mb-2">Active Judges:</div>
-                    {AI_MODELS.map((model) => (
-                      <div
-                        key={model.id}
-                        className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
-                      >
-                        <span className="text-xl">{model.icon}</span>
-                        <div className="flex-1">
-                          <div className="font-medium text-gray-900 text-sm">{model.name}</div>
-                          <div className="text-xs text-gray-600">Independent Judge</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {mode === 'risk-long' && (
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-2">Risk Evaluation (Long)</h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    A single AI judge will provide a comprehensive, detailed evaluation of your prompt against extensive safety criteria.
-                  </p>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Select Judge Model
-                    </label>
-                    <select
-                      value={judgeModel}
-                      onChange={(e) => setJudgeModel(e.target.value)}
-                      className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
-                    >
-                      {AI_MODELS.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <div className="flex items-start gap-2">
-                      <FileText className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-medium text-blue-900 mb-1">Detailed Analysis</p>
-                        <p className="text-xs text-blue-700">
-                          <strong>{AI_MODELS.find(m => m.id === judgeModel)?.name}</strong> will provide comprehensive safety assessment.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {renderSidebarForMode(mode)}
 
               <div className="pt-4 border-t border-gray-200">
                 <button className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors group">
