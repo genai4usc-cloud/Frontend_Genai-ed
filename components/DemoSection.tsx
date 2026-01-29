@@ -1,7 +1,15 @@
 'use client';
 
+import { useMemo } from 'react';
+import { supabase } from '@/lib/supabase';
+
 export default function DemoSection() {
-  const demoVideoUrl = '/videos/platform-overview.mp4';
+  const storagePath = 'Videos/intro2.mp4';
+
+  const demoVideoUrl = useMemo(() => {
+    const { data } = supabase.storage.from('media').getPublicUrl(storagePath);
+    return data.publicUrl;
+  }, []);
 
   return (
     <section id="demos" className="py-16 md:py-24 bg-gray-50">
