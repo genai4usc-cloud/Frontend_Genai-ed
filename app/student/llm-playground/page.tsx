@@ -18,7 +18,8 @@ import {
   ChevronUp,
   AlertTriangle,
   ShieldAlert,
-  FileText
+  FileText,
+  Sparkles
 } from 'lucide-react';
 
 type AIModel = {
@@ -112,8 +113,6 @@ export default function LLMPlayground() {
   const [singleMessages, setSingleMessages] = useState<Message[]>([]);
 
   const [compareModelIds, setCompareModelIds] = useState<string[]>(AI_MODELS.map(m => m.id));
-  const [orchestratorModelId, setOrchestratorModelId] = useState<string | null>(null);
-  const [orchestrationPrompt, setOrchestrationPrompt] = useState<string>('');
   const [compareRuns, setCompareRuns] = useState<CompareRun[]>([]);
   const [activeCompareRunId, setActiveCompareRunId] = useState<string | null>(null);
 
@@ -134,6 +133,9 @@ export default function LLMPlayground() {
 
   const [expandedOutputs, setExpandedOutputs] = useState<Set<string>>(new Set());
   const [expandedReports, setExpandedReports] = useState<Set<string>>(new Set());
+
+  const [orchestratorModelId, setOrchestratorModelId] = useState<string>('');
+  const [orchestrationPrompt, setOrchestrationPrompt] = useState<string>('');
 
   useEffect(() => {
     checkAuth();
@@ -171,12 +173,12 @@ export default function LLMPlayground() {
   const handleSend = async () => {
     if (!input.trim() || isProcessing) return;
 
-    setIsProcessing(true);
     const userPrompt = input;
     setInput('');
 
-    setTimeout(() => {
-      if (mode === 'single') {
+    if (mode === 'single') {
+      setIsProcessing(true);
+      setTimeout(() => {
         const userMessage: Message = {
           id: Date.now().toString(),
           role: 'user',
@@ -190,23 +192,73 @@ export default function LLMPlayground() {
           model: selectedModel,
           timestamp: new Date()
         };
-        setSingleMessages([...singleMessages, userMessage, assistantMessage]);
-      } else if (mode === 'compare') {
-        const newRun: CompareRun = {
-          id: Date.now().toString(),
-          prompt: userPrompt,
-          modelIds: compareModelIds,
-          outputs: compareModelIds.map(modelId => ({
-            modelId,
-            text: 'Awaiting backend...',
-            latencyMs: 0
-          })),
-          orchestratorModelId: orchestratorModelId || undefined,
-          orchestrationPrompt: orchestrationPrompt || undefined
-        };
-        setCompareRuns([...compareRuns, newRun]);
-        setActiveCompareRunId(newRun.id);
-      } else if (mode === 'multi-judge') {
+        setSingleMessages(prev => [...prev, userMessage, assistantMessage]);
+        setIsProcessing(false);
+      }, 500);
+    } else if (mode === 'compare') {
+      const activeRun = compareRuns.find(r => r.id === activeCompareRunId);
+
+      if (activeRun?.orchestratedThread) {
+        setIsProcessing(true);
+        setTimeout(() => {
+          setCompareRuns(prev => prev.map(run => {
+            if (run.id === activeCompareRunId && run.orchestratedThread) {
+              const userMessage: Message = {
+                id: Date.now().toString(),
+                role: 'user',
+                content: userPrompt,
+                timestamp: new Date()
+              };
+              const assistantMessage: Message = {
+                id: (Date.now() + 1).toString(),
+                role: 'assistant',
+                content: 'Backend not wired yet.',
+                timestamp: new Date()
+              };
+              return {
+                ...run,
+                orchestratedThread: [...run.orchestratedThread, userMessage, assistantMessage]
+              };
+            }
+            return run;
+          }));
+          setIsProcessing(false);
+        }, 500);
+      } else {
+        if (compareModelIds.length < 1) {
+          window.alert('Please select at least 1 model to compare.');
+          return;
+        }
+
+        setIsProcessing(true);
+        setTimeout(() => {
+          const newRun: CompareRun = {
+            id: Date.now().toString(),
+            prompt: userPrompt,
+            modelIds: compareModelIds,
+            outputs: compareModelIds.map(modelId => ({
+              modelId,
+              text: 'Awaiting backend...',
+              latencyMs: 0
+            }))
+          };
+          setCompareRuns(prev => [...prev, newRun]);
+          setActiveCompareRunId(newRun.id);
+          setIsProcessing(false);
+        }, 500);
+      }
+    } else if (mode === 'multi-judge') {
+      if (multiJudgePrimaryIds.length < 1) {
+        window.alert('Please select at least 1 primary model.');
+        return;
+      }
+      if (multiJudgeJudgeIds.length < 1) {
+        window.alert('Please select at least 1 judge model.');
+        return;
+      }
+
+      setIsProcessing(true);
+      setTimeout(() => {
         const newRun: MultiJudgeRun = {
           id: Date.now().toString(),
           prompt: userPrompt,
@@ -216,8 +268,21 @@ export default function LLMPlayground() {
           assessments: [],
           aggregated: null
         };
-        setMultiJudgeRuns([...multiJudgeRuns, newRun]);
-      } else if (mode === 'single-judge') {
+        setMultiJudgeRuns(prev => [...prev, newRun]);
+        setIsProcessing(false);
+      }, 500);
+    } else if (mode === 'single-judge') {
+      if (singleJudgePrimaryIds.length < 1) {
+        window.alert('Please select at least 1 primary model.');
+        return;
+      }
+      if (!singleJudgeEvaluatorId) {
+        window.alert('Please select an evaluator model.');
+        return;
+      }
+
+      setIsProcessing(true);
+      setTimeout(() => {
         const newRun: SingleJudgeRun = {
           id: Date.now().toString(),
           prompt: userPrompt,
@@ -227,8 +292,44 @@ export default function LLMPlayground() {
           report: 'Awaiting backend...',
           latencyMs: 0
         };
-        setSingleJudgeRuns([...singleJudgeRuns, newRun]);
-      }
+        setSingleJudgeRuns(prev => [...prev, newRun]);
+        setIsProcessing(false);
+      }, 500);
+    }
+  };
+
+  const handleGenerateFinalAnswer = () => {
+    if (!orchestratorModelId || !activeCompareRunId) return;
+
+    setIsProcessing(true);
+    setTimeout(() => {
+      setCompareRuns(prev => prev.map(run => {
+        if (run.id === activeCompareRunId) {
+          const userMessage: Message = {
+            id: Date.now().toString(),
+            role: 'user',
+            content: run.prompt,
+            timestamp: new Date()
+          };
+          const assistantMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: 'Awaiting backend orchestration...',
+            timestamp: new Date()
+          };
+          return {
+            ...run,
+            orchestratorModelId,
+            orchestrationPrompt: orchestrationPrompt || undefined,
+            finalAnswer: 'Awaiting backend orchestration...',
+            rationale: 'Awaiting backend rationale...',
+            orchestratedThread: [userMessage, assistantMessage]
+          };
+        }
+        return run;
+      }));
+      setOrchestratorModelId('');
+      setOrchestrationPrompt('');
       setIsProcessing(false);
     }, 500);
   };
@@ -256,10 +357,15 @@ export default function LLMPlayground() {
   };
 
   const getPlaceholder = () => {
+    const activeRun = compareRuns.find(r => r.id === activeCompareRunId);
+
     switch (mode) {
       case 'single':
         return `Ask ${AI_MODELS.find(m => m.id === selectedModel)?.name} anything...`;
       case 'compare':
+        if (activeRun?.orchestratedThread) {
+          return 'Continue the conversation...';
+        }
         return 'Ask selected models the same question...';
       case 'multi-judge':
         return 'Enter a prompt to evaluate for safety risks (multi-judge)...';
@@ -333,7 +439,7 @@ export default function LLMPlayground() {
       <div>
         <h3 className="font-semibold text-gray-900 mb-2">Compare Models</h3>
         <p className="text-sm text-gray-600 mb-4">
-          Select which models to compare. Optionally enable orchestration.
+          Select which models to compare.
         </p>
         <div className="space-y-2 mb-4">
           <div className="text-sm font-medium text-gray-700 mb-2">Models to Compare:</div>
@@ -347,9 +453,9 @@ export default function LLMPlayground() {
                 checked={compareModelIds.includes(model.id)}
                 onChange={(e) => {
                   if (e.target.checked) {
-                    setCompareModelIds([...compareModelIds, model.id]);
+                    setCompareModelIds(prev => [...prev, model.id]);
                   } else {
-                    setCompareModelIds(compareModelIds.filter(id => id !== model.id));
+                    setCompareModelIds(prev => prev.filter(id => id !== model.id));
                   }
                 }}
                 className="w-4 h-4 text-brand-maroon focus:ring-brand-maroon border-gray-300 rounded"
@@ -358,39 +464,6 @@ export default function LLMPlayground() {
               <span className="font-medium text-gray-900 text-sm">{model.name}</span>
             </label>
           ))}
-        </div>
-        <div className="border-t border-gray-200 pt-4">
-          <div className="mb-3">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Orchestrator (optional)
-            </label>
-            <select
-              value={orchestratorModelId || ''}
-              onChange={(e) => setOrchestratorModelId(e.target.value || null)}
-              className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent text-sm"
-            >
-              <option value="">None</option>
-              {AI_MODELS.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          {orchestratorModelId && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Orchestration Prompt (optional)
-              </label>
-              <textarea
-                value={orchestrationPrompt}
-                onChange={(e) => setOrchestrationPrompt(e.target.value)}
-                placeholder="e.g., Synthesize all responses into a comprehensive answer..."
-                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent text-sm resize-none"
-                rows={3}
-              />
-            </div>
-          )}
         </div>
       </div>
       <div className="pt-4 border-t border-gray-200">
@@ -429,9 +502,9 @@ export default function LLMPlayground() {
                   checked={multiJudgePrimaryIds.includes(model.id)}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setMultiJudgePrimaryIds([...multiJudgePrimaryIds, model.id]);
+                      setMultiJudgePrimaryIds(prev => [...prev, model.id]);
                     } else {
-                      setMultiJudgePrimaryIds(multiJudgePrimaryIds.filter(id => id !== model.id));
+                      setMultiJudgePrimaryIds(prev => prev.filter(id => id !== model.id));
                     }
                   }}
                   className="w-4 h-4 text-brand-maroon focus:ring-brand-maroon border-gray-300 rounded"
@@ -453,9 +526,9 @@ export default function LLMPlayground() {
                   checked={multiJudgeJudgeIds.includes(model.id)}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setMultiJudgeJudgeIds([...multiJudgeJudgeIds, model.id]);
+                      setMultiJudgeJudgeIds(prev => [...prev, model.id]);
                     } else {
-                      setMultiJudgeJudgeIds(multiJudgeJudgeIds.filter(id => id !== model.id));
+                      setMultiJudgeJudgeIds(prev => prev.filter(id => id !== model.id));
                     }
                   }}
                   className="w-4 h-4 text-brand-maroon focus:ring-brand-maroon border-gray-300 rounded"
@@ -503,9 +576,9 @@ export default function LLMPlayground() {
                   checked={singleJudgePrimaryIds.includes(model.id)}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setSingleJudgePrimaryIds([...singleJudgePrimaryIds, model.id]);
+                      setSingleJudgePrimaryIds(prev => [...prev, model.id]);
                     } else {
-                      setSingleJudgePrimaryIds(singleJudgePrimaryIds.filter(id => id !== model.id));
+                      setSingleJudgePrimaryIds(prev => prev.filter(id => id !== model.id));
                     }
                   }}
                   className="w-4 h-4 text-brand-maroon focus:ring-brand-maroon border-gray-300 rounded"
@@ -565,47 +638,143 @@ export default function LLMPlayground() {
   };
 
   const renderCompareRuns = () => {
-    return (
-      <div className="space-y-6">
-        {compareRuns.map((run) => (
-          <div key={run.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-              <div className="flex items-center gap-2">
-                <ArrowLeftRight className="w-5 h-5 text-brand-maroon" />
-                <h3 className="font-semibold text-gray-900">Compare Run</h3>
-              </div>
-              <p className="text-sm text-gray-600 mt-1">{run.prompt}</p>
-            </div>
+    const activeRun = compareRuns.find(r => r.id === activeCompareRunId);
+    if (!activeRun) return null;
 
-            {run.finalAnswer && run.rationale ? (
-              <div className="p-4 space-y-4">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-green-900 mb-2 text-sm">Final Answer</h4>
-                  <p className="text-sm text-gray-700">{run.finalAnswer}</p>
-                </div>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-blue-900 mb-2 text-sm">Rationale</h4>
-                  <p className="text-sm text-gray-700">{run.rationale}</p>
-                </div>
+    return (
+      <div className="flex gap-4 h-full">
+        <div className="w-64 bg-white border-r border-gray-200 overflow-y-auto">
+          <div className="p-4">
+            <h3 className="font-semibold text-gray-900 mb-3">Conversation History</h3>
+            <div className="space-y-2">
+              {compareRuns.map((run, index) => (
                 <button
-                  onClick={() => toggleExpanded(run.id, 'outputs')}
-                  className="flex items-center gap-2 text-sm text-brand-maroon hover:text-red-800 font-medium"
+                  key={run.id}
+                  onClick={() => setActiveCompareRunId(run.id)}
+                  className={`w-full text-left p-3 rounded-lg transition-all ${
+                    activeCompareRunId === run.id
+                      ? 'bg-brand-maroon text-white shadow-md'
+                      : 'bg-gray-50 hover:bg-gray-100 text-gray-900'
+                  }`}
                 >
-                  {expandedOutputs.has(run.id) ? (
-                    <>
-                      <span>Hide Individual Outputs</span>
-                      <ChevronUp className="w-4 h-4" />
-                    </>
-                  ) : (
-                    <>
-                      <span>View Individual Model Outputs</span>
-                      <ChevronDown className="w-4 h-4" />
-                    </>
-                  )}
+                  <div className="font-medium text-sm mb-1">
+                    Run #{compareRuns.length - index}
+                  </div>
+                  <div className={`text-xs line-clamp-2 ${
+                    activeCompareRunId === run.id ? 'text-white/80' : 'text-gray-600'
+                  }`}>
+                    {run.prompt.substring(0, 40)}...
+                  </div>
                 </button>
-                {expandedOutputs.has(run.id) && (
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-3">
-                    {run.outputs.map((output) => {
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                <div className="flex items-center gap-2">
+                  <ArrowLeftRight className="w-5 h-5 text-brand-maroon" />
+                  <h3 className="font-semibold text-gray-900">Compare Run</h3>
+                </div>
+                <p className="text-sm text-gray-600 mt-1">{activeRun.prompt}</p>
+              </div>
+
+              {activeRun.finalAnswer && activeRun.rationale ? (
+                <div className="p-4 space-y-4">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Sparkles className="w-4 h-4 text-green-600" />
+                      <h4 className="font-semibold text-green-900 text-sm">Final Answer</h4>
+                    </div>
+                    <p className="text-sm text-gray-700">{activeRun.finalAnswer}</p>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-blue-900 mb-2 text-sm">Rationale</h4>
+                    <p className="text-sm text-gray-700">{activeRun.rationale}</p>
+                  </div>
+                  <button
+                    onClick={() => toggleExpanded(activeRun.id, 'outputs')}
+                    className="flex items-center gap-2 text-sm text-brand-maroon hover:text-red-800 font-medium"
+                  >
+                    {expandedOutputs.has(activeRun.id) ? (
+                      <>
+                        <span>Hide Individual Outputs</span>
+                        <ChevronUp className="w-4 h-4" />
+                      </>
+                    ) : (
+                      <>
+                        <span>View Individual Model Outputs</span>
+                        <ChevronDown className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                  {expandedOutputs.has(activeRun.id) && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-3">
+                      {activeRun.outputs.map((output) => {
+                        const model = AI_MODELS.find(m => m.id === output.modelId);
+                        return (
+                          <div key={output.modelId} className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+                            <div className="bg-gray-100 px-3 py-2 border-b border-gray-200">
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{model?.icon}</span>
+                                <div>
+                                  <div className="font-medium text-gray-900 text-xs">{model?.name}</div>
+                                  <div className="text-xs text-gray-500">{output.latencyMs}ms</div>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="p-3">
+                              <p className="text-xs text-gray-700">{output.text}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {activeRun.orchestratedThread && (
+                    <div className="border-t border-gray-200 pt-4 mt-4">
+                      <h4 className="font-semibold text-gray-900 mb-3 text-sm">Conversation Thread</h4>
+                      <div className="space-y-3">
+                        {activeRun.orchestratedThread.map((message) => (
+                          <div
+                            key={message.id}
+                            className={`flex gap-3 ${
+                              message.role === 'user' ? 'justify-end' : 'justify-start'
+                            }`}
+                          >
+                            {message.role === 'assistant' && (
+                              <div className="w-8 h-8 bg-brand-maroon rounded-full flex items-center justify-center flex-shrink-0">
+                                <Bot className="w-5 h-5 text-white" />
+                              </div>
+                            )}
+                            <div
+                              className={`max-w-2xl rounded-2xl px-4 py-3 ${
+                                message.role === 'user'
+                                  ? 'bg-brand-maroon text-white'
+                                  : 'bg-white text-gray-900 border border-gray-200'
+                              }`}
+                            >
+                              <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                            </div>
+                            {message.role === 'user' && (
+                              <div className="w-8 h-8 bg-brand-yellow rounded-full flex items-center justify-center flex-shrink-0 font-bold text-gray-900">
+                                {profile?.first_name?.[0]}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-4 space-y-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    {activeRun.outputs.map((output) => {
                       const model = AI_MODELS.find(m => m.id === output.modelId);
                       return (
                         <div key={output.modelId} className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
@@ -613,58 +782,75 @@ export default function LLMPlayground() {
                             <div className="flex items-center gap-2">
                               <span className="text-lg">{model?.icon}</span>
                               <div>
-                                <div className="font-medium text-gray-900 text-xs">{model?.name}</div>
-                                <div className="text-xs text-gray-500">{output.latencyMs}ms</div>
+                                <div className="font-medium text-gray-900 text-sm">{model?.name}</div>
+                                <div className="text-xs text-gray-500">{output.latencyMs > 0 ? `${output.latencyMs}ms` : 'Pending'}</div>
                               </div>
                             </div>
                           </div>
                           <div className="p-3">
-                            <p className="text-xs text-gray-700">{output.text}</p>
+                            <p className="text-sm text-gray-700">{output.text}</p>
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 p-4">
-                {run.outputs.map((output) => {
-                  const model = AI_MODELS.find(m => m.id === output.modelId);
-                  return (
-                    <div key={output.modelId} className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
-                      <div className="bg-gray-100 px-3 py-2 border-b border-gray-200">
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">{model?.icon}</span>
-                          <div>
-                            <div className="font-medium text-gray-900 text-sm">{model?.name}</div>
-                            <div className="text-xs text-gray-500">{output.latencyMs > 0 ? `${output.latencyMs}ms` : 'Pending'}</div>
-                          </div>
+
+                  {activeRun.outputs.length > 0 && !activeRun.finalAnswer && (
+                    <div className="border-t border-gray-200 pt-4 mt-4">
+                      <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-brand-maroon" />
+                        Orchestration (optional)
+                      </h4>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Orchestrator Model
+                          </label>
+                          <select
+                            value={orchestratorModelId}
+                            onChange={(e) => setOrchestratorModelId(e.target.value)}
+                            className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent text-sm"
+                          >
+                            <option value="">None</option>
+                            {AI_MODELS.map((model) => (
+                              <option key={model.id} value={model.id}>
+                                {model.name}
+                              </option>
+                            ))}
+                          </select>
                         </div>
-                      </div>
-                      <div className="p-3">
-                        <p className="text-sm text-gray-700">{output.text}</p>
+                        {orchestratorModelId && (
+                          <>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Orchestration Prompt (optional)
+                              </label>
+                              <textarea
+                                value={orchestrationPrompt}
+                                onChange={(e) => setOrchestrationPrompt(e.target.value)}
+                                placeholder="e.g., Synthesize all responses into a comprehensive answer..."
+                                className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent text-sm resize-none"
+                                rows={3}
+                              />
+                            </div>
+                            <button
+                              onClick={handleGenerateFinalAnswer}
+                              disabled={isProcessing}
+                              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-brand-maroon text-white rounded-lg hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                            >
+                              <Sparkles className="w-4 h-4" />
+                              Generate Final Answer
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ))}
-
-        {isProcessing && (
-          <div className="bg-white rounded-xl border border-gray-200 p-8">
-            <div className="flex items-center justify-center gap-3">
-              <div className="flex gap-1">
-                <div className="w-2 h-2 bg-brand-maroon rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-brand-maroon rounded-full animate-bounce delay-100"></div>
-                <div className="w-2 h-2 bg-brand-maroon rounded-full animate-bounce delay-200"></div>
-              </div>
-              <span className="text-gray-600 font-medium">Generating responses...</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
       </div>
     );
   };
@@ -889,9 +1075,9 @@ export default function LLMPlayground() {
           </div>
 
           <div className="flex-1 flex flex-col bg-gray-50">
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-hidden">
               {messageCount === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center">
+                <div className="h-full flex flex-col items-center justify-center text-center p-6">
                   <div className="mb-6">
                     {mode === 'single' && (
                       <div className="relative">
@@ -935,74 +1121,78 @@ export default function LLMPlayground() {
                   </p>
                 </div>
               ) : mode === 'compare' ? (
-                <div className="max-w-7xl mx-auto">
-                  {renderCompareRuns()}
-                </div>
+                renderCompareRuns()
               ) : mode === 'multi-judge' ? (
-                <div className="max-w-6xl mx-auto">
-                  {renderMultiJudgeRuns()}
+                <div className="h-full overflow-y-auto p-6">
+                  <div className="max-w-6xl mx-auto">
+                    {renderMultiJudgeRuns()}
+                  </div>
                 </div>
               ) : mode === 'single-judge' ? (
-                <div className="max-w-5xl mx-auto">
-                  {renderSingleJudgeRuns()}
+                <div className="h-full overflow-y-auto p-6">
+                  <div className="max-w-5xl mx-auto">
+                    {renderSingleJudgeRuns()}
+                  </div>
                 </div>
               ) : (
-                <div className="max-w-4xl mx-auto space-y-4">
-                  <div className="flex items-center gap-2 mb-4 p-3 bg-white rounded-lg border border-gray-200">
-                    <span className="text-2xl">
-                      {AI_MODELS.find(m => m.id === selectedModel)?.icon}
-                    </span>
-                    <div>
-                      <div className="font-semibold text-gray-900">
-                        {AI_MODELS.find(m => m.id === selectedModel)?.name}
+                <div className="h-full overflow-y-auto p-6">
+                  <div className="max-w-4xl mx-auto space-y-4">
+                    <div className="flex items-center gap-2 mb-4 p-3 bg-white rounded-lg border border-gray-200">
+                      <span className="text-2xl">
+                        {AI_MODELS.find(m => m.id === selectedModel)?.icon}
+                      </span>
+                      <div>
+                        <div className="font-semibold text-gray-900">
+                          {AI_MODELS.find(m => m.id === selectedModel)?.name}
+                        </div>
+                        <div className="text-sm text-gray-600">{messageCount} messages</div>
                       </div>
-                      <div className="text-sm text-gray-600">{messageCount} messages</div>
                     </div>
-                  </div>
 
-                  {singleMessages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex gap-3 ${
-                        message.role === 'user' ? 'justify-end' : 'justify-start'
-                      }`}
-                    >
-                      {message.role === 'assistant' && (
+                    {singleMessages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`flex gap-3 ${
+                          message.role === 'user' ? 'justify-end' : 'justify-start'
+                        }`}
+                      >
+                        {message.role === 'assistant' && (
+                          <div className="w-8 h-8 bg-brand-maroon rounded-full flex items-center justify-center flex-shrink-0">
+                            <Bot className="w-5 h-5 text-white" />
+                          </div>
+                        )}
+                        <div
+                          className={`max-w-2xl rounded-2xl px-4 py-3 ${
+                            message.role === 'user'
+                              ? 'bg-brand-maroon text-white'
+                              : 'bg-white text-gray-900 border border-gray-200'
+                          }`}
+                        >
+                          <p className="whitespace-pre-wrap">{message.content}</p>
+                        </div>
+                        {message.role === 'user' && (
+                          <div className="w-8 h-8 bg-brand-yellow rounded-full flex items-center justify-center flex-shrink-0 font-bold text-gray-900">
+                            {profile?.first_name?.[0]}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {isProcessing && (
+                      <div className="flex gap-3 justify-start">
                         <div className="w-8 h-8 bg-brand-maroon rounded-full flex items-center justify-center flex-shrink-0">
                           <Bot className="w-5 h-5 text-white" />
                         </div>
-                      )}
-                      <div
-                        className={`max-w-2xl rounded-2xl px-4 py-3 ${
-                          message.role === 'user'
-                            ? 'bg-brand-maroon text-white'
-                            : 'bg-white text-gray-900 border border-gray-200'
-                        }`}
-                      >
-                        <p className="whitespace-pre-wrap">{message.content}</p>
-                      </div>
-                      {message.role === 'user' && (
-                        <div className="w-8 h-8 bg-brand-yellow rounded-full flex items-center justify-center flex-shrink-0 font-bold text-gray-900">
-                          {profile?.first_name?.[0]}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {isProcessing && (
-                    <div className="flex gap-3 justify-start">
-                      <div className="w-8 h-8 bg-brand-maroon rounded-full flex items-center justify-center flex-shrink-0">
-                        <Bot className="w-5 h-5 text-white" />
-                      </div>
-                      <div className="bg-white border border-gray-200 rounded-2xl px-4 py-3">
-                        <div className="flex gap-1">
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100"></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200"></div>
+                        <div className="bg-white border border-gray-200 rounded-2xl px-4 py-3">
+                          <div className="flex gap-1">
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100"></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200"></div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )}
             </div>
