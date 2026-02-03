@@ -1,59 +1,31 @@
 'use client';
 
-import { useState } from 'react';
-import { Play } from 'lucide-react';
-import VideoModal from './VideoModal';
-
-interface Demo {
-  id: string;
-  title: string;
-  description: string;
-  thumbnail: string;
-  videoUrl: string;
-}
-
-const demos: Demo[] = [
-  {
-    id: '1',
-    title: 'Platform Overview',
-    description: 'Discover how the USC GenAI Learning Platform transforms education through AI integration',
-    thumbnail: 'https://images.pexels.com/photos/3861969/pexels-photo-3861969.jpeg?auto=compress&cs=tinysrgb&w=1200',
-    videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-  },
-];
+import { useMemo } from 'react';
+import { supabase } from '@/lib/supabase';
 
 export default function DemoSection() {
-  const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
-  const demoVideoUrl = 'https://www.youtube.com/embed/dQw4w9WgXcQ';
+  const storagePath = 'Videos/intro2.mp4';
+
+  const demoVideoUrl = useMemo(() => {
+    const { data } = supabase.storage.from('media').getPublicUrl(storagePath);
+    return data.publicUrl;
+  }, []);
 
   return (
-    <>
-      <section id="demos" className="py-16 md:py-24 bg-gray-50">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div
-            className="relative bg-black rounded-2xl overflow-hidden shadow-2xl cursor-pointer group"
-            onClick={() => setSelectedVideo(demoVideoUrl)}
-          >
-            <div className="aspect-video flex items-center justify-center">
-              <div className="relative z-10">
-                <div className="w-24 h-24 md:w-32 md:h-32 bg-brand-yellow rounded-full flex items-center justify-center group-hover:scale-110 transition-transform shadow-2xl">
-                  <Play className="w-12 h-12 md:w-16 md:h-16 text-brand-maroon fill-brand-maroon ml-2" />
-                </div>
-              </div>
-
-              <div className="absolute bottom-6 right-6 text-white text-lg font-medium">
-                3:00
-              </div>
-            </div>
+    <section id="demos" className="py-16 md:py-24 bg-gray-50">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="bg-black rounded-2xl overflow-hidden shadow-2xl">
+          <div className="aspect-video">
+            <video
+              className="w-full h-full"
+              src={demoVideoUrl}
+              controls
+              playsInline
+              preload="metadata"
+            />
           </div>
         </div>
-      </section>
-
-      <VideoModal
-        isOpen={selectedVideo !== null}
-        onClose={() => setSelectedVideo(null)}
-        videoUrl={selectedVideo || ''}
-      />
-    </>
+      </div>
+    </section>
   );
 }

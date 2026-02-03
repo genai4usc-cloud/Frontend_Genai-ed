@@ -1328,13 +1328,16 @@ SLIDE 1: Untitled Lecture
   ];
 
   const avatarOptions = [
-    { id: 'lisa' as AvatarCharacter, label: 'Lisa', emoji: '👩' },
-    { id: 'lori' as AvatarCharacter, label: 'Lori', emoji: '👩‍💼' },
-    { id: 'meg' as AvatarCharacter, label: 'Meg', emoji: '👩‍💻' },
-    { id: 'jeff' as AvatarCharacter, label: 'Jeff', emoji: '👨‍💼' },
-    { id: 'max' as AvatarCharacter, label: 'Max', emoji: '👨‍💻' },
-    { id: 'harry' as AvatarCharacter, label: 'Harry', emoji: '👨' }
-  ];
+    { id: 'lisa' as AvatarCharacter, label: 'Lisa', file: 'Lisa.png' },
+    { id: 'lori' as AvatarCharacter, label: 'Lori', file: 'Lori.png' },
+    { id: 'meg' as AvatarCharacter, label: 'Meg', file: 'Meg.png' },
+    { id: 'jeff' as AvatarCharacter, label: 'Jeff', file: 'Jeff.png' },
+    { id: 'max' as AvatarCharacter, label: 'Max', file: 'Max.png' },
+    { id: 'harry' as AvatarCharacter, label: 'Harry', file: 'Harry.png' },
+  ].map((a) => {
+    const { data } = supabase.storage.from('media').getPublicUrl(`Images/${a.file}`);
+    return { ...a, imageUrl: data.publicUrl };
+  });
 
   const characterStyles: Record<AvatarCharacter, { styles: string[]; default: string }> = {
     lisa: {
@@ -1883,7 +1886,14 @@ SLIDE 1: Untitled Lecture
                                 : 'border-gray-200 hover:border-gray-300'
                             }`}
                           >
-                            <div className="text-5xl mb-3">{avatar.emoji}</div>
+                            <div className="mb-3 flex justify-center">
+                              <img
+                                src={avatar.imageUrl}
+                                alt={avatar.label}
+                                className="h-20 w-20 rounded-full object-cover border border-gray-200 bg-white"
+                                loading="lazy"
+                              />
+                            </div>
                             <h4 className="font-bold text-gray-900 text-sm">{avatar.label}</h4>
                           </button>
                         ))}
