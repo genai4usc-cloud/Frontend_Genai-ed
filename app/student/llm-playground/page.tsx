@@ -652,7 +652,9 @@ export default function LLMPlayground() {
   };
 
   const renderCompareRuns = () => {
-    if (!activeCompareRun) {
+    const activeRun = compareRuns.find(r => r.id === activeCompareRunId);
+
+    if (!activeRun) {
       return (
         <div className="h-full overflow-y-auto p-6">
           <div className="max-w-6xl mx-auto">
@@ -661,9 +663,7 @@ export default function LLMPlayground() {
                 <ArrowLeftRight className="w-5 h-5 text-brand-maroon" />
                 <h3 className="font-semibold text-gray-900">Compare Models</h3>
               </div>
-              <p className="text-sm text-gray-600">
-                Send a prompt to create your first compare run.
-              </p>
+              <p className="text-sm text-gray-600">Send a prompt to create your first compare run.</p>
             </div>
           </div>
         </div>
@@ -672,7 +672,7 @@ export default function LLMPlayground() {
 
     return (
       <div className="flex gap-4 h-full overflow-hidden">
-        {/* Runs list */}
+        {/* LEFT: History */}
         <div className="w-64 bg-white border-r border-gray-200 overflow-y-auto">
           <div className="p-4">
             <h3 className="font-semibold text-gray-900 mb-3">Conversation History</h3>
@@ -683,6 +683,7 @@ export default function LLMPlayground() {
                 .map((run, idx) => {
                   const runNumber = compareRuns.length - idx;
                   const isActive = activeCompareRunId === run.id;
+
                   return (
                     <button
                       key={run.id}
@@ -704,7 +705,7 @@ export default function LLMPlayground() {
           </div>
         </div>
 
-        {/* Active run */}
+        {/* RIGHT: Active run */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-6xl mx-auto space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -713,14 +714,14 @@ export default function LLMPlayground() {
                   <ArrowLeftRight className="w-5 h-5 text-brand-maroon" />
                   <h3 className="font-semibold text-gray-900">Compare Run</h3>
                 </div>
-                <p className="text-sm text-gray-600 mt-1">{activeCompareRun.prompt}</p>
+                <p className="text-sm text-gray-600 mt-1">{activeRun.prompt}</p>
               </div>
 
               <div className="p-4 space-y-4">
-                {/* Outputs grid always visible */}
+                {/* Side-by-side outputs always */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  {activeCompareRun.outputs.map((output) => {
-                    const model = AI_MODELS.find((m) => m.id === output.modelId);
+                  {activeRun.outputs.map((output) => {
+                    const model = AI_MODELS.find(m => m.id === output.modelId);
                     return (
                       <div key={output.modelId} className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
                         <div className="bg-gray-100 px-3 py-2 border-b border-gray-200">
@@ -742,27 +743,27 @@ export default function LLMPlayground() {
                   })}
                 </div>
 
-                {/* Final Answer + Rationale (if generated) */}
-                {activeCompareRun.finalAnswer && activeCompareRun.rationale && (
+                {/* If final answer exists, show it + rationale + thread */}
+                {activeRun.finalAnswer && activeRun.rationale ? (
                   <>
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                       <div className="flex items-center gap-2 mb-2">
                         <Sparkles className="w-4 h-4 text-green-600" />
                         <h4 className="font-semibold text-green-900 text-sm">Final Answer</h4>
                       </div>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{activeCompareRun.finalAnswer}</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{activeRun.finalAnswer}</p>
                     </div>
 
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                       <h4 className="font-semibold text-blue-900 mb-2 text-sm">Rationale</h4>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{activeCompareRun.rationale}</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{activeRun.rationale}</p>
                     </div>
 
                     <button
-                      onClick={() => toggleExpanded(activeCompareRun.id, 'outputs')}
+                      onClick={() => toggleExpanded(activeRun.id, 'outputs')}
                       className="flex items-center gap-2 text-sm text-brand-maroon hover:text-red-800 font-medium"
                     >
-                      {expandedOutputs.has(activeCompareRun.id) ? (
+                      {expandedOutputs.has(activeRun.id) ? (
                         <>
                           <span>Hide Individual Outputs</span>
                           <ChevronUp className="w-4 h-4" />
@@ -775,12 +776,12 @@ export default function LLMPlayground() {
                       )}
                     </button>
 
-                    {expandedOutputs.has(activeCompareRun.id) && (
+                    {expandedOutputs.has(activeRun.id) && (
                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-2">
-                        {activeCompareRun.outputs.map((output) => {
-                          const model = AI_MODELS.find((m) => m.id === output.modelId);
+                        {activeRun.outputs.map((output) => {
+                          const model = AI_MODELS.find(m => m.id === output.modelId);
                           return (
-                            <div key={`${activeCompareRun.id}-${output.modelId}`} className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+                            <div key={`${activeRun.id}-${output.modelId}`} className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
                               <div className="bg-gray-100 px-3 py-2 border-b border-gray-200">
                                 <div className="flex items-center gap-2">
                                   <span className="text-lg">{model?.icon}</span>
@@ -799,15 +800,16 @@ export default function LLMPlayground() {
                       </div>
                     )}
 
-                    {/* Orchestrated thread */}
-                    {activeCompareRun.orchestratedThread && (
+                    {activeRun.orchestratedThread && (
                       <div className="border-t border-gray-200 pt-4 mt-2">
                         <h4 className="font-semibold text-gray-900 mb-3 text-sm">Conversation Thread</h4>
                         <div className="space-y-3">
-                          {activeCompareRun.orchestratedThread.map((message) => (
+                          {activeRun.orchestratedThread.map((message) => (
                             <div
                               key={message.id}
-                              className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                              className={`flex gap-3 ${
+                                message.role === 'user' ? 'justify-end' : 'justify-start'
+                              }`}
                             >
                               {message.role === 'assistant' && (
                                 <div className="w-8 h-8 bg-brand-maroon rounded-full flex items-center justify-center flex-shrink-0">
@@ -834,10 +836,8 @@ export default function LLMPlayground() {
                       </div>
                     )}
                   </>
-                )}
-
-                {/* Orchestration section (ONLY when final answer not generated yet) */}
-                {!activeCompareRun.finalAnswer && (
+                ) : (
+                  /* Orchestration UI when final answer not generated yet */
                   <div className="border-t border-gray-200 pt-4">
                     <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-brand-maroon" />
@@ -846,7 +846,9 @@ export default function LLMPlayground() {
 
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Orchestrator Model</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Orchestrator Model
+                        </label>
                         <select
                           value={orchestratorModelId}
                           onChange={(e) => setOrchestratorModelId(e.target.value)}
@@ -864,7 +866,9 @@ export default function LLMPlayground() {
                       {orchestratorModelId && (
                         <>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Orchestration Prompt (optional)</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Orchestration Prompt (optional)
+                            </label>
                             <textarea
                               value={orchestrationPrompt}
                               onChange={(e) => setOrchestrationPrompt(e.target.value)}
@@ -894,9 +898,9 @@ export default function LLMPlayground() {
               <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <div className="flex items-center justify-center gap-3">
                   <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-brand-maroon rounded-full animate-bounce" />
-                    <div className="w-2 h-2 bg-brand-maroon rounded-full animate-bounce delay-100" />
-                    <div className="w-2 h-2 bg-brand-maroon rounded-full animate-bounce delay-200" />
+                    <div className="w-2 h-2 bg-brand-maroon rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-brand-maroon rounded-full animate-bounce delay-100"></div>
+                    <div className="w-2 h-2 bg-brand-maroon rounded-full animate-bounce delay-200"></div>
                   </div>
                   <span className="text-gray-600 font-medium">Processing...</span>
                 </div>
