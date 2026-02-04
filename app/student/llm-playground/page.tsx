@@ -581,7 +581,7 @@ export default function LLMPlayground() {
       const resp = await apiPost('/api/llm-playground/orchestrate', {
         orchestratorModelId,
         prompt: activeRun.prompt,
-        outputs: activeRun.outputs,
+        outputs: toLlmOutputs(activeRun.outputs),
         orchestrationPrompt: orchestrationPrompt || undefined,
         config: {
           temperature,
@@ -943,42 +943,8 @@ export default function LLMPlayground() {
     }
 
     return (
-      <div className="flex gap-4 h-full overflow-hidden">
-        {/* LEFT: History */}
-        <div className="w-64 bg-white border-r border-gray-200 overflow-y-auto">
-          <div className="p-4">
-            <h3 className="font-semibold text-gray-900 mb-3">Conversation History</h3>
-            <div className="space-y-2">
-              {compareRuns
-                .slice()
-                .reverse()
-                .map((run, idx) => {
-                  const runNumber = compareRuns.length - idx;
-                  const isActive = activeCompareRunId === run.id;
-
-                  return (
-                    <button
-                      key={run.id}
-                      onClick={() => setActiveCompareRunId(run.id)}
-                      className={`w-full text-left p-3 rounded-lg transition-all ${
-                        isActive
-                          ? 'bg-brand-maroon text-white shadow-md'
-                          : 'bg-gray-50 hover:bg-gray-100 text-gray-900'
-                      }`}
-                    >
-                      <div className="font-medium text-sm mb-1">Run #{runNumber}</div>
-                      <div className={`text-xs line-clamp-2 ${isActive ? 'text-white/80' : 'text-gray-600'}`}>
-                        {run.prompt.length > 40 ? `${run.prompt.substring(0, 40)}...` : run.prompt}
-                      </div>
-                    </button>
-                  );
-                })}
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT: Active run */}
-        <div className="flex-1 overflow-y-auto p-6">
+      <div className="h-full overflow-hidden">
+        <div className="h-full overflow-y-auto p-6">
           <div className="max-w-6xl mx-auto space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
