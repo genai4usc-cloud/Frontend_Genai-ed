@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase, Profile } from '@/lib/supabase';
 import StudentLayout from '@/components/StudentLayout';
 import GenerationSettings from '@/components/GenerationSettings';
+import Markdown from '@/components/Markdown';
 import {
   Bot,
   Send,
@@ -993,9 +994,7 @@ export default function LLMPlayground() {
                           </div>
                         </div>
                         <div className="p-3">
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                            {output.content?.value ?? (output.error ? `Error: ${output.error}` : '')}
-                          </p>
+                          <Markdown value={output.content?.value ?? (output.error ? `Error: ${output.error}` : '')} />
                         </div>
                       </div>
                     );
@@ -1010,12 +1009,12 @@ export default function LLMPlayground() {
                         <Sparkles className="w-4 h-4 text-green-600" />
                         <h4 className="font-semibold text-green-900 text-sm">Final Answer</h4>
                       </div>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{activeRun.finalAnswer}</p>
+                      <Markdown value={activeRun.finalAnswer} />
                     </div>
 
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                       <h4 className="font-semibold text-blue-900 mb-2 text-sm">Rationale</h4>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{activeRun.rationale}</p>
+                      <Markdown value={activeRun.rationale} />
                     </div>
 
                     <button
@@ -1051,9 +1050,7 @@ export default function LLMPlayground() {
                                 </div>
                               </div>
                               <div className="p-3">
-                                <p className="text-xs text-gray-700 whitespace-pre-wrap">
-                                  {output.content?.value ?? (output.error ? `Error: ${output.error}` : '')}
-                                </p>
+                                <Markdown value={output.content?.value ?? (output.error ? `Error: ${output.error}` : '')} />
                               </div>
                             </div>
                           );
@@ -1084,7 +1081,7 @@ export default function LLMPlayground() {
                                     : 'bg-white text-gray-900 border border-gray-200'
                                 }`}
                               >
-                                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                                <Markdown value={message.content} />
                               </div>
                               {message.role === 'user' && (
                                 <div className="w-8 h-8 bg-brand-yellow rounded-full flex items-center justify-center flex-shrink-0 font-bold text-gray-900">
@@ -1248,7 +1245,7 @@ export default function LLMPlayground() {
             <div className="px-6 py-4">
               <div className="mb-4">
                 <h4 className="text-sm font-semibold text-gray-900 mb-2">Evaluation Report</h4>
-                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{run.report}</p>
+                <Markdown value={run.report} />
               </div>
 
               {expandedReports.has(run.id) && run.primaryOutputs.length > 0 && (
@@ -1263,9 +1260,7 @@ export default function LLMPlayground() {
                           <span className="font-medium text-gray-900 text-sm">{model?.name}</span>
                           <span className="text-xs text-gray-500">• {output.latencyMs}ms</span>
                         </div>
-                        <p className="text-xs text-gray-700 whitespace-pre-wrap">
-                          {output.content?.value ?? (output.error ? `Error: ${output.error}` : '')}
-                        </p>
+                        <Markdown value={output.content?.value ?? (output.error ? `Error: ${output.error}` : '')} />
                       </div>
                     );
                   })}
@@ -1460,7 +1455,7 @@ export default function LLMPlayground() {
                               : 'bg-white text-gray-900 border border-gray-200'
                           }`}
                         >
-                          <p className="whitespace-pre-wrap">{message.content}</p>
+                          <Markdown value={message.content} />
                         </div>
 
                         {message.role === 'user' && (
