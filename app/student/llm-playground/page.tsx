@@ -345,20 +345,80 @@ export default function LLMPlayground() {
         return;
       }
 
+      const newRun: MultiJudgeRun = {
+        id: Date.now().toString(),
+        prompt: userPrompt,
+        primaryModelIds: multiJudgePrimaryIds,
+        judgeModelIds: multiJudgeJudgeIds,
+        primaryOutputs: multiJudgePrimaryIds.map((id) => ({
+          modelId: id,
+          text: 'Loading...',
+          latencyMs: 0
+        })),
+        assessments: [],
+        aggregated: null
+      };
+      setMultiJudgeRuns((prev) => [...prev, newRun]);
+
       setIsProcessing(true);
-      setTimeout(() => {
-        const newRun: MultiJudgeRun = {
-          id: Date.now().toString(),
+      try {
+        const compareResp = await apiPost('/api/llm-playground/compare', {
+          modelIds: multiJudgePrimaryIds,
           prompt: userPrompt,
-          primaryModelIds: multiJudgePrimaryIds,
+          config: {
+            temperature,
+            maxTokens,
+            includeSystemInstruction,
+            systemPrompt,
+          },
+        });
+
+        const primaryOutputs = compareResp.outputs || compareResp.results || [];
+        setMultiJudgeRuns((prev) =>
+          prev.map((r) => {
+            if (r.id !== newRun.id) return r;
+            return {
+              ...r,
+              primaryOutputs,
+            };
+          })
+        );
+
+        const judgeResp = await apiPost('/api/llm-playground/judge/multi', {
           judgeModelIds: multiJudgeJudgeIds,
-          primaryOutputs: [],
-          assessments: [],
-          aggregated: null
-        };
-        setMultiJudgeRuns((prev) => [...prev, newRun]);
+          prompt: userPrompt,
+          primaryOutputs,
+          config: {
+            temperature,
+            maxTokens,
+            includeSystemInstruction,
+            systemPrompt,
+          },
+        });
+
+        setMultiJudgeRuns((prev) =>
+          prev.map((r) => {
+            if (r.id !== newRun.id) return r;
+            return {
+              ...r,
+              assessments: judgeResp.assessments || [],
+              aggregated: judgeResp.aggregated ?? null,
+            };
+          })
+        );
+      } catch (error: any) {
+        setMultiJudgeRuns((prev) =>
+          prev.map((r) => {
+            if (r.id !== newRun.id) return r;
+            return {
+              ...r,
+              aggregated: { error: `Error: ${error.message}` },
+            };
+          })
+        );
+      } finally {
         setIsProcessing(false);
-      }, 500);
+      }
       return;
     }
 
@@ -372,20 +432,81 @@ export default function LLMPlayground() {
         return;
       }
 
-      setIsProcessing(true);
-      setTimeout(() => {
-        const newRun: SingleJudgeRun = {
-          id: Date.now().toString(),
-          prompt: userPrompt,
-          primaryModelIds: singleJudgePrimaryIds,
-          evaluatorModelId: singleJudgeEvaluatorId,
-          primaryOutputs: [],
-          report: 'Awaiting backend...',
+      const newRun: SingleJudgeRun = {
+        id: Date.now().toString(),
+        prompt: userPrompt,
+        primaryModelIds: singleJudgePrimaryIds,
+        evaluatorModelId: singleJudgeEvaluatorId,
+        primaryOutputs: singleJudgePrimaryIds.map((id) => ({
+          modelId: id,
+          text: 'Loading...',
           latencyMs: 0
-        };
-        setSingleJudgeRuns((prev) => [...prev, newRun]);
+        })),
+        report: 'Loading...',
+        latencyMs: 0
+      };
+      setSingleJudgeRuns((prev) => [...prev, newRun]);
+
+      setIsProcessing(true);
+      try {
+        const compareResp = await apiPost('/api/llm-playground/compare', {
+          modelIds: singleJudgePrimaryIds,
+          prompt: userPrompt,
+          config: {
+            temperature,
+            maxTokens,
+            includeSystemInstruction,
+            systemPrompt,
+          },
+        });
+
+        const primaryOutputs = compareResp.outputs || compareResp.results || [];
+        setSingleJudgeRuns((prev) =>
+          prev.map((r) => {
+            if (r.id !== newRun.id) return r;
+            return {
+              ...r,
+              primaryOutputs,
+            };
+          })
+        );
+
+        const judgeResp = await apiPost('/api/llm-playground/judge/single', {
+          evaluatorModelId: singleJudgeEvaluatorId,
+          prompt: userPrompt,
+          primaryOutputs,
+          config: {
+            temperature,
+            maxTokens,
+            includeSystemInstruction,
+            systemPrompt,
+          },
+        });
+
+        setSingleJudgeRuns((prev) =>
+          prev.map((r) => {
+            if (r.id !== newRun.id) return r;
+            return {
+              ...r,
+              report: judgeResp.report || '',
+              latencyMs: judgeResp.latencyMs || 0,
+            };
+          })
+        );
+      } catch (error: any) {
+        setSingleJudgeRuns((prev) =>
+          prev.map((r) => {
+            if (r.id !== newRun.id) return r;
+            return {
+              ...r,
+              report: `Error: ${error.message}`,
+              latencyMs: 0,
+            };
+          })
+        );
+      } finally {
         setIsProcessing(false);
-      }, 500);
+      }
     }
   };
 
@@ -1002,20 +1123,33 @@ export default function LLMPlayground() {
 
   const renderMultiJudgeRuns = () => (
     <div className="space-y-6">
-      {multiJudgeRuns.map((run) => (
-        <div key={run.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5 text-brand-maroon" />
-              <h3 className="font-semibold text-gray-900">Multi-Judge Evaluation</h3>
+      {multiJudgeRuns.map((run) => {
+        const isLoading = run.aggregated === null && run.primaryOutputs.some((o) => o.text === 'Loading...');
+        const hasError = run.aggregated && typeof run.aggregated === 'object' && 'error' in run.aggregated;
+
+        return (
+          <div key={run.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-brand-maroon" />
+                <h3 className="font-semibold text-gray-900">Multi-Judge Evaluation</h3>
+              </div>
+              <p className="text-sm text-gray-600 mt-1">{run.prompt}</p>
             </div>
-            <p className="text-sm text-gray-600 mt-1">{run.prompt}</p>
+            <div className="p-6">
+              {isLoading ? (
+                <p className="text-sm text-gray-500 italic text-center">Loading...</p>
+              ) : hasError ? (
+                <p className="text-sm text-red-600 text-center">{(run.aggregated as any).error}</p>
+              ) : (
+                <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-4 rounded-lg overflow-x-auto">
+                  {JSON.stringify(run.aggregated, null, 2)}
+                </pre>
+              )}
+            </div>
           </div>
-          <div className="p-6 text-center">
-            <p className="text-sm text-gray-500 italic">Awaiting backend implementation</p>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 
