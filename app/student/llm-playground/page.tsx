@@ -39,6 +39,21 @@ type Message = {
 
 type Mode = 'single' | 'compare' | 'multi-judge' | 'single-judge';
 
+type EnvelopeItem = {
+  kind: string;
+  modelId: string;
+  latencyMs: number;
+  content: { format: 'markdown'; value: string };
+  structured?: any;
+  error?: string | null;
+};
+
+type EnvelopeResponse = {
+  phase: string;
+  items: EnvelopeItem[];
+  meta?: any;
+};
+
 type LlmOutput = {
   modelId: string;
   text: string;
@@ -50,7 +65,7 @@ type CompareRun = {
   id: string;
   prompt: string;
   modelIds: string[];
-  outputs: LlmOutput[];
+  outputs: EnvelopeItem[];
   orchestratorModelId?: string;
   orchestrationPrompt?: string;
   finalAnswer?: string;
@@ -63,9 +78,9 @@ type MultiJudgeRun = {
   prompt: string;
   primaryModelIds: string[];
   judgeModelIds: string[];
-  primaryOutputs: LlmOutput[];
-  assessments: any[];
-  aggregated: any;
+  primaryOutputs: EnvelopeItem[];
+  assessments: EnvelopeItem[];
+  meta?: any;
 };
 
 type SingleJudgeRun = {
@@ -73,7 +88,7 @@ type SingleJudgeRun = {
   prompt: string;
   primaryModelIds: string[];
   evaluatorModelId: string;
-  primaryOutputs: LlmOutput[];
+  primaryOutputs: EnvelopeItem[];
   report: string;
   latencyMs: number;
 };
@@ -249,10 +264,14 @@ export default function LLMPlayground() {
           },
         });
 
+        const env = resp as EnvelopeResponse;
+        const item = env.items?.[0];
+        const text = item?.content?.value ?? (item?.error ? `Error: ${item.error}` : 'No response');
+
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: resp.output.text,
+          content: text,
           model: selectedModel,
           timestamp: new Date()
         };
@@ -283,9 +302,12 @@ export default function LLMPlayground() {
         prompt: userPrompt,
         modelIds: compareModelIds,
         outputs: compareModelIds.map((modelId) => ({
+          kind: 'model_output',
           modelId,
-          text: 'Loading...',
-          latencyMs: 0
+          latencyMs: 0,
+          content: { format: 'markdown', value: 'Loading...' },
+          structured: null,
+          error: null,
         }))
       };
 
@@ -305,13 +327,14 @@ export default function LLMPlayground() {
           },
         });
 
-        const outputs = resp.outputs || resp.results || [];
+        const env = resp as EnvelopeResponse;
+        const items = env.items || [];
         setCompareRuns((prev) =>
           prev.map((r) => {
             if (r.id !== newRun.id) return r;
             return {
               ...r,
-              outputs,
+              outputs: items,
             };
           })
         );
@@ -323,7 +346,8 @@ export default function LLMPlayground() {
               ...r,
               outputs: r.outputs.map((output) => ({
                 ...output,
-                text: `Error: ${error.message}`,
+                content: { format: 'markdown', value: `Error: ${error.message}` },
+                error: error.message,
                 latencyMs: 0,
               })),
             };
@@ -351,12 +375,15 @@ export default function LLMPlayground() {
         primaryModelIds: multiJudgePrimaryIds,
         judgeModelIds: multiJudgeJudgeIds,
         primaryOutputs: multiJudgePrimaryIds.map((id) => ({
+          kind: 'model_output',
           modelId: id,
-          text: 'Loading...',
-          latencyMs: 0
+          latencyMs: 0,
+          content: { format: 'markdown', value: 'Loading...' },
+          structured: null,
+          error: null,
         })),
         assessments: [],
-        aggregated: null
+        meta: null
       };
       setMultiJudgeRuns((prev) => [...prev, newRun]);
 
@@ -373,7 +400,8 @@ export default function LLMPlayground() {
           },
         });
 
-        const primaryOutputs = compareResp.outputs || compareResp.results || [];
+        const env = compareResp as EnvelopeResponse;
+        const primaryOutputs = env.items || [];
         setMultiJudgeRuns((prev) =>
           prev.map((r) => {
             if (r.id !== newRun.id) return r;
@@ -396,13 +424,15 @@ export default function LLMPlayground() {
           },
         });
 
+        const judgeEnv = judgeResp as EnvelopeResponse;
+
         setMultiJudgeRuns((prev) =>
           prev.map((r) => {
             if (r.id !== newRun.id) return r;
             return {
               ...r,
-              assessments: judgeResp.assessments || [],
-              aggregated: judgeResp.aggregated ?? null,
+              assessments: judgeEnv.items || [],
+              meta: judgeEnv.meta ?? null,
             };
           })
         );
@@ -412,7 +442,7 @@ export default function LLMPlayground() {
             if (r.id !== newRun.id) return r;
             return {
               ...r,
-              aggregated: { error: `Error: ${error.message}` },
+              meta: { error: `Error: ${error.message}` },
             };
           })
         );
@@ -438,9 +468,12 @@ export default function LLMPlayground() {
         primaryModelIds: singleJudgePrimaryIds,
         evaluatorModelId: singleJudgeEvaluatorId,
         primaryOutputs: singleJudgePrimaryIds.map((id) => ({
+          kind: 'model_output',
           modelId: id,
-          text: 'Loading...',
-          latencyMs: 0
+          latencyMs: 0,
+          content: { format: 'markdown', value: 'Loading...' },
+          structured: null,
+          error: null,
         })),
         report: 'Loading...',
         latencyMs: 0
@@ -483,13 +516,17 @@ export default function LLMPlayground() {
           },
         });
 
+        const env = judgeResp as EnvelopeResponse;
+        const item = env.items?.[0];
+        const report = item?.content?.value ?? (item?.error ? `Error: ${item.error}` : '');
+
         setSingleJudgeRuns((prev) =>
           prev.map((r) => {
             if (r.id !== newRun.id) return r;
             return {
               ...r,
-              report: judgeResp.report || '',
-              latencyMs: judgeResp.latencyMs || 0,
+              report,
+              latencyMs: item?.latencyMs || 0,
             };
           })
         );
@@ -539,6 +576,17 @@ export default function LLMPlayground() {
         },
       });
 
+      const env = resp as EnvelopeResponse;
+      const item = env.items?.[0];
+
+      const finalAnswer =
+        item?.structured?.finalAnswer ??
+        item?.content?.value ??
+        (item?.error ? `Error: ${item.error}` : '');
+
+      const rationale =
+        item?.structured?.rationale ?? '';
+
       setCompareRuns((prev) =>
         prev.map((run) => {
           if (run.id !== activeCompareRunId) return run;
@@ -552,14 +600,14 @@ export default function LLMPlayground() {
           const assistantMessage: Message = {
             id: `${Date.now()}a`,
             role: 'assistant',
-            content: resp.finalAnswer,
+            content: finalAnswer,
             timestamp: new Date()
           };
 
           return {
             ...run,
-            finalAnswer: resp.finalAnswer,
-            rationale: resp.rationale,
+            finalAnswer,
+            rationale,
             orchestratorModelId,
             orchestrationPrompt: orchestrationPrompt || undefined,
             orchestratedThread: [userMessage, assistantMessage]
@@ -945,7 +993,9 @@ export default function LLMPlayground() {
                           </div>
                         </div>
                         <div className="p-3">
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{output.text}</p>
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                            {output.content?.value ?? (output.error ? `Error: ${output.error}` : '')}
+                          </p>
                         </div>
                       </div>
                     );
@@ -1001,7 +1051,9 @@ export default function LLMPlayground() {
                                 </div>
                               </div>
                               <div className="p-3">
-                                <p className="text-xs text-gray-700 whitespace-pre-wrap">{output.text}</p>
+                                <p className="text-xs text-gray-700 whitespace-pre-wrap">
+                                  {output.content?.value ?? (output.error ? `Error: ${output.error}` : '')}
+                                </p>
                               </div>
                             </div>
                           );
@@ -1124,8 +1176,8 @@ export default function LLMPlayground() {
   const renderMultiJudgeRuns = () => (
     <div className="space-y-6">
       {multiJudgeRuns.map((run) => {
-        const isLoading = run.aggregated === null && run.primaryOutputs.some((o) => o.text === 'Loading...');
-        const hasError = run.aggregated && typeof run.aggregated === 'object' && 'error' in run.aggregated;
+        const isLoading = run.meta === null && run.primaryOutputs.some((o) => o.content?.value === 'Loading...');
+        const hasError = run.meta && typeof run.meta === 'object' && 'error' in run.meta;
 
         return (
           <div key={run.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -1140,10 +1192,10 @@ export default function LLMPlayground() {
               {isLoading ? (
                 <p className="text-sm text-gray-500 italic text-center">Loading...</p>
               ) : hasError ? (
-                <p className="text-sm text-red-600 text-center">{(run.aggregated as any).error}</p>
+                <p className="text-sm text-red-600 text-center">{(run.meta as any).error}</p>
               ) : (
                 <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-4 rounded-lg overflow-x-auto">
-                  {JSON.stringify(run.aggregated, null, 2)}
+                  {JSON.stringify(run.meta, null, 2)}
                 </pre>
               )}
             </div>
@@ -1211,7 +1263,9 @@ export default function LLMPlayground() {
                           <span className="font-medium text-gray-900 text-sm">{model?.name}</span>
                           <span className="text-xs text-gray-500">• {output.latencyMs}ms</span>
                         </div>
-                        <p className="text-xs text-gray-700 whitespace-pre-wrap">{output.text}</p>
+                        <p className="text-xs text-gray-700 whitespace-pre-wrap">
+                          {output.content?.value ?? (output.error ? `Error: ${output.error}` : '')}
+                        </p>
                       </div>
                     );
                   })}
