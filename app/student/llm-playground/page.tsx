@@ -84,6 +84,34 @@ const AI_MODELS: AIModel[] = [
   { id: 'claude-opus-4.5', name: 'Claude Opus 4.5', provider: 'Anthropic', icon: '🧠', color: 'bg-purple-500' }
 ];
 
+const BACKEND_BASE = process.env.NEXT_PUBLIC_BACKEND_BASE || 'https://backend-genai-ed.onrender.com';
+
+async function apiPost(path: string, body: any): Promise<any> {
+  const res = await fetch(`${BACKEND_BASE}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await res.text();
+  let json: any;
+
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch (e) {
+    throw new Error(`Failed to parse response: ${text}`);
+  }
+
+  if (!res.ok) {
+    const errorMessage = json.detail || json.message || text || `HTTP ${res.status}`;
+    throw new Error(errorMessage);
+  }
+
+  return json;
+}
+
 export default function LLMPlayground() {
   const router = useRouter();
 
@@ -200,24 +228,47 @@ export default function LLMPlayground() {
     setInput('');
 
     if (mode === 'single') {
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: userPrompt,
+        timestamp: new Date()
+      };
+      setSingleMessages((prev) => [...prev, userMessage]);
+
       setIsProcessing(true);
-      setTimeout(() => {
-        const userMessage: Message = {
-          id: Date.now().toString(),
-          role: 'user',
-          content: userPrompt,
-          timestamp: new Date()
-        };
+      try {
+        const resp = await apiPost('/api/llm-playground/single', {
+          modelId: selectedModel,
+          prompt: userPrompt,
+          config: {
+            temperature,
+            maxTokens,
+            includeSystemInstruction,
+            systemPrompt,
+          },
+        });
+
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: 'Backend not wired yet.',
+          content: resp.output.text,
           model: selectedModel,
           timestamp: new Date()
         };
-        setSingleMessages((prev) => [...prev, userMessage, assistantMessage]);
+        setSingleMessages((prev) => [...prev, assistantMessage]);
+      } catch (error: any) {
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: `Error: ${error.message}`,
+          model: selectedModel,
+          timestamp: new Date()
+        };
+        setSingleMessages((prev) => [...prev, errorMessage]);
+      } finally {
         setIsProcessing(false);
-      }, 500);
+      }
       return;
     }
 
