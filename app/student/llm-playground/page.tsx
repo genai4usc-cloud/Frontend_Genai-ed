@@ -1187,7 +1187,8 @@ export default function LLMPlayground() {
   const renderMultiJudgeRuns = () => (
     <div className="space-y-6">
       {multiJudgeRuns.map((run) => {
-        const isLoading = run.meta === null && run.primaryOutputs.some((o) => o.content?.value === 'Loading...');
+        const isStillLoadingPrimary = run.primaryOutputs.some((o) => o.content?.value === 'Loading...');
+        const isLoading = run.meta === null;
         const hasError = run.meta && typeof run.meta === 'object' && 'error' in run.meta;
 
         return (
@@ -1199,16 +1200,77 @@ export default function LLMPlayground() {
               </div>
               <p className="text-sm text-gray-600 mt-1">{run.prompt}</p>
             </div>
-            <div className="p-6">
-              {isLoading ? (
-                <p className="text-sm text-gray-500 italic text-center">Loading...</p>
-              ) : hasError ? (
-                <p className="text-sm text-red-600 text-center">{(run.meta as any).error}</p>
-              ) : (
+
+            <div className="p-6 space-y-6">
+              {/* PRIMARY MODEL OUTPUTS */}
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-3">Primary Model Outputs</h4>
+
+                {isStillLoadingPrimary ? (
+                  <p className="text-sm text-gray-500 italic">Loading primary outputs...</p>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    {run.primaryOutputs.map((output) => {
+                      const model = AI_MODELS.find((m) => m.id === output.modelId);
+                      return (
+                        <div key={output.modelId} className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+                          <div className="bg-gray-100 px-3 py-2 border-b border-gray-200">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">{model?.icon}</span>
+                              <div>
+                                <div className="font-medium text-gray-900 text-sm">{model?.name}</div>
+                                <div className="text-xs text-gray-500">
+                                  {output.latencyMs > 0 ? `${output.latencyMs}ms` : '—'}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="p-3">
+                            <Markdown value={output.content?.value ?? (output.error ? `Error: ${output.error}` : '')} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* JUDGE ASSESSMENTS */}
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-3">Judge Assessments</h4>
+
+                {hasError ? (
+                  <p className="text-sm text-red-600">{(run.meta as any).error}</p>
+                ) : isLoading ? (
+                  <p className="text-sm text-gray-500 italic">Waiting for judges...</p>
+                ) : run.assessments.length === 0 ? (
+                  <p className="text-sm text-gray-500 italic">No assessments returned.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {run.assessments.map((a, idx) => {
+                      const judge = AI_MODELS.find((m) => m.id === a.modelId);
+                      return (
+                        <div key={`${run.id}-judge-${idx}`} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-lg">{judge?.icon}</span>
+                            <div className="font-medium text-gray-900 text-sm">{judge?.name}</div>
+                            <div className="text-xs text-gray-600">{a.latencyMs > 0 ? `${a.latencyMs}ms` : ''}</div>
+                          </div>
+                          <Markdown value={a.content?.value ?? (a.error ? `Error: ${a.error}` : '')} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* META (DEBUG) */}
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-2">Meta (Debug)</h4>
                 <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-4 rounded-lg overflow-x-auto">
                   {JSON.stringify(run.meta, null, 2)}
                 </pre>
-              )}
+              </div>
             </div>
           </div>
         );
@@ -1220,6 +1282,9 @@ export default function LLMPlayground() {
     <div className="space-y-6">
       {singleJudgeRuns.map((run) => {
         const evaluator = AI_MODELS.find((m) => m.id === run.evaluatorModelId);
+        const isStillLoadingPrimary = run.primaryOutputs.some((o) => o.content?.value === 'Loading...');
+        const isLoading = !run.report || run.report === '';
+
         return (
           <div key={run.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
@@ -1228,7 +1293,7 @@ export default function LLMPlayground() {
                   <FileText className="w-5 h-5 text-brand-maroon" />
                   <h3 className="font-semibold text-gray-900">Single-Judge Evaluation</h3>
                 </div>
-                {run.primaryOutputs.length > 0 && (
+                {run.primaryOutputs.length > 0 && !isStillLoadingPrimary && (
                   <button
                     onClick={() => toggleExpanded(run.id, 'reports')}
                     className="flex items-center gap-2 text-sm text-brand-maroon hover:text-red-800 font-medium"
@@ -1259,25 +1324,35 @@ export default function LLMPlayground() {
             <div className="px-6 py-4">
               <div className="mb-4">
                 <h4 className="text-sm font-semibold text-gray-900 mb-2">Evaluation Report</h4>
-                <Markdown value={run.report} />
+                {isStillLoadingPrimary ? (
+                  <p className="text-sm text-gray-500 italic">Loading primary outputs...</p>
+                ) : isLoading ? (
+                  <p className="text-sm text-gray-500 italic">Waiting for evaluation...</p>
+                ) : (
+                  <Markdown value={run.report} />
+                )}
               </div>
 
               {expandedReports.has(run.id) && run.primaryOutputs.length > 0 && (
                 <div className="space-y-3 border-t border-gray-200 pt-4">
                   <h4 className="text-sm font-semibold text-gray-900">Primary Model Outputs:</h4>
-                  {run.primaryOutputs.map((output) => {
-                    const model = AI_MODELS.find((m) => m.id === output.modelId);
-                    return (
-                      <div key={output.modelId} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-lg">{model?.icon}</span>
-                          <span className="font-medium text-gray-900 text-sm">{model?.name}</span>
-                          <span className="text-xs text-gray-500">• {output.latencyMs}ms</span>
+                  {isStillLoadingPrimary ? (
+                    <p className="text-sm text-gray-500 italic">Loading primary outputs...</p>
+                  ) : (
+                    run.primaryOutputs.map((output) => {
+                      const model = AI_MODELS.find((m) => m.id === output.modelId);
+                      return (
+                        <div key={output.modelId} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-lg">{model?.icon}</span>
+                            <span className="font-medium text-gray-900 text-sm">{model?.name}</span>
+                            <span className="text-xs text-gray-500">• {output.latencyMs > 0 ? `${output.latencyMs}ms` : '—'}</span>
+                          </div>
+                          <Markdown value={output.content?.value ?? (output.error ? `Error: ${output.error}` : '')} />
                         </div>
-                        <Markdown value={output.content?.value ?? (output.error ? `Error: ${output.error}` : '')} />
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               )}
             </div>
