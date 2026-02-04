@@ -102,6 +102,15 @@ const AI_MODELS: AIModel[] = [
 
 const BACKEND_BASE = process.env.NEXT_PUBLIC_BACKEND_BASE || 'https://backend-genai-ed.onrender.com';
 
+function toLlmOutputs(items: EnvelopeItem[]): LlmOutput[] {
+  return (items || []).map((it) => ({
+    modelId: it.modelId,
+    text: it.content?.value ?? '',
+    latencyMs: it.latencyMs ?? 0,
+    error: it.error ?? undefined,
+  }));
+}
+
 async function apiPost(path: string, body: any): Promise<any> {
   const res = await fetch(`${BACKEND_BASE}${path}`, {
     method: 'POST',
@@ -402,13 +411,15 @@ export default function LLMPlayground() {
         });
 
         const env = compareResp as EnvelopeResponse;
-        const primaryOutputs = env.items || [];
+        const primaryEnvelopeItems = env.items || [];
+        const primaryOutputsForJudge = toLlmOutputs(primaryEnvelopeItems);
+
         setMultiJudgeRuns((prev) =>
           prev.map((r) => {
             if (r.id !== newRun.id) return r;
             return {
               ...r,
-              primaryOutputs,
+              primaryOutputs: primaryEnvelopeItems,
             };
           })
         );
@@ -416,7 +427,7 @@ export default function LLMPlayground() {
         const judgeResp = await apiPost('/api/llm-playground/judge/multi', {
           judgeModelIds: multiJudgeJudgeIds,
           prompt: userPrompt,
-          primaryOutputs,
+          primaryOutputs: primaryOutputsForJudge,
           config: {
             temperature,
             maxTokens,
@@ -494,13 +505,16 @@ export default function LLMPlayground() {
           },
         });
 
-        const primaryOutputs = compareResp.outputs || compareResp.results || [];
+        const env = compareResp as EnvelopeResponse;
+        const primaryEnvelopeItems = env.items || [];
+        const primaryOutputsForJudge = toLlmOutputs(primaryEnvelopeItems);
+
         setSingleJudgeRuns((prev) =>
           prev.map((r) => {
             if (r.id !== newRun.id) return r;
             return {
               ...r,
-              primaryOutputs,
+              primaryOutputs: primaryEnvelopeItems,
             };
           })
         );
@@ -508,7 +522,7 @@ export default function LLMPlayground() {
         const judgeResp = await apiPost('/api/llm-playground/judge/single', {
           evaluatorModelId: singleJudgeEvaluatorId,
           prompt: userPrompt,
-          primaryOutputs,
+          primaryOutputs: primaryOutputsForJudge,
           config: {
             temperature,
             maxTokens,
@@ -517,8 +531,8 @@ export default function LLMPlayground() {
           },
         });
 
-        const env = judgeResp as EnvelopeResponse;
-        const item = env.items?.[0];
+        const judgeEnv = judgeResp as EnvelopeResponse;
+        const item = judgeEnv.items?.[0];
         const report = item?.content?.value ?? (item?.error ? `Error: ${item.error}` : '');
 
         setSingleJudgeRuns((prev) =>
