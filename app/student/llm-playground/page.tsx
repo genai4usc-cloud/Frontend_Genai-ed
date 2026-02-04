@@ -273,62 +273,65 @@ export default function LLMPlayground() {
     }
 
     if (mode === 'compare') {
-      // Continue thread if orchestration already happened
-      const run = activeCompareRun;
-      if (run?.orchestratedThread && activeCompareRunId) {
-        setIsProcessing(true);
-        setTimeout(() => {
-          setCompareRuns((prev) =>
-            prev.map((r) => {
-              if (r.id !== activeCompareRunId || !r.orchestratedThread) return r;
-
-              const userMessage: Message = {
-                id: Date.now().toString(),
-                role: 'user',
-                content: userPrompt,
-                timestamp: new Date()
-              };
-              const assistantMessage: Message = {
-                id: (Date.now() + 1).toString(),
-                role: 'assistant',
-                content: 'Backend not wired yet.',
-                timestamp: new Date()
-              };
-
-              return {
-                ...r,
-                orchestratedThread: [...r.orchestratedThread, userMessage, assistantMessage]
-              };
-            })
-          );
-          setIsProcessing(false);
-        }, 500);
-        return;
-      }
-
-      // Create a new compare run
       if (compareModelIds.length < 1) {
         window.alert('Please select at least 1 model to compare.');
         return;
       }
 
-      setIsProcessing(true);
-      setTimeout(() => {
-        const newRun: CompareRun = {
-          id: Date.now().toString(),
-          prompt: userPrompt,
-          modelIds: compareModelIds,
-          outputs: compareModelIds.map((modelId) => ({
-            modelId,
-            text: 'Awaiting backend...',
-            latencyMs: 0
-          }))
-        };
+      const newRun: CompareRun = {
+        id: Date.now().toString(),
+        prompt: userPrompt,
+        modelIds: compareModelIds,
+        outputs: compareModelIds.map((modelId) => ({
+          modelId,
+          text: 'Loading...',
+          latencyMs: 0
+        }))
+      };
 
-        setCompareRuns((prev) => [...prev, newRun]);
-        setActiveCompareRunId(newRun.id);
+      setCompareRuns((prev) => [...prev, newRun]);
+      setActiveCompareRunId(newRun.id);
+
+      setIsProcessing(true);
+      try {
+        const resp = await apiPost('/api/llm-playground/compare', {
+          modelIds: compareModelIds,
+          prompt: userPrompt,
+          config: {
+            temperature,
+            maxTokens,
+            includeSystemInstruction,
+            systemPrompt,
+          },
+        });
+
+        const outputs = resp.outputs || resp.results || [];
+        setCompareRuns((prev) =>
+          prev.map((r) => {
+            if (r.id !== newRun.id) return r;
+            return {
+              ...r,
+              outputs,
+            };
+          })
+        );
+      } catch (error: any) {
+        setCompareRuns((prev) =>
+          prev.map((r) => {
+            if (r.id !== newRun.id) return r;
+            return {
+              ...r,
+              outputs: r.outputs.map((output) => ({
+                ...output,
+                text: `Error: ${error.message}`,
+                latencyMs: 0,
+              })),
+            };
+          })
+        );
+      } finally {
         setIsProcessing(false);
-      }, 500);
+      }
       return;
     }
 
@@ -386,44 +389,78 @@ export default function LLMPlayground() {
     }
   };
 
-  const handleGenerateFinalAnswer = () => {
+  const handleGenerateFinalAnswer = async () => {
     if (!activeCompareRunId) return;
+
+    const activeRun = compareRuns.find((r) => r.id === activeCompareRunId);
+    if (!activeRun) {
+      window.alert('Active compare run not found.');
+      return;
+    }
+
     if (!orchestratorModelId) {
       window.alert('Please select an orchestrator model.');
       return;
     }
 
     setIsProcessing(true);
-    setTimeout(() => {
+    try {
+      const resp = await apiPost('/api/llm-playground/orchestrate', {
+        orchestratorModelId,
+        prompt: activeRun.prompt,
+        outputs: activeRun.outputs,
+        orchestrationPrompt: orchestrationPrompt || undefined,
+        config: {
+          temperature,
+          maxTokens: 300,
+          includeSystemInstruction,
+          systemPrompt,
+        },
+      });
+
       setCompareRuns((prev) =>
         prev.map((run) => {
           if (run.id !== activeCompareRunId) return run;
 
           const userMessage: Message = {
-            id: Date.now().toString(),
+            id: `${Date.now()}u`,
             role: 'user',
-            content: run.prompt,
+            content: activeRun.prompt,
             timestamp: new Date()
           };
           const assistantMessage: Message = {
-            id: (Date.now() + 1).toString(),
+            id: `${Date.now()}a`,
             role: 'assistant',
-            content: 'Awaiting backend orchestration...',
+            content: resp.finalAnswer,
             timestamp: new Date()
           };
 
           return {
             ...run,
+            finalAnswer: resp.finalAnswer,
+            rationale: resp.rationale,
             orchestratorModelId,
             orchestrationPrompt: orchestrationPrompt || undefined,
-            finalAnswer: 'Awaiting backend orchestration...',
-            rationale: 'Awaiting backend rationale...',
-            orchestratedThread: run.orchestratedThread ?? [userMessage, assistantMessage]
+            orchestratedThread: [userMessage, assistantMessage]
           };
         })
       );
+    } catch (error: any) {
+      setCompareRuns((prev) =>
+        prev.map((run) => {
+          if (run.id !== activeCompareRunId) return run;
+          return {
+            ...run,
+            finalAnswer: `Error: ${error.message}`,
+            rationale: '',
+            orchestratorModelId,
+            orchestrationPrompt: orchestrationPrompt || undefined,
+          };
+        })
+      );
+    } finally {
       setIsProcessing(false);
-    }, 500);
+    }
   };
 
   const handleClearChat = () => {
