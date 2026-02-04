@@ -4,9 +4,11 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
-import { ArrowLeft, Upload, File, Check, ChevronDown, ChevronUp, Info, Video, Mic, FileText, Sparkles, Download, Eye, Play, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Upload, File as FileIcon, Check, ChevronDown, ChevronUp, Info, Video, Mic, FileText, Sparkles, Download, Eye, Play, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { validateFileSize } from '@/lib/fileUpload';
+import { AvatarVoiceMap, AvatarName } from "@/lib/avatarVoiceMap";
+
 
 type MaterialWithType = {
   url: string;
@@ -18,8 +20,8 @@ type MaterialWithType = {
   courseCode?: string;
 };
 
-type AvatarCharacter = 'lisa' | 'lori' | 'meg' | 'jeff' | 'max' | 'harry';
-
+// type AvatarCharacter = 'lisa' | 'lori' | 'meg' | 'jeff' | 'max' | 'harry';
+type AvatarCharacter = AvatarName;
 type AvatarStyles = {
   lisa: 'casual-sitting' | 'graceful-sitting' | 'graceful-standing' | 'technical-sitting' | 'technical-standing';
   lori: 'casual' | 'graceful' | 'formal';
@@ -78,6 +80,8 @@ export default function CreateLecture() {
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
 
   const [selectedCharacter, setSelectedCharacter] = useState<AvatarCharacter | null>(null);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('');
+  const [avatarGender, setAvatarGender] = useState<'male' | 'female' | ''>('');
   const [selectedStyle, setSelectedStyle] = useState<string>('');
 
   const [contentGenerated, setContentGenerated] = useState(false);
@@ -111,6 +115,21 @@ export default function CreateLecture() {
       loadLectureData(lectureId);
     }
   }, [lectureId]);
+  
+  // Ensure avatar → voice mapping stays consistent (edit / reload safety)
+  useEffect(() => {
+    if (!selectedCharacter) return;
+
+    const vc = AvatarVoiceMap[selectedCharacter];
+
+    if (!selectedVoiceId) {
+      setSelectedVoiceId(vc.voiceId);
+    }
+
+    if (!avatarGender) {
+      setAvatarGender(vc.gender);
+    }
+  }, [selectedCharacter]);
 
   useEffect(() => {
     if (selectedCourseIds.length > 0) {
@@ -261,7 +280,7 @@ export default function CreateLecture() {
     try {
       const { data: lectureData, error } = await supabase
         .from('lectures')
-        .select('title, selected_course_ids, library_personal, library_usc, content_style, avatar_character, avatar_style, status, script_mode, script_text, script_prompt, video_length')
+        .select('title, selected_course_ids, library_personal, library_usc, content_style, avatar_character, avatar_style, avatar_voice_id, avatar_gender, status, script_mode, script_text, script_prompt, video_length')
         .eq('id', lectureIdToLoad)
         .maybeSingle();
 
@@ -285,6 +304,13 @@ export default function CreateLecture() {
 
         if (lectureData.script_mode) {
           setScriptMode(lectureData.script_mode as 'direct' | 'ai');
+        }
+        if ((lectureData as any).avatar_voice_id) {
+          setSelectedVoiceId((lectureData as any).avatar_voice_id);
+        }
+        
+        if ((lectureData as any).avatar_gender) {
+          setAvatarGender((lectureData as any).avatar_gender);
         }
 
         if (lectureData.script_text) {
@@ -535,7 +561,7 @@ export default function CreateLecture() {
       }
     }
   };
-
+   
   const handleAdditionalFilesSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -911,10 +937,10 @@ export default function CreateLecture() {
       return;
     }
 
-    if (!aiPrompt.trim()) {
-      toast.error('Please enter an AI prompt');
-      return;
-    }
+    // if (!aiPrompt.trim()) {
+    //   toast.error('Please enter an AI prompt');
+    //   return;
+    // }
 
     setIsGeneratingScript(true);
     try {
@@ -1007,7 +1033,7 @@ export default function CreateLecture() {
 Background Materials: ${backgroundMaterials.length > 0 ? backgroundMaterials.join(', ') : 'None'}`;
 
         scriptTextFormatted = `TITLE:
-Untitled Lecture
+${lectureTitle || 'Untitled Lecture'}
 
 ${materialsSummary}
 
@@ -1044,41 +1070,95 @@ SLIDE 1: Untitled Lecture
     }
   };
 
+  
+
+    const saveAvatarToBackend = async (payload: { avatarName: string; voiceId: string; speakingStyle?: string }) => {
+      if (!lectureId) throw new Error('No lecture draft found');
+
+      const { error: updateError } = await supabase
+        .from('lectures')
+        .update({
+          avatar_character: payload.avatarName,
+          avatar_voice_id: payload.voiceId || null,
+          avatar_style: payload.speakingStyle || null,
+        })
+        .eq('id', lectureId);
+
+      if (updateError) throw updateError;
+      return true;
+    };
+
+    const handleSaveAvatar = async () => {
+      try {
+        if (!selectedCharacter) {
+          toast.error('Please select an avatar');
+          return;
+        }
+
+        const normalizedName = selectedCharacter as AvatarName;
+        const voiceData = AvatarVoiceMap[normalizedName];
+
+        if (!voiceData) {
+          throw new Error(`Avatar ${normalizedName} not found in configuration`);
+        }
+
+        const payload = {
+          avatarName: normalizedName,
+          voiceId: voiceData.voiceId,
+          speakingStyle: (voiceData as any).speakingStyle
+        };
+
+        await saveAvatarToBackend(payload);
+
+        toast.success('Avatar saved');
+        setCurrentStep(6);
+        setExpandedStep(6);
+      } catch (error) {
+        console.error('Error saving avatar:', error);
+        toast.error('Failed to save avatar');
+      }
+    };
   const handleContinueToGenerateContent = async () => {
     if (!selectedCharacter) {
       toast.error('Please select a character');
       return;
     }
-
     if (!selectedStyle) {
       toast.error('Please select a style');
       return;
     }
-
     if (!lectureId) {
       toast.error('No lecture draft found');
       return;
     }
 
     try {
+      const voiceData = AvatarVoiceMap[selectedCharacter];
+
       const { error: updateError } = await supabase
         .from('lectures')
         .update({
           avatar_character: selectedCharacter,
-          avatar_style: selectedStyle
+          avatar_style: selectedStyle,
+          avatar_voice_id: voiceData?.voiceId || selectedVoiceId || null,
         })
         .eq('id', lectureId);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Failed to save avatar:', updateError);
+        toast.error(`Failed to save avatar: ${updateError.message}`);
+        return;
+      }
 
       toast.success('Avatar saved');
       setCurrentStep(6);
       setExpandedStep(6);
-    } catch (error) {
-      console.error('Error saving avatar:', error);
-      toast.error('Failed to save avatar');
+    } catch (e: any) {
+      console.error('Failed to save avatar (exception):', e);
+      toast.error(`Failed to save avatar: ${e?.message ?? 'Unknown error'}`);
     }
   };
+
 
   const pollJobsAndArtifacts = async (lectureIdToPoll: string, jobIds: string[]) => {
     if (!jobIds || jobIds.length === 0) return;
@@ -1181,9 +1261,14 @@ SLIDE 1: Untitled Lecture
     toast.info('Starting content generation...');
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+
       const resp = await fetch(`${BACKEND_URL}/api/lectures/${lectureId}/generate-content`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        }
       });
 
       if (!resp.ok) {
@@ -1224,17 +1309,47 @@ SLIDE 1: Untitled Lecture
     setCurrentStep(7);
     setExpandedStep(7);
   };
-
   const handleRegenerateScript = async () => {
     if (scriptSaveTimeoutRef.current) {
       clearTimeout(scriptSaveTimeoutRef.current);
       scriptSaveTimeoutRef.current = null;
     }
 
-    await saveScriptToDatabase(generatedScript);
+    if (!lectureId) {
+      toast.error('No lecture draft found');
+      return;
+    }
 
-    toast.info('Regenerating with changes...');
-  };
+    try {
+      // 1. Save the edited script
+      await saveScriptToDatabase(generatedScript);
+
+      // 2. Save avatar changes (in case user changed avatar before regenerating)
+      if (selectedCharacter && selectedStyle) {
+        const voiceData = AvatarVoiceMap[selectedCharacter];
+        
+        const { error: updateError } = await supabase
+          .from('lectures')
+          .update({
+            avatar_character: selectedCharacter,
+            avatar_style: selectedStyle,
+            avatar_voice_id: voiceData?.voiceId || selectedVoiceId || null,
+          })
+          .eq('id', lectureId);
+
+        if (updateError) {
+          console.error('Failed to save avatar before regeneration:', updateError);
+        }
+      }
+
+      // 3. Actually regenerate the content
+      await handleGenerateContent();
+      
+    } catch (error) {
+      console.error('Error regenerating:', error);
+      toast.error('Failed to regenerate content');
+    }
+  }; 
 
   const handleRegenerateSlides = () => {
     toast.info('Regenerating slides...');
@@ -1523,7 +1638,7 @@ SLIDE 1: Untitled Lecture
                                 onChange={() => togglePreloadedMaterial(material.url)}
                                 className="w-5 h-5 text-brand-maroon rounded focus:ring-brand-maroon mt-0.5"
                               />
-                              <File className="w-5 h-5 text-gray-400 mt-0.5" />
+                              <FileIcon className="w-5 h-5 text-gray-400 mt-0.5" />
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-gray-900 break-words">{material.name}</p>
                                 <p className="text-xs text-gray-600 mt-1">{material.courseCode}</p>
@@ -1563,7 +1678,7 @@ SLIDE 1: Untitled Lecture
                           {additionalFiles.map((file, index) => (
                             <div key={index} className="flex items-center justify-between bg-gray-50 px-4 py-3 rounded-lg">
                               <div className="flex items-center gap-3">
-                                <File className="w-5 h-5 text-gray-400" />
+                                <FileIcon className="w-5 h-5 text-gray-400" />
                                 <div>
                                   <p className="font-medium text-gray-900">{file.name}</p>
                                   <p className="text-sm text-gray-600">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
@@ -1588,7 +1703,7 @@ SLIDE 1: Untitled Lecture
                           {allMaterials.map((material, index) => (
                             <div key={index} className="p-4 border border-gray-200 rounded-lg space-y-3">
                               <div className="flex items-start gap-3">
-                                <File className="w-5 h-5 text-gray-400 mt-1" />
+                                <FileIcon className="w-5 h-5 text-gray-400 mt-1" />
                                 <div className="flex-1 space-y-2">
                                   <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1777,7 +1892,7 @@ SLIDE 1: Untitled Lecture
                           {scriptFile && (
                             <div className="mt-4 bg-gray-50 p-4 rounded-lg flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                <File className="w-5 h-5 text-gray-400" />
+                                <FileIcon className="w-5 h-5 text-gray-400" />
                                 <span className="font-medium text-gray-900">{scriptFile.name}</span>
                               </div>
                               <button
@@ -1817,13 +1932,11 @@ SLIDE 1: Untitled Lecture
                             onChange={(e) => setVideoLength(Number(e.target.value))}
                             className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
                           >
+                            <option value={1}>1 minutes</option>
+                            <option value={3}>3 minutes</option>
                             <option value={5}>5 minutes</option>
+                            <option value={7}>7 minutes</option>
                             <option value={10}>10 minutes</option>
-                            <option value={15}>15 minutes</option>
-                            <option value={20}>20 minutes</option>
-                            <option value={30}>30 minutes</option>
-                            <option value={45}>45 minutes</option>
-                            <option value={60}>60 minutes</option>
                           </select>
                         </div>
 
@@ -1879,6 +1992,11 @@ SLIDE 1: Untitled Lecture
                             onClick={() => {
                               setSelectedCharacter(avatar.id);
                               setSelectedStyle(characterStyles[avatar.id].default);
+
+                              const vc = AvatarVoiceMap[avatar.id];
+
+                              setSelectedVoiceId(vc.voiceId);
+                              setAvatarGender(vc.gender);
                             }}
                             className={`p-6 border-2 rounded-xl text-center transition-all ${
                               selectedCharacter === avatar.id
