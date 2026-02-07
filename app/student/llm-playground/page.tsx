@@ -1287,82 +1287,39 @@ export default function LLMPlayground() {
               </div>
             </div>
 
-            <div className="px-6 py-4 space-y-4">
-              {/* WHEN COLLAPSED: show ONLY evaluation report */}
-              {!expandedReports.has(run.id) && (
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-900 mb-2">Evaluation Report</h4>
+            <div className="px-6 py-4">
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-2">Evaluation Report</h4>
+                {isStillLoadingPrimary ? (
+                  <p className="text-sm text-gray-500 italic">Loading primary outputs...</p>
+                ) : isLoading ? (
+                  <p className="text-sm text-gray-500 italic">Waiting for evaluation...</p>
+                ) : (
+                  <Markdown value={run.report} />
+                )}
+              </div>
 
+              {expandedReports.has(run.id) && run.primaryOutputs.length > 0 && (
+                <div className="space-y-3 border-t border-gray-200 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-900">Primary Model Outputs:</h4>
                   {isStillLoadingPrimary ? (
                     <p className="text-sm text-gray-500 italic">Loading primary outputs...</p>
-                  ) : isLoading ? (
-                    <p className="text-sm text-gray-500 italic">Waiting for evaluation...</p>
                   ) : (
-                    <Markdown value={run.report} />
+                    run.primaryOutputs.map((output) => {
+                      const model = AI_MODELS.find((m) => m.id === output.modelId);
+                      return (
+                        <div key={output.modelId} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-lg">{model?.icon}</span>
+                            <span className="font-medium text-gray-900 text-sm">{model?.name}</span>
+                            <span className="text-xs text-gray-500">• {output.latencyMs > 0 ? `${output.latencyMs}ms` : '—'}</span>
+                          </div>
+                          <Markdown value={output.content?.value ?? (output.error ? `Error: ${output.error}` : '')} />
+                        </div>
+                      );
+                    })
                   )}
                 </div>
-              )}
-
-              {/* WHEN EXPANDED: show 3-model grid FIRST, then evaluation report */}
-              {expandedReports.has(run.id) && (
-                <>
-                  {/* 1) PRIMARY OUTPUTS FIRST (GRID) */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-900 mb-2">Primary Model Outputs</h4>
-
-                    {isStillLoadingPrimary ? (
-                      <p className="text-sm text-gray-500 italic">Loading primary outputs...</p>
-                    ) : (
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        {run.primaryModelIds.map((modelId) => {
-                          const output = run.primaryOutputs.find((o) => o.modelId === modelId);
-                          const model = AI_MODELS.find((m) => m.id === modelId);
-
-                          return (
-                            <div
-                              key={`${run.id}-${modelId}`}
-                              className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden"
-                            >
-                              <div className="bg-gray-100 px-3 py-2 border-b border-gray-200">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-lg">{model?.icon}</span>
-                                  <div>
-                                    <div className="font-medium text-gray-900 text-sm">{model?.name}</div>
-                                    <div className="text-xs text-gray-500">
-                                      {output?.latencyMs && output.latencyMs > 0 ? `${output.latencyMs}ms` : '—'}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="p-3">
-                                <Markdown
-                                  value={
-                                    output?.content?.value ??
-                                    (output?.error ? `Error: ${output.error}` : 'No response')
-                                  }
-                                />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 2) EVALUATION REPORT AFTER */}
-                  <div className="border-t border-gray-200 pt-4">
-                    <h4 className="text-sm font-semibold text-gray-900 mb-2">Evaluation Report</h4>
-
-                    {isStillLoadingPrimary ? (
-                      <p className="text-sm text-gray-500 italic">Waiting for primary outputs...</p>
-                    ) : isLoading ? (
-                      <p className="text-sm text-gray-500 italic">Waiting for evaluation...</p>
-                    ) : (
-                      <Markdown value={run.report} />
-                    )}
-                  </div>
-                </>
               )}
             </div>
           </div>
