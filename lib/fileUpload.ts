@@ -77,3 +77,30 @@ export const validateFileType = (file: File, allowedTypes: string[]): boolean =>
     return file.type === type;
   });
 };
+
+export const uploadFile = async (
+  file: File,
+  storagePath: string,
+  bucketName: string
+): Promise<{ url: string | null; error: string | null }> => {
+  try {
+    const { error: uploadError } = await supabase.storage
+      .from(bucketName)
+      .upload(storagePath, file, {
+        cacheControl: '3600',
+        upsert: true,
+      });
+
+    if (uploadError) {
+      return { url: null, error: uploadError.message };
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from(bucketName)
+      .getPublicUrl(storagePath);
+
+    return { url: publicUrl, error: null };
+  } catch (error) {
+    return { url: null, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+};
