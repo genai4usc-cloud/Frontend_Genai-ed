@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
 import {
-  Check, ChevronDown, ChevronUp, FileText, GraduationCap, Upload,
-  Users, Settings, Info, AlertCircle, X
+  Check, ChevronDown, ChevronUp, FileText, Upload,
+  Users, Info, AlertCircle, X, Wand2, Eye, FileCheck, Download
 } from 'lucide-react';
 import { uploadFile } from '@/lib/fileUpload';
 
@@ -19,6 +19,9 @@ interface QuizBatch {
   short_answer_count: number;
   fixed_mcq_answer_key_enabled: boolean;
   fixed_mcq_answer_key: string[] | null;
+  additional_instructions: string | null;
+  quiz_name: string | null;
+  saved_at: string | null;
 }
 
 interface Student {
@@ -47,37 +50,54 @@ interface StudentFile {
   storage_path: string;
 }
 
+interface GeneratedQuiz {
+  id: string;
+  quiz_batch_id: string;
+  student_id: string;
+  student_file_url: string;
+  student_file_name: string;
+  mcq_count: number;
+  short_answer_count: number;
+  quiz_content_json: any;
+  answers_content_json: any;
+  quiz_pdf_url: string | null;
+  answers_pdf_url: string | null;
+  student_name?: string;
+}
+
 export default function CreateQuiz() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Quiz batch state
   const [quizBatchId, setQuizBatchId] = useState<string | null>(null);
   const [quizBatch, setQuizBatch] = useState<QuizBatch | null>(null);
 
-  // Step 1: Course selection
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseIds, setSelectedCourseIds] = useState<Set<string>>(new Set());
 
-  // Step 2: Course type
   const [courseMode, setCourseMode] = useState<string | null>(null);
 
-  // Step 3: Materials
   const [students, setStudents] = useState<Student[]>([]);
   const [studentFiles, setStudentFiles] = useState<Map<string, StudentFile>>(new Map());
   const [lectureMaterials, setLectureMaterials] = useState<LectureMaterial[]>([]);
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<Set<string>>(new Set());
   const [uploadingStudent, setUploadingStudent] = useState<string | null>(null);
 
-  // Step 4: Quiz settings
   const [mcqCount, setMcqCount] = useState(5);
   const [shortAnswerCount] = useState(0);
   const [useFixedAnswerKey, setUseFixedAnswerKey] = useState(false);
   const [answerKey, setAnswerKey] = useState<string[]>([]);
 
-  // UI state
+  const [additionalInstructions, setAdditionalInstructions] = useState('');
+
+  const [generatedQuizzes, setGeneratedQuizzes] = useState<GeneratedQuiz[]>([]);
+  const [generating, setGenerating] = useState(false);
+
+  const [quizName, setQuizName] = useState('');
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+
   const [expandedStep, setExpandedStep] = useState(1);
 
   useEffect(() => {
@@ -105,6 +125,12 @@ export default function CreateQuiz() {
       setAnswerKey([]);
     }
   }, [useFixedAnswerKey, mcqCount]);
+
+  useEffect(() => {
+    if (quizBatchId && quizBatch?.status === 'generated') {
+      loadGeneratedQuizzes();
+    }
+  }, [quizBatchId, quizBatch?.status]);
 
   const checkAuth = async () => {
     try {
@@ -166,6 +192,8 @@ export default function CreateQuiz() {
       if (batch.fixed_mcq_answer_key) {
         setAnswerKey(batch.fixed_mcq_answer_key);
       }
+      setAdditionalInstructions(batch.additional_instructions || '');
+      setQuizName(batch.quiz_name || '');
 
       await loadBatchCourses(batch.id);
       await loadBatchMaterials(batch.id);
@@ -212,6 +240,36 @@ export default function CreateQuiz() {
         });
       });
       setStudentFiles(filesMap);
+    }
+  };
+
+  const loadGeneratedQuizzes = async () => {
+    if (!quizBatchId) return;
+
+    const { data } = await supabase
+      .from('quiz_generated')
+      .select('*')
+      .eq('quiz_batch_id', quizBatchId);
+
+    if (data) {
+      const enrichedQuizzes = await Promise.all(
+        data.map(async (quiz) => {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('first_name, last_name')
+            .eq('id', quiz.student_id)
+            .maybeSingle();
+
+          return {
+            ...quiz,
+            student_name: profileData
+              ? `${profileData.first_name} ${profileData.last_name}`
+              : 'Student',
+          };
+        })
+      );
+
+      setGeneratedQuizzes(enrichedQuizzes);
     }
   };
 
@@ -441,7 +499,7 @@ export default function CreateQuiz() {
         })
         .eq('id', quizBatchId);
 
-      alert('Quiz settings saved successfully!');
+      setExpandedStep(5);
     } catch (error) {
       console.error('Error saving quiz settings:', error);
       alert('Failed to save quiz settings');
@@ -450,10 +508,118 @@ export default function CreateQuiz() {
     }
   };
 
+  const handleSaveAdditionalInstructions = async () => {
+    if (!quizBatchId) return;
+
+    setSaving(true);
+    try {
+      await supabase
+        .from('quiz_batches')
+        .update({
+          additional_instructions: additionalInstructions || null,
+        })
+        .eq('id', quizBatchId);
+
+      setExpandedStep(6);
+    } catch (error) {
+      console.error('Error saving instructions:', error);
+      alert('Failed to save instructions');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleGenerateQuizzes = async () => {
+    if (!quizBatchId) return;
+
+    setGenerating(true);
+    try {
+      const response = await fetch('/api/educator/quiz/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quizBatchId }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate quizzes');
+      }
+
+      const data = await response.json();
+      setGeneratedQuizzes(data.quizzes);
+
+      await supabase
+        .from('quiz_batches')
+        .update({ status: 'generated' })
+        .eq('id', quizBatchId);
+
+      const updatedBatch = { ...quizBatch!, status: 'generated' };
+      setQuizBatch(updatedBatch);
+    } catch (error) {
+      console.error('Error generating quizzes:', error);
+      alert('Failed to generate quizzes');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleSaveQuiz = async () => {
+    if (!quizBatchId) return;
+
+    setSaving(true);
+    try {
+      await supabase
+        .from('quiz_batches')
+        .update({
+          quiz_name: quizName || null,
+          status: 'saved',
+          saved_at: new Date().toISOString(),
+        })
+        .eq('id', quizBatchId);
+
+      alert('Quiz saved successfully!');
+      router.push('/educator/dashboard');
+    } catch (error) {
+      console.error('Error saving quiz:', error);
+      alert('Failed to save quiz');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDownload = async (type: string) => {
+    if (!quizBatchId) return;
+
+    try {
+      const response = await fetch(
+        `/api/educator/quiz/download?quizBatchId=${quizBatchId}&type=${type}`
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to download');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `quiz-${type}-${Date.now()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error downloading:', error);
+      alert('Failed to download files');
+    }
+  };
+
   const isStep1Complete = selectedCourseIds.size > 0;
   const isStep2Complete = courseMode !== null;
   const isStep3Complete = students.length > 0 && (studentFiles.size > 0 || selectedMaterialIds.size > 0);
   const isStep4Complete = mcqCount > 0;
+  const isStep5Complete = true;
+  const isStep6Complete = quizBatch?.status === 'generated' || quizBatch?.status === 'saved';
+  const isStep7Complete = quizBatch?.status === 'saved';
 
   if (loading || !profile) {
     return (
@@ -636,7 +802,6 @@ export default function CreateQuiz() {
 
             {expandedStep === 3 && isStep2Complete && (
               <div className="px-6 py-4 border-t border-gray-200 space-y-6">
-                {/* Students Section */}
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <Users className="w-5 h-5 text-brand-maroon" />
@@ -724,7 +889,6 @@ export default function CreateQuiz() {
                   </div>
                 </div>
 
-                {/* Preloaded Materials Section */}
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <FileText className="w-5 h-5 text-brand-maroon" />
@@ -794,7 +958,6 @@ export default function CreateQuiz() {
 
             {expandedStep === 4 && isStep3Complete && (
               <div className="px-6 py-4 border-t border-gray-200 space-y-6">
-                {/* MCQ Count */}
                 <div>
                   <label className="block font-medium text-gray-900 mb-2">
                     Number of Multiple Choice Questions (0-30)
@@ -812,7 +975,6 @@ export default function CreateQuiz() {
                   </div>
                 </div>
 
-                {/* Short Answer (Disabled) */}
                 <div>
                   <label className="block font-medium text-gray-900 mb-2">
                     Number of Short Answer Questions
@@ -828,7 +990,6 @@ export default function CreateQuiz() {
                   </div>
                 </div>
 
-                {/* Fixed Answer Key */}
                 <div className="border-t border-gray-200 pt-6">
                   <label className="flex items-start gap-3 cursor-pointer">
                     <input
@@ -892,38 +1053,304 @@ export default function CreateQuiz() {
             )}
           </div>
 
-          {/* Step 5-7: Placeholder */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden opacity-60">
-            <div className="px-6 py-4 flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-gray-300 text-gray-500 flex items-center justify-center font-bold">5</div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Additional Prompt</h3>
-                <p className="text-sm text-gray-600">Add specific instructions or focus areas (optional)</p>
+          {/* Step 5: Additional Prompt */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <button
+              onClick={() => setExpandedStep(expandedStep === 5 ? 0 : 5)}
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+              disabled={!isStep4Complete}
+            >
+              <div className="flex items-center gap-4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
+                  isStep5Complete && isStep6Complete ? 'bg-green-500 text-white' : isStep4Complete ? 'bg-brand-maroon text-white' : 'bg-gray-300 text-gray-500'
+                }`}>
+                  {isStep5Complete && isStep6Complete ? <Check className="w-5 h-5" /> : '5'}
+                </div>
+                <div className="text-left">
+                  <h3 className="font-semibold text-gray-900">Additional Prompt</h3>
+                  <p className="text-sm text-gray-600">Add specific instructions or focus areas (optional)</p>
+                </div>
               </div>
-            </div>
+              {expandedStep === 5 ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+            </button>
+
+            {expandedStep === 5 && isStep4Complete && (
+              <div className="px-6 py-4 border-t border-gray-200 space-y-4">
+                <div>
+                  <label className="block font-medium text-gray-900 mb-2">
+                    Additional Instructions (Optional)
+                  </label>
+                  <textarea
+                    value={additionalInstructions}
+                    onChange={(e) => setAdditionalInstructions(e.target.value)}
+                    placeholder="e.g., Focus on main themes, emphasize critical analysis, include vocabulary questions..."
+                    rows={6}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-brand-maroon resize-none"
+                  />
+                  <p className="text-sm text-gray-600 mt-2">
+                    Provide specific areas to focus on or additional requirements for the quiz questions
+                  </p>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleSaveAdditionalInstructions}
+                    disabled={saving}
+                    className="bg-brand-maroon text-white px-6 py-2 rounded-lg font-medium hover:bg-red-800 transition-colors disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Continue to Generate Content'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden opacity-60">
-            <div className="px-6 py-4 flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-gray-300 text-gray-500 flex items-center justify-center font-bold">6</div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Generate & Review Content</h3>
-                <p className="text-sm text-gray-600">Generate quizzes and review/modify if needed</p>
+          {/* Step 6: Generate & Review Content */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <button
+              onClick={() => setExpandedStep(expandedStep === 6 ? 0 : 6)}
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+              disabled={!isStep5Complete}
+            >
+              <div className="flex items-center gap-4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
+                  isStep6Complete ? 'bg-green-500 text-white' : isStep5Complete ? 'bg-brand-maroon text-white' : 'bg-gray-300 text-gray-500'
+                }`}>
+                  {isStep6Complete ? <Check className="w-5 h-5" /> : '6'}
+                </div>
+                <div className="text-left">
+                  <h3 className="font-semibold text-gray-900">Generate & Review Content</h3>
+                  <p className="text-sm text-gray-600">Generate quizzes and review/modify if needed</p>
+                </div>
               </div>
-            </div>
+              {expandedStep === 6 ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+            </button>
+
+            {expandedStep === 6 && isStep5Complete && (
+              <div className="px-6 py-4 border-t border-gray-200">
+                {!isStep6Complete ? (
+                  <div className="py-12 text-center">
+                    <Wand2 className="w-16 h-16 text-brand-maroon mx-auto mb-4" />
+                    <h4 className="text-xl font-semibold text-gray-900 mb-2">Ready to Generate Quizzes</h4>
+                    <p className="text-gray-600 mb-6">
+                      AI will generate {studentFiles.size || selectedMaterialIds.size} personalized quiz{(studentFiles.size || selectedMaterialIds.size) !== 1 ? 'zes' : ''} based on the selected materials
+                    </p>
+                    <button
+                      onClick={handleGenerateQuizzes}
+                      disabled={generating}
+                      className="bg-brand-maroon text-white px-6 py-3 rounded-lg font-medium hover:bg-red-800 transition-colors disabled:opacity-50 inline-flex items-center gap-2"
+                    >
+                      <Wand2 className="w-5 h-5" />
+                      {generating ? 'Generating...' : 'Generate Quizzes'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-green-600 mb-4">
+                      <Check className="w-5 h-5" />
+                      <span className="font-semibold">Quizzes Generated Successfully!</span>
+                    </div>
+
+                    <h4 className="font-semibold text-gray-900">Generated Quizzes ({generatedQuizzes.length})</h4>
+
+                    <div className="space-y-3">
+                      {generatedQuizzes.map((quiz) => (
+                        <div key={quiz.id} className="border border-gray-200 rounded-lg p-4 flex items-center justify-between">
+                          <div>
+                            <div className="font-semibold text-gray-900">{quiz.student_name}</div>
+                            <div className="text-sm text-gray-600">{quiz.student_file_name}</div>
+                            <div className="text-sm text-gray-500 mt-1">
+                              {quiz.mcq_count} Multiple Choice • {quiz.short_answer_count} Short Answer
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => window.open(quiz.student_file_url, '_blank')}
+                              className="flex items-center gap-2 px-4 py-2 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                            >
+                              <FileText className="w-4 h-4" />
+                              <span className="text-sm font-medium">File</span>
+                            </button>
+                            <button
+                              onClick={() => window.open(quiz.quiz_pdf_url || '#', '_blank')}
+                              className="flex items-center gap-2 px-4 py-2 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                            >
+                              <Eye className="w-4 h-4" />
+                              <span className="text-sm font-medium">Quiz</span>
+                            </button>
+                            <button
+                              onClick={() => window.open(quiz.answers_pdf_url || '#', '_blank')}
+                              className="flex items-center gap-2 px-4 py-2 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                            >
+                              <FileCheck className="w-4 h-4" />
+                              <span className="text-sm font-medium">Answers</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex justify-end mt-6">
+                      <button
+                        onClick={() => setExpandedStep(7)}
+                        className="bg-brand-maroon text-white px-6 py-3 rounded-lg font-medium hover:bg-red-800 transition-colors"
+                      >
+                        Continue to Save & Download
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden opacity-60">
-            <div className="px-6 py-4 flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-gray-300 text-gray-500 flex items-center justify-center font-bold">7</div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Download & Distribute</h3>
-                <p className="text-sm text-gray-600">Download quizzes and answer keys for distribution</p>
+          {/* Step 7: Save & Download */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <button
+              onClick={() => setExpandedStep(expandedStep === 7 ? 0 : 7)}
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+              disabled={!isStep6Complete}
+            >
+              <div className="flex items-center gap-4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
+                  isStep7Complete ? 'bg-green-500 text-white' : isStep6Complete ? 'bg-brand-maroon text-white' : 'bg-gray-300 text-gray-500'
+                }`}>
+                  {isStep7Complete ? <Check className="w-5 h-5" /> : '7'}
+                </div>
+                <div className="text-left">
+                  <h3 className="font-semibold text-gray-900">Save & Download</h3>
+                  <p className="text-sm text-gray-600">Save your quiz and download files</p>
+                </div>
               </div>
-            </div>
+              {expandedStep === 7 ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+            </button>
+
+            {expandedStep === 7 && isStep6Complete && (
+              <div className="px-6 py-4 border-t border-gray-200 space-y-6">
+                <div>
+                  <label className="block font-medium text-gray-900 mb-2">Quiz Name</label>
+                  <input
+                    type="text"
+                    value={quizName}
+                    onChange={(e) => setQuizName(e.target.value)}
+                    placeholder="e.g., Homework #1, Midterm Essay Quiz, Chapter 3 Review..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-brand-maroon"
+                  />
+                </div>
+
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 mb-4">Quiz Summary</h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Quiz Name:</span>
+                      <span className="text-gray-900 font-medium">{quizName || 'Not set'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Number of Quizzes:</span>
+                      <span className="text-gray-900 font-medium">{generatedQuizzes.length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Questions per Quiz:</span>
+                      <span className="text-gray-900 font-medium">
+                        {mcqCount} MCQ, {shortAnswerCount} Short Answer
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Courses:</span>
+                      <span className="text-gray-900 font-medium">{selectedCourseIds.size} selected</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 mb-2">Download Quiz Files</h4>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Choose how you want to download your quiz files
+                  </p>
+                  <button
+                    onClick={() => setShowDownloadModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 border-2 border-red-600 text-red-600 rounded-lg hover:bg-red-50 transition-colors font-medium"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download Options
+                  </button>
+                </div>
+
+                {courseMode === 'in_class' && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex gap-3">
+                      <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h5 className="font-semibold text-gray-900 mb-1">In-Class Mode Selected</h5>
+                        <p className="text-sm text-gray-700">
+                          Clicking "Save Quiz" will save this quiz to your Personal Library for future reference.
+                          You can access and reprint these quizzes anytime from your library.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={handleSaveQuiz}
+                    disabled={saving}
+                    className="bg-brand-maroon text-white px-8 py-3 rounded-lg font-medium hover:bg-red-800 transition-colors disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save Quiz'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {showDownloadModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowDownloadModal(false)}>
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">Download Options</h3>
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  handleDownload('all_zip');
+                  setShowDownloadModal(false);
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Download className="w-5 h-5 text-brand-maroon" />
+                <span className="font-medium">Download All Quizzes (ZIP)</span>
+              </button>
+              <button
+                onClick={() => {
+                  handleDownload('answers_zip');
+                  setShowDownloadModal(false);
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Download className="w-5 h-5 text-brand-maroon" />
+                <span className="font-medium">Download Answer Keys (ZIP)</span>
+              </button>
+              <button
+                onClick={() => {
+                  handleDownload('quizzes_zip');
+                  setShowDownloadModal(false);
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Download className="w-5 h-5 text-brand-maroon" />
+                <span className="font-medium">Download Quizzes Only (ZIP)</span>
+              </button>
+            </div>
+            <button
+              onClick={() => setShowDownloadModal(false)}
+              className="w-full mt-4 px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </EducatorLayout>
   );
 }
