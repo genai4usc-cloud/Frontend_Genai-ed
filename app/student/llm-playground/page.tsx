@@ -10,7 +10,6 @@ import {
   Bot,
   Send,
   Trash2,
-  Settings as SettingsIcon,
   MessageSquare,
   ArrowLeftRight,
   Users,
@@ -676,7 +675,7 @@ export default function LLMPlayground() {
       case 'single':
         return `Ask ${AI_MODELS.find((m) => m.id === selectedModel)?.name} anything...`;
       case 'compare':
-        return activeCompareRun?.orchestratedThread ? 'Continue the conversation...' : 'Ask selected models the same question...';
+        return activeCompareRun?.orchestratedThread ? 'Continue the conversation...' : 'Ask selected models the same question (then orchestrate)...';
       case 'multi-judge':
         return 'Enter a prompt to evaluate for safety risks (multi-judge)...';
       case 'single-judge':
@@ -731,7 +730,7 @@ export default function LLMPlayground() {
   const renderCompareSidebar = () => (
     <div className="space-y-6">
       <div>
-        <h3 className="font-semibold text-gray-900 mb-2">Compare Models</h3>
+        <h3 className="font-semibold text-gray-900 mb-2">Compare and Orchestrate</h3>
         <p className="text-sm text-gray-600 mb-4">Select which models to compare.</p>
 
         <div className="space-y-2 mb-4">
@@ -933,7 +932,7 @@ export default function LLMPlayground() {
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <div className="flex items-center gap-2 mb-2">
                 <ArrowLeftRight className="w-5 h-5 text-brand-maroon" />
-                <h3 className="font-semibold text-gray-900">Compare Models</h3>
+                <h3 className="font-semibold text-gray-900">Compare and Orchestrate</h3>
               </div>
               <p className="text-sm text-gray-600">Send a prompt to create your first compare run.</p>
             </div>
@@ -950,7 +949,7 @@ export default function LLMPlayground() {
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
                 <div className="flex items-center gap-2">
                   <ArrowLeftRight className="w-5 h-5 text-brand-maroon" />
-                  <h3 className="font-semibold text-gray-900">Compare Run</h3>
+                  <h3 className="font-semibold text-gray-900">Compare and Orchestrate Run</h3>
                 </div>
                 <p className="text-sm text-gray-600 mt-1">{activeRun.prompt}</p>
               </div>
@@ -1408,7 +1407,7 @@ export default function LLMPlayground() {
               }`}
             >
               <MessageSquare className="w-4 h-4" />
-              Single Chat
+              Single Model
             </button>
 
             <button
@@ -1418,7 +1417,7 @@ export default function LLMPlayground() {
               }`}
             >
               <ArrowLeftRight className="w-4 h-4" />
-              Compare Models
+              Compare and Orchestrate
             </button>
 
             <button
@@ -1447,13 +1446,6 @@ export default function LLMPlayground() {
           <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto">
             <div className="p-4 space-y-4">
               {renderSidebarForMode(mode)}
-
-              <div className="pt-4 border-t border-gray-200">
-                <button className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors group">
-                  <span className="font-medium text-gray-700 group-hover:text-gray-900">Settings</span>
-                  <SettingsIcon className="w-5 h-5 text-gray-400 group-hover:text-gray-600" />
-                </button>
-              </div>
 
               <div>
                 <h3 className="font-semibold text-gray-900 mb-2">Quick Actions</h3>
@@ -1505,14 +1497,14 @@ export default function LLMPlayground() {
 
                   <h2 className="text-2xl font-bold text-gray-900 mb-2">
                     {mode === 'single' && 'Start a conversation'}
-                    {mode === 'compare' && 'Compare AI Responses'}
+                    {mode === 'compare' && 'Compare and Orchestrate'}
                     {mode === 'multi-judge' && 'Multi-Judge Evaluation'}
                     {mode === 'single-judge' && 'Single-Judge Evaluation'}
                   </h2>
 
                   <p className="text-gray-600 max-w-md">
                     {mode === 'single' && `Chat with ${AI_MODELS.find((m) => m.id === selectedModel)?.name}`}
-                    {mode === 'compare' && 'Ask the same question to selected models and compare'}
+                    {mode === 'compare' && 'Ask the same question to selected models, then orchestrate a final answer'}
                     {mode === 'multi-judge' && 'Multiple judges will evaluate your prompt for safety'}
                     {mode === 'single-judge' && 'Detailed evaluation from a single judge model'}
                   </p>
