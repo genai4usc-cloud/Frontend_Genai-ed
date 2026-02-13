@@ -25,7 +25,7 @@ interface QuizBatch {
 }
 
 interface Student {
-  student_id: string;
+  student_id: string | null;
   email: string;
   course_id: string;
   first_name?: string;
@@ -174,73 +174,30 @@ export default function CreateQuiz() {
   };
 
   const loadOrCreateBatch = async () => {
-    const { data: existingBatches } = await supabase
+    const { data, error } = await supabase
       .from('quiz_batches')
-      .select('*')
-      .eq('educator_id', profile!.id)
-      .eq('status', 'draft')
-      .order('created_at', { ascending: false })
-      .limit(1);
+      .insert({ educator_id: profile!.id, status: 'draft' })
+      .select()
+      .single();
 
-    if (existingBatches && existingBatches.length > 0) {
-      const batch = existingBatches[0];
-      setQuizBatchId(batch.id);
-      setQuizBatch(batch);
-      setCourseMode(batch.mode);
-      setMcqCount(batch.mcq_count || 5);
-      setUseFixedAnswerKey(batch.fixed_mcq_answer_key_enabled || false);
-      if (batch.fixed_mcq_answer_key) {
-        setAnswerKey(batch.fixed_mcq_answer_key);
-      }
-      setAdditionalInstructions(batch.additional_instructions || '');
-      setQuizName(batch.quiz_name || '');
-
-      await loadBatchCourses(batch.id);
-      await loadBatchMaterials(batch.id);
-      await loadBatchStudentFiles(batch.id);
+    if (error) {
+      console.error('Failed to create batch:', error);
+      return;
     }
-  };
 
-  const loadBatchCourses = async (batchId: string) => {
-    const { data } = await supabase
-      .from('quiz_batch_courses')
-      .select('course_id')
-      .eq('quiz_batch_id', batchId);
-
-    if (data) {
-      setSelectedCourseIds(new Set(data.map(c => c.course_id)));
-    }
-  };
-
-  const loadBatchMaterials = async (batchId: string) => {
-    const { data } = await supabase
-      .from('quiz_batch_materials')
-      .select('lecture_material_id')
-      .eq('quiz_batch_id', batchId);
-
-    if (data) {
-      setSelectedMaterialIds(new Set(data.map(m => m.lecture_material_id)));
-    }
-  };
-
-  const loadBatchStudentFiles = async (batchId: string) => {
-    const { data } = await supabase
-      .from('quiz_batch_student_files')
-      .select('*')
-      .eq('quiz_batch_id', batchId);
-
-    if (data) {
-      const filesMap = new Map<string, StudentFile>();
-      data.forEach(file => {
-        filesMap.set(file.student_id, {
-          student_id: file.student_id,
-          file_name: file.file_name,
-          file_url: file.file_url,
-          storage_path: file.storage_path,
-        });
-      });
-      setStudentFiles(filesMap);
-    }
+    setQuizBatchId(data.id);
+    setQuizBatch(data);
+    setCourseMode(null);
+    setSelectedCourseIds(new Set());
+    setSelectedMaterialIds(new Set());
+    setStudentFiles(new Map());
+    setStudents([]);
+    setMcqCount(5);
+    setUseFixedAnswerKey(false);
+    setAnswerKey([]);
+    setAdditionalInstructions('');
+    setQuizName('');
+    setExpandedStep(1);
   };
 
   const loadGeneratedQuizzes = async () => {
@@ -344,16 +301,24 @@ export default function CreateQuiz() {
 
   const loadStudentsForCourses = async () => {
     const courseIds = Array.from(selectedCourseIds);
-    const { data } = await supabase
+
+    const { data, error } = await supabase
       .from('course_students')
       .select('course_id, student_id, email')
-      .in('course_id', courseIds);
+      .in('course_id', courseIds)
+      .not('student_id', 'is', null);
+
+    if (error) {
+      console.error('Error loading students:', error);
+      return;
+    }
 
     if (data) {
       const uniqueStudents = new Map<string, Student>();
+
       data.forEach(s => {
         if (!uniqueStudents.has(s.student_id)) {
-          uniqueStudents.set(s.student_id, s);
+          uniqueStudents.set(s.student_id, s as Student);
         }
       });
 
@@ -832,7 +797,11 @@ export default function CreateQuiz() {
                           </div>
                         </div>
                         <div>
-                          {studentFiles.has(student.student_id) ? (
+                          {!student.student_id ? (
+                            <div className="text-sm text-red-600">
+                              Student not registered (missing student_id). Ask student to sign up / link account.
+                            </div>
+                          ) : studentFiles.has(student.student_id) ? (
                             <div className="flex items-center gap-2">
                               <span className="text-sm text-green-600 font-medium">
                                 {studentFiles.get(student.student_id)?.file_name}
@@ -840,14 +809,14 @@ export default function CreateQuiz() {
                               <button
                                 onClick={() => {
                                   const newFiles = new Map(studentFiles);
-                                  newFiles.delete(student.student_id);
+                                  newFiles.delete(student.student_id!);
                                   setStudentFiles(newFiles);
                                   if (quizBatchId) {
                                     supabase
                                       .from('quiz_batch_student_files')
                                       .delete()
                                       .eq('quiz_batch_id', quizBatchId)
-                                      .eq('student_id', student.student_id);
+                                      .eq('student_id', student.student_id!);
                                   }
                                 }}
                                 className="text-red-600 hover:text-red-800"
@@ -863,7 +832,7 @@ export default function CreateQuiz() {
                                 onChange={(e) => {
                                   const file = e.target.files?.[0];
                                   if (file) {
-                                    handleFileUpload(student.student_id, file);
+                                    handleFileUpload(student.student_id!, file);
                                   }
                                 }}
                                 disabled={uploadingStudent === student.student_id}
