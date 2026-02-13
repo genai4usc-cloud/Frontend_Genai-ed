@@ -1361,6 +1361,7 @@ export default function CreateQuiz() {
                           : null;
                         const fileUrl = quiz.student_file_url || (isEducator && firstMaterial ? firstMaterial.material_url : null);
 
+
                         return (
                           <div key={quiz.id} className="border border-gray-200 rounded-lg p-4 flex items-center justify-between">
                             <div>
