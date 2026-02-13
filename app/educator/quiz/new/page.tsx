@@ -375,13 +375,15 @@ export default function CreateQuiz() {
   const loadStudentsForCourses = async () => {
     const courseIds = Array.from(selectedCourseIds);
 
+    console.log('loadStudentsForCourses courseIds:', courseIds);
+
     const { data, error } = await supabase
       .from('course_students')
       .select(`
         course_id,
         student_id,
         email,
-        profiles:student_id (
+        student_profile:profiles!course_students_student_id_fkey (
           first_name,
           last_name
         )
@@ -389,48 +391,53 @@ export default function CreateQuiz() {
       .in('course_id', courseIds)
       .not('student_id', 'is', null);
 
+    console.log('loadStudentsForCourses result:', { data, error });
+
     if (error) {
       console.error('Error loading students:', error);
       return;
     }
 
-    if (data) {
-      const uniqueStudents = new Map<string, Student>();
+    if (!data) {
+      setStudents([]);
+      return;
+    }
 
-      data.forEach((row: any) => {
-        const sid = row.student_id as string | null;
-        if (!sid) return;
+    const uniqueStudents = new Map<string, Student>();
 
-        if (!uniqueStudents.has(sid)) {
-          uniqueStudents.set(sid, {
-            student_id: sid,
-            email: row.email,
-            course_id: row.course_id,
-            first_name: row.profiles?.first_name ?? undefined,
-            last_name: row.profiles?.last_name ?? undefined,
-          });
-        }
-      });
+    data.forEach((row: any) => {
+      const sid = row.student_id as string | null;
+      if (!sid) return;
 
-      const studentsList = Array.from(uniqueStudents.values());
-      setStudents(studentsList);
+      if (!uniqueStudents.has(sid)) {
+        uniqueStudents.set(sid, {
+          student_id: sid,
+          email: row.email,
+          course_id: row.course_id,
+          first_name: row.student_profile?.first_name ?? undefined,
+          last_name: row.student_profile?.last_name ?? undefined,
+        });
+      }
+    });
 
-      if (quizBatchId) {
+    const studentsList = Array.from(uniqueStudents.values());
+    setStudents(studentsList);
+
+    if (quizBatchId) {
+      await supabase
+        .from('quiz_batch_students')
+        .delete()
+        .eq('quiz_batch_id', quizBatchId);
+
+      if (studentsList.length > 0) {
         await supabase
           .from('quiz_batch_students')
-          .delete()
-          .eq('quiz_batch_id', quizBatchId);
-
-        if (studentsList.length > 0) {
-          await supabase
-            .from('quiz_batch_students')
-            .insert(
-              studentsList.map((s) => ({
-                quiz_batch_id: quizBatchId,
-                student_id: s.student_id!,
-              }))
-            );
-        }
+          .insert(
+            studentsList.map((s) => ({
+              quiz_batch_id: quizBatchId,
+              student_id: s.student_id!,
+            }))
+          );
       }
     }
   };
