@@ -281,7 +281,7 @@ export default function CreateQuiz() {
       });
     });
     setStudentFiles(filesMap);
-
+  };
 
   const loadGeneratedQuizzes = async () => {
     if (!quizBatchId) return;
