@@ -22,6 +22,7 @@ interface QuizBatch {
   additional_instructions: string | null;
   quiz_name: string | null;
   saved_at: string | null;
+  created_at: string;
 }
 
 interface Student {
@@ -100,6 +101,9 @@ export default function CreateQuiz() {
 
   const [expandedStep, setExpandedStep] = useState(1);
 
+  const [quizSettingsSaved, setQuizSettingsSaved] = useState(false);
+  const [promptSaved, setPromptSaved] = useState(false);
+
   useEffect(() => {
     checkAuth();
   }, []);
@@ -174,30 +178,99 @@ export default function CreateQuiz() {
   };
 
   const loadOrCreateBatch = async () => {
-    const { data, error } = await supabase
-      .from('quiz_batches')
-      .insert({ educator_id: profile!.id, status: 'draft' })
-      .select()
-      .single();
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
 
-    if (error) {
-      console.error('Failed to create batch:', error);
-      return;
+    const { data: existingBatch } = await supabase
+      .from('quiz_batches')
+      .select('*')
+      .eq('educator_id', profile!.id)
+      .eq('status', 'draft')
+      .gte('created_at', twoHoursAgo)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingBatch) {
+      setQuizBatchId(existingBatch.id);
+      setQuizBatch(existingBatch);
+      await loadBatchData(existingBatch.id, existingBatch);
+    } else {
+      const { data, error } = await supabase
+        .from('quiz_batches')
+        .insert({ educator_id: profile!.id, status: 'draft' })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Failed to create batch:', error);
+        return;
+      }
+
+      setQuizBatchId(data.id);
+      setQuizBatch(data);
+      setCourseMode(null);
+      setSelectedCourseIds(new Set());
+      setSelectedMaterialIds(new Set());
+      setStudentFiles(new Map());
+      setStudents([]);
+      setMcqCount(5);
+      setUseFixedAnswerKey(false);
+      setAnswerKey([]);
+      setAdditionalInstructions('');
+      setQuizName('');
+      setQuizSettingsSaved(false);
+      setPromptSaved(false);
+      setExpandedStep(1);
+    }
+  };
+
+  const loadBatchData = async (batchId: string, batch: QuizBatch) => {
+    setCourseMode(batch.mode);
+    setMcqCount(batch.mcq_count || 5);
+    setUseFixedAnswerKey(batch.fixed_mcq_answer_key_enabled || false);
+    setAnswerKey(batch.fixed_mcq_answer_key || []);
+    setAdditionalInstructions(batch.additional_instructions || '');
+    setQuizName(batch.quiz_name || '');
+
+    const { data: batchCourses } = await supabase
+      .from('quiz_batch_courses')
+      .select('course_id')
+      .eq('quiz_batch_id', batchId);
+
+    if (batchCourses && batchCourses.length > 0) {
+      setSelectedCourseIds(new Set(batchCourses.map(bc => bc.course_id)));
     }
 
-    setQuizBatchId(data.id);
-    setQuizBatch(data);
-    setCourseMode(null);
-    setSelectedCourseIds(new Set());
-    setSelectedMaterialIds(new Set());
-    setStudentFiles(new Map());
-    setStudents([]);
-    setMcqCount(5);
-    setUseFixedAnswerKey(false);
-    setAnswerKey([]);
-    setAdditionalInstructions('');
-    setQuizName('');
-    setExpandedStep(1);
+    const { data: batchMaterials } = await supabase
+      .from('quiz_batch_materials')
+      .select('lecture_material_id')
+      .eq('quiz_batch_id', batchId);
+
+    if (batchMaterials && batchMaterials.length > 0) {
+      setSelectedMaterialIds(new Set(batchMaterials.map(bm => bm.lecture_material_id)));
+    }
+
+    await loadStudentFilesForBatch(batchId);
+  };
+
+  const loadStudentFilesForBatch = async (batchId: string) => {
+    const { data: files } = await supabase
+      .from('quiz_batch_student_files')
+      .select('*')
+      .eq('quiz_batch_id', batchId);
+
+    if (files && files.length > 0) {
+      const filesMap = new Map<string, StudentFile>();
+      files.forEach(file => {
+        filesMap.set(file.student_id, {
+          student_id: file.student_id,
+          file_name: file.file_name,
+          file_url: file.file_url,
+          storage_path: file.storage_path,
+        });
+      });
+      setStudentFiles(filesMap);
+    }
   };
 
   const loadGeneratedQuizzes = async () => {
@@ -221,7 +294,7 @@ export default function CreateQuiz() {
             ...quiz,
             student_name: profileData
               ? `${profileData.first_name} ${profileData.last_name}`
-              : 'Student',
+              : quiz.student_id === profile?.id ? 'Educator' : 'Student',
           };
         })
       );
@@ -461,7 +534,7 @@ export default function CreateQuiz() {
   };
 
   const handleContinueToStep4 = () => {
-    if (students.length > 0 && (studentFiles.size > 0 || selectedMaterialIds.size > 0)) {
+    if (studentFiles.size > 0 || selectedMaterialIds.size > 0) {
       setExpandedStep(4);
     }
   };
@@ -481,6 +554,7 @@ export default function CreateQuiz() {
         })
         .eq('id', quizBatchId);
 
+      setQuizSettingsSaved(true);
       setExpandedStep(5);
     } catch (error) {
       console.error('Error saving quiz settings:', error);
@@ -502,6 +576,7 @@ export default function CreateQuiz() {
         })
         .eq('id', quizBatchId);
 
+      setPromptSaved(true);
       setExpandedStep(6);
     } catch (error) {
       console.error('Error saving instructions:', error);
@@ -595,13 +670,28 @@ export default function CreateQuiz() {
     }
   };
 
+  const calculateTargetCount = () => {
+    let count = 0;
+    studentFiles.forEach((file, studentId) => {
+      if (studentId !== profile?.id) {
+        count++;
+      }
+    });
+    if (studentFiles.has(profile?.id || '') || selectedMaterialIds.size > 0) {
+      count++;
+    }
+    return count;
+  };
+
   const isStep1Complete = selectedCourseIds.size > 0;
   const isStep2Complete = courseMode !== null;
-  const isStep3Complete = students.length > 0 && (studentFiles.size > 0 || selectedMaterialIds.size > 0);
-  const isStep4Complete = mcqCount > 0;
-  const isStep5Complete = true;
+  const isStep3Complete = studentFiles.size > 0 || selectedMaterialIds.size > 0;
+  const isStep4Complete = quizSettingsSaved;
+  const isStep5Complete = promptSaved;
   const isStep6Complete = quizBatch?.status === 'generated' || quizBatch?.status === 'saved';
   const isStep7Complete = quizBatch?.status === 'saved';
+
+  const educatorHasUpload = profile?.id && studentFiles.has(profile.id);
 
   if (loading || !profile) {
     return (
@@ -628,7 +718,6 @@ export default function CreateQuiz() {
         </div>
 
         <div className="space-y-4">
-          {/* Step 1: Select Course */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <button
               onClick={() => setExpandedStep(expandedStep === 1 ? 0 : 1)}
@@ -681,7 +770,6 @@ export default function CreateQuiz() {
             )}
           </div>
 
-          {/* Step 2: Select Course Type */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <button
               onClick={() => setExpandedStep(expandedStep === 2 ? 0 : 2)}
@@ -761,7 +849,6 @@ export default function CreateQuiz() {
             )}
           </div>
 
-          {/* Step 3: Select Materials */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <button
               onClick={() => setExpandedStep(expandedStep === 3 ? 0 : 3)}
@@ -813,16 +900,15 @@ export default function CreateQuiz() {
                                   ? `${student.first_name} ${student.last_name}`
                                   : 'Student'}
                               </div>
-                              <div className="text-sm text-gray-600 flex items-center gap-2">
-                                <span>{student.email}</span>
-                                <span>• 1234567890</span>
+                              <div className="text-sm text-gray-600">
+                                {student.email}
                               </div>
                             </div>
                           </div>
                           <div>
                             {!student.student_id ? (
                               <div className="text-sm text-red-600">
-                                Student not registered (missing student_id). Ask student to sign up / link account.
+                                Student not registered
                               </div>
                             ) : studentFiles.has(student.student_id) ? (
                               <div className="flex items-center gap-2">
@@ -879,6 +965,72 @@ export default function CreateQuiz() {
                         </div>
                       ))
                     )}
+                    <div className="flex items-center justify-between p-4 bg-blue-50 border-t-2 border-blue-200">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-200 rounded-full flex items-center justify-center">
+                          <Users className="w-5 h-5 text-blue-700" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900">Educator</div>
+                          <div className="text-sm text-gray-600">
+                            {profile.email}
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        {educatorHasUpload ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-green-600 font-medium">
+                              {studentFiles.get(profile.id)?.file_name}
+                            </span>
+                            <button
+                              onClick={() => {
+                                const newFiles = new Map(studentFiles);
+                                newFiles.delete(profile.id);
+                                setStudentFiles(newFiles);
+                                if (quizBatchId) {
+                                  supabase
+                                    .from('quiz_batch_student_files')
+                                    .delete()
+                                    .eq('quiz_batch_id', quizBatchId)
+                                    .eq('student_id', profile.id);
+                                }
+                              }}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="cursor-pointer">
+                            <input
+                              type="file"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handleFileUpload(profile.id, file);
+                                }
+                              }}
+                              disabled={uploadingStudent === profile.id}
+                            />
+                            <div className="flex items-center gap-2 text-brand-maroon border border-brand-maroon px-4 py-2 rounded-lg hover:bg-red-50 transition-colors">
+                              {uploadingStudent === profile.id ? (
+                                <>
+                                  <div className="w-4 h-4 border-2 border-brand-maroon border-t-transparent rounded-full animate-spin" />
+                                  <span className="font-medium text-sm">Uploading...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="w-4 h-4" />
+                                  <span className="font-medium text-sm">Upload File</span>
+                                </>
+                              )}
+                            </div>
+                          </label>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -891,26 +1043,32 @@ export default function CreateQuiz() {
                     Choose from textbooks, readings, and lecture notes to generate quizzes
                   </p>
                   <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
-                    {lectureMaterials.map((material, index) => (
-                      <label
-                        key={material.id}
-                        className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50 ${
-                          index < lectureMaterials.length - 1 ? 'border-b border-gray-200' : ''
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedMaterialIds.has(material.id)}
-                          onChange={() => handleMaterialToggle(material.id)}
-                          className="w-4 h-4 text-brand-maroon focus:ring-brand-maroon"
-                        />
-                        <FileText className="w-5 h-5 text-red-500" />
-                        <div className="flex-1">
-                          <div className="font-medium text-gray-900">{material.material_name}</div>
-                          <div className="text-sm text-gray-500">{material.course_number || 'Course'}</div>
-                        </div>
-                      </label>
-                    ))}
+                    {lectureMaterials.length === 0 ? (
+                      <div className="p-4 text-sm text-gray-600">
+                        No preloaded materials found for the selected course(s).
+                      </div>
+                    ) : (
+                      lectureMaterials.map((material, index) => (
+                        <label
+                          key={material.id}
+                          className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50 ${
+                            index < lectureMaterials.length - 1 ? 'border-b border-gray-200' : ''
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedMaterialIds.has(material.id)}
+                            onChange={() => handleMaterialToggle(material.id)}
+                            className="w-4 h-4 text-brand-maroon focus:ring-brand-maroon"
+                          />
+                          <FileText className="w-5 h-5 text-red-500" />
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900">{material.material_name}</div>
+                            <div className="text-sm text-gray-500">{material.course_number || 'Course'}</div>
+                          </div>
+                        </label>
+                      ))
+                    )}
                   </div>
                 </div>
 
@@ -928,7 +1086,6 @@ export default function CreateQuiz() {
             )}
           </div>
 
-          {/* Step 4: Quiz Type Settings */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <button
               onClick={() => setExpandedStep(expandedStep === 4 ? 0 : 4)}
@@ -1046,7 +1203,6 @@ export default function CreateQuiz() {
             )}
           </div>
 
-          {/* Step 5: Additional Prompt */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <button
               onClick={() => setExpandedStep(expandedStep === 5 ? 0 : 5)}
@@ -1055,9 +1211,9 @@ export default function CreateQuiz() {
             >
               <div className="flex items-center gap-4">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                  isStep5Complete && isStep6Complete ? 'bg-green-500 text-white' : isStep4Complete ? 'bg-brand-maroon text-white' : 'bg-gray-300 text-gray-500'
+                  isStep5Complete ? 'bg-green-500 text-white' : isStep4Complete ? 'bg-brand-maroon text-white' : 'bg-gray-300 text-gray-500'
                 }`}>
-                  {isStep5Complete && isStep6Complete ? <Check className="w-5 h-5" /> : '5'}
+                  {isStep5Complete ? <Check className="w-5 h-5" /> : '5'}
                 </div>
                 <div className="text-left">
                   <h3 className="font-semibold text-gray-900">Additional Prompt</h3>
@@ -1091,14 +1247,13 @@ export default function CreateQuiz() {
                     disabled={saving}
                     className="bg-brand-maroon text-white px-6 py-2 rounded-lg font-medium hover:bg-red-800 transition-colors disabled:opacity-50"
                   >
-                    {saving ? 'Saving...' : 'Continue to Generate Content'}
+                    {saving ? 'Saving...' : 'Continue to Generate'}
                   </button>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Step 6: Generate & Review Content */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <button
               onClick={() => setExpandedStep(expandedStep === 6 ? 0 : 6)}
@@ -1126,7 +1281,7 @@ export default function CreateQuiz() {
                     <Wand2 className="w-16 h-16 text-brand-maroon mx-auto mb-4" />
                     <h4 className="text-xl font-semibold text-gray-900 mb-2">Ready to Generate Quizzes</h4>
                     <p className="text-gray-600 mb-6">
-                      AI will generate {studentFiles.size || selectedMaterialIds.size} personalized quiz{(studentFiles.size || selectedMaterialIds.size) !== 1 ? 'zes' : ''} based on the selected materials
+                      AI will generate {calculateTargetCount()} personalized quiz{calculateTargetCount() !== 1 ? 'zes' : ''} based on the selected materials
                     </p>
                     <button
                       onClick={handleGenerateQuizzes}
@@ -1147,40 +1302,63 @@ export default function CreateQuiz() {
                     <h4 className="font-semibold text-gray-900">Generated Quizzes ({generatedQuizzes.length})</h4>
 
                     <div className="space-y-3">
-                      {generatedQuizzes.map((quiz) => (
-                        <div key={quiz.id} className="border border-gray-200 rounded-lg p-4 flex items-center justify-between">
-                          <div>
-                            <div className="font-semibold text-gray-900">{quiz.student_name}</div>
-                            <div className="text-sm text-gray-600">{quiz.student_file_name}</div>
-                            <div className="text-sm text-gray-500 mt-1">
-                              {quiz.mcq_count} Multiple Choice • {quiz.short_answer_count} Short Answer
+                      {generatedQuizzes.map((quiz) => {
+                        const isEducator = quiz.student_id === profile?.id;
+                        const firstMaterial = selectedMaterialIds.size > 0
+                          ? lectureMaterials.find(m => selectedMaterialIds.has(m.id))
+                          : null;
+                        const fileUrl = quiz.student_file_url || (isEducator && firstMaterial ? firstMaterial.material_url : null);
+
+                        return (
+                          <div key={quiz.id} className="border border-gray-200 rounded-lg p-4 flex items-center justify-between">
+                            <div>
+                              <div className="font-semibold text-gray-900">{quiz.student_name}</div>
+                              <div className="text-sm text-gray-600">{quiz.student_file_name}</div>
+                              <div className="text-sm text-gray-500 mt-1">
+                                {quiz.mcq_count} Multiple Choice • {quiz.short_answer_count} Short Answer
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => fileUrl && window.open(fileUrl, '_blank')}
+                                disabled={!fileUrl}
+                                className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
+                                  fileUrl
+                                    ? 'border-red-600 text-red-600 hover:bg-red-50'
+                                    : 'border-gray-300 text-gray-400 cursor-not-allowed'
+                                }`}
+                              >
+                                <FileText className="w-4 h-4" />
+                                <span className="text-sm font-medium">File</span>
+                              </button>
+                              <button
+                                onClick={() => quiz.quiz_pdf_url && window.open(quiz.quiz_pdf_url, '_blank')}
+                                disabled={!quiz.quiz_pdf_url}
+                                className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
+                                  quiz.quiz_pdf_url
+                                    ? 'border-red-600 text-red-600 hover:bg-red-50'
+                                    : 'border-gray-300 text-gray-400 cursor-not-allowed'
+                                }`}
+                              >
+                                <Eye className="w-4 h-4" />
+                                <span className="text-sm font-medium">Quiz</span>
+                              </button>
+                              <button
+                                onClick={() => quiz.answers_pdf_url && window.open(quiz.answers_pdf_url, '_blank')}
+                                disabled={!quiz.answers_pdf_url}
+                                className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
+                                  quiz.answers_pdf_url
+                                    ? 'border-red-600 text-red-600 hover:bg-red-50'
+                                    : 'border-gray-300 text-gray-400 cursor-not-allowed'
+                                }`}
+                              >
+                                <FileCheck className="w-4 h-4" />
+                                <span className="text-sm font-medium">Answers</span>
+                              </button>
                             </div>
                           </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => window.open(quiz.student_file_url, '_blank')}
-                              className="flex items-center gap-2 px-4 py-2 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                            >
-                              <FileText className="w-4 h-4" />
-                              <span className="text-sm font-medium">File</span>
-                            </button>
-                            <button
-                              onClick={() => window.open(quiz.quiz_pdf_url || '#', '_blank')}
-                              className="flex items-center gap-2 px-4 py-2 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                            >
-                              <Eye className="w-4 h-4" />
-                              <span className="text-sm font-medium">Quiz</span>
-                            </button>
-                            <button
-                              onClick={() => window.open(quiz.answers_pdf_url || '#', '_blank')}
-                              className="flex items-center gap-2 px-4 py-2 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                            >
-                              <FileCheck className="w-4 h-4" />
-                              <span className="text-sm font-medium">Answers</span>
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     <div className="flex justify-end mt-6">
@@ -1197,7 +1375,6 @@ export default function CreateQuiz() {
             )}
           </div>
 
-          {/* Step 7: Save & Download */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <button
               onClick={() => setExpandedStep(expandedStep === 7 ? 0 : 7)}
@@ -1312,17 +1489,7 @@ export default function CreateQuiz() {
                 className="w-full flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <Download className="w-5 h-5 text-brand-maroon" />
-                <span className="font-medium">Download All Quizzes (ZIP)</span>
-              </button>
-              <button
-                onClick={() => {
-                  handleDownload('answers_zip');
-                  setShowDownloadModal(false);
-                }}
-                className="w-full flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <Download className="w-5 h-5 text-brand-maroon" />
-                <span className="font-medium">Download Answer Keys (ZIP)</span>
+                <span className="font-medium">Download All Files (ZIP)</span>
               </button>
               <button
                 onClick={() => {
@@ -1333,6 +1500,16 @@ export default function CreateQuiz() {
               >
                 <Download className="w-5 h-5 text-brand-maroon" />
                 <span className="font-medium">Download Quizzes Only (ZIP)</span>
+              </button>
+              <button
+                onClick={() => {
+                  handleDownload('answers_zip');
+                  setShowDownloadModal(false);
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Download className="w-5 h-5 text-brand-maroon" />
+                <span className="font-medium">Download Answer Keys (ZIP)</span>
               </button>
             </div>
             <button
