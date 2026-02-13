@@ -386,8 +386,18 @@ export default function CreateQuiz() {
 
     const { data, error } = await supabase
       .from('course_students')
-      .select('id, course_id, student_id, email')
+      .select(`
+        id,
+        course_id,
+        student_id,
+        email,
+        student_profile:profiles!course_students_student_id_fkey!left (
+          first_name,
+          last_name
+        )
+      `)
       .in('course_id', courseIds);
+
     
     console.log("RAW course_students:", { data, error });
 
