@@ -304,7 +304,15 @@ export default function CreateQuiz() {
 
     const { data, error } = await supabase
       .from('course_students')
-      .select('course_id, student_id, email')
+      .select(`
+        course_id,
+        student_id,
+        email,
+        profiles:student_id (
+          first_name,
+          last_name
+        )
+      `)
       .in('course_id', courseIds)
       .not('student_id', 'is', null);
 
@@ -316,9 +324,18 @@ export default function CreateQuiz() {
     if (data) {
       const uniqueStudents = new Map<string, Student>();
 
-      data.forEach(s => {
-        if (!uniqueStudents.has(s.student_id)) {
-          uniqueStudents.set(s.student_id, s as Student);
+      data.forEach((row: any) => {
+        const sid = row.student_id as string | null;
+        if (!sid) return;
+
+        if (!uniqueStudents.has(sid)) {
+          uniqueStudents.set(sid, {
+            student_id: sid,
+            email: row.email,
+            course_id: row.course_id,
+            first_name: row.profiles?.first_name ?? undefined,
+            last_name: row.profiles?.last_name ?? undefined,
+          });
         }
       });
 
@@ -335,9 +352,9 @@ export default function CreateQuiz() {
           await supabase
             .from('quiz_batch_students')
             .insert(
-              studentsList.map(s => ({
+              studentsList.map((s) => ({
                 quiz_batch_id: quizBatchId,
-                student_id: s.student_id,
+                student_id: s.student_id!,
               }))
             );
         }
@@ -773,88 +790,95 @@ export default function CreateQuiz() {
                     <h4 className="font-semibold text-gray-900">Students from Selected Courses</h4>
                   </div>
                   <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
-                    {students.map((student, index) => (
-                      <div
-                        key={student.student_id}
-                        className={`flex items-center justify-between p-4 ${
-                          index < students.length - 1 ? 'border-b border-gray-200' : ''
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                            <Users className="w-5 h-5 text-brand-maroon" />
+                    {students.length === 0 ? (
+                      <div className="p-4 text-sm text-gray-600">
+                        No enrolled students found for the selected course(s).
+                        If you invited students by email, they must sign up so their account can be linked.
+                      </div>
+                    ) : (
+                      students.map((student, index) => (
+                        <div
+                          key={`${student.course_id}-${student.student_id ?? student.email}`}
+                          className={`flex items-center justify-between p-4 ${
+                            index < students.length - 1 ? 'border-b border-gray-200' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                              <Users className="w-5 h-5 text-brand-maroon" />
+                            </div>
+                            <div>
+                              <div className="font-medium text-gray-900">
+                                {student.first_name && student.last_name
+                                  ? `${student.first_name} ${student.last_name}`
+                                  : 'Student'}
+                              </div>
+                              <div className="text-sm text-gray-600 flex items-center gap-2">
+                                <span>{student.email}</span>
+                                <span>• 1234567890</span>
+                              </div>
+                            </div>
                           </div>
                           <div>
-                            <div className="font-medium text-gray-900">
-                              {student.first_name && student.last_name
-                                ? `${student.first_name} ${student.last_name}`
-                                : 'Student'}
-                            </div>
-                            <div className="text-sm text-gray-600 flex items-center gap-2">
-                              <span>{student.email}</span>
-                              <span>• 1234567890</span>
-                            </div>
+                            {!student.student_id ? (
+                              <div className="text-sm text-red-600">
+                                Student not registered (missing student_id). Ask student to sign up / link account.
+                              </div>
+                            ) : studentFiles.has(student.student_id) ? (
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-green-600 font-medium">
+                                  {studentFiles.get(student.student_id)?.file_name}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    const newFiles = new Map(studentFiles);
+                                    newFiles.delete(student.student_id!);
+                                    setStudentFiles(newFiles);
+                                    if (quizBatchId) {
+                                      supabase
+                                        .from('quiz_batch_student_files')
+                                        .delete()
+                                        .eq('quiz_batch_id', quizBatchId)
+                                        .eq('student_id', student.student_id!);
+                                    }
+                                  }}
+                                  className="text-red-600 hover:text-red-800"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              <label className="cursor-pointer">
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      handleFileUpload(student.student_id!, file);
+                                    }
+                                  }}
+                                  disabled={uploadingStudent === student.student_id}
+                                />
+                                <div className="flex items-center gap-2 text-brand-maroon border border-brand-maroon px-4 py-2 rounded-lg hover:bg-red-50 transition-colors">
+                                  {uploadingStudent === student.student_id ? (
+                                    <>
+                                      <div className="w-4 h-4 border-2 border-brand-maroon border-t-transparent rounded-full animate-spin" />
+                                      <span className="font-medium text-sm">Uploading...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Upload className="w-4 h-4" />
+                                      <span className="font-medium text-sm">Upload File</span>
+                                    </>
+                                  )}
+                                </div>
+                              </label>
+                            )}
                           </div>
                         </div>
-                        <div>
-                          {!student.student_id ? (
-                            <div className="text-sm text-red-600">
-                              Student not registered (missing student_id). Ask student to sign up / link account.
-                            </div>
-                          ) : studentFiles.has(student.student_id) ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-green-600 font-medium">
-                                {studentFiles.get(student.student_id)?.file_name}
-                              </span>
-                              <button
-                                onClick={() => {
-                                  const newFiles = new Map(studentFiles);
-                                  newFiles.delete(student.student_id!);
-                                  setStudentFiles(newFiles);
-                                  if (quizBatchId) {
-                                    supabase
-                                      .from('quiz_batch_student_files')
-                                      .delete()
-                                      .eq('quiz_batch_id', quizBatchId)
-                                      .eq('student_id', student.student_id!);
-                                  }
-                                }}
-                                className="text-red-600 hover:text-red-800"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ) : (
-                            <label className="cursor-pointer">
-                              <input
-                                type="file"
-                                className="hidden"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    handleFileUpload(student.student_id!, file);
-                                  }
-                                }}
-                                disabled={uploadingStudent === student.student_id}
-                              />
-                              <div className="flex items-center gap-2 text-brand-maroon border border-brand-maroon px-4 py-2 rounded-lg hover:bg-red-50 transition-colors">
-                                {uploadingStudent === student.student_id ? (
-                                  <>
-                                    <div className="w-4 h-4 border-2 border-brand-maroon border-t-transparent rounded-full animate-spin" />
-                                    <span className="font-medium text-sm">Uploading...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Upload className="w-4 h-4" />
-                                    <span className="font-medium text-sm">Upload File</span>
-                                  </>
-                                )}
-                              </div>
-                            </label>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
 
