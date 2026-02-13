@@ -48,7 +48,7 @@ interface LectureMaterial {
 }
 
 interface StudentFile {
-  course_student_id: string;
+  course_student_id: string | null;
   file_name: string;
   file_url: string;
   storage_path: string;
@@ -259,7 +259,7 @@ export default function CreateQuiz() {
   const loadStudentFilesForBatch = async (batchId: string) => {
     const { data: files, error } = await supabase
       .from('quiz_batch_student_files')
-      .select('course_student_id, file_name, file_url, storage_path')
+      .select('course_student_id, student_id, file_name, file_url, storage_path')
       .eq('quiz_batch_id', batchId);
 
     if (error) {
@@ -270,17 +270,18 @@ export default function CreateQuiz() {
 
     const filesMap = new Map<string, StudentFile>();
     (files || []).forEach((f: any) => {
-      if (!f.course_student_id) return;
-      filesMap.set(f.course_student_id, {
+      const key = f.course_student_id ?? f.student_id; // <--- important
+      if (!key) return;
+    
+      filesMap.set(key, {
         course_student_id: f.course_student_id,
         file_name: f.file_name,
         file_url: f.file_url,
         storage_path: f.storage_path,
       });
     });
-
     setStudentFiles(filesMap);
-  };
+
 
   const loadGeneratedQuizzes = async () => {
     if (!quizBatchId) return;
@@ -435,6 +436,7 @@ export default function CreateQuiz() {
     });
 
     const studentsList = Array.from(uniqueStudents.values());
+    const registered = studentsList.filter(s => !!s.student_id);
     setStudents(studentsList);
 
     if (quizBatchId) {
@@ -442,14 +444,15 @@ export default function CreateQuiz() {
         .from('quiz_batch_students')
         .delete()
         .eq('quiz_batch_id', quizBatchId);
+      
 
       if (studentsList.length > 0) {
         await supabase
           .from('quiz_batch_students')
           .insert(
-            studentsList.map((s) => ({
-              quiz_batch_id: quizBatchId,
-              student_id: s.student_id!,
+              registered.map((s) => ({
+                quiz_batch_id: quizBatchId,
+                student_id: s.student_id,
             }))
           );
       }
@@ -507,13 +510,18 @@ export default function CreateQuiz() {
     setSelectedMaterialIds(newSelected);
   };
 
-  const handleFileUpload = async (courseStudentId: string, file: File) => {
+  const handleFileUpload = async (
+      courseStudentId: string | null,
+      studentId: string,
+      file: File
+    ) => {
     if (!quizBatchId) return;
 
-    setUploadingStudent(courseStudentId);
+    const mapKey = courseStudentId ?? studentId;
+    setUploadingStudent(mapKey);
 
     try {
-      const storagePath = `quiz-student-files/${quizBatchId}/${courseStudentId}/${file.name}`;
+      const storagePath = `quiz-student-files/${quizBatchId}/${studentId}/${file.name}`;
       const { url, error } = await uploadFile(file, storagePath, 'quiz-student-materials');
 
       if (error || !url) {
@@ -527,18 +535,19 @@ export default function CreateQuiz() {
         .upsert(
           {
             quiz_batch_id: quizBatchId,
-            course_student_id: courseStudentId,
+            student_id: studentId,              // ✅ REQUIRED for backend matching
+            course_student_id: courseStudentId, // ✅ keep for traceability (nullable)
             file_name: file.name,
             file_url: url,
             storage_path: storagePath,
             file_mime: file.type,
             file_size_bytes: file.size,
           },
-          { onConflict: 'quiz_batch_id,course_student_id' }
+          { onConflict: 'quiz_batch_id,student_id' } // ✅ if you have this unique constraint
         );
 
       const newFiles = new Map(studentFiles);
-      newFiles.set(courseStudentId, {
+      newFiles.set(mapKey, {
         course_student_id: courseStudentId,
         file_name: file.name,
         file_url: url,
@@ -607,6 +616,22 @@ export default function CreateQuiz() {
   };
 
   const handleGenerateQuizzes = async () => {
+    // If no preloaded materials are selected, every registered student in the batch must have an upload
+    if (selectedMaterialIds.size === 0) {
+      const missing = students
+        .filter(s => !!s.student_id)
+        .filter(s => !studentFiles.has(s.enrollment_id)); // because your UI map is keyed by enrollment_id
+    
+      if (missing.length > 0) {
+        alert(
+          "Missing uploads for:\n" +
+          missing.map(s => s.email).join("\n") +
+          "\n\nUpload a file for them OR select at least one preloaded material."
+        );
+        return;
+      }
+    }
+
     if (!quizBatchId) return;
 
     setGenerating(true);
@@ -948,7 +973,7 @@ export default function CreateQuiz() {
                                         .from('quiz_batch_student_files')
                                         .delete()
                                         .eq('quiz_batch_id', quizBatchId)
-                                        .eq('course_student_id', student.enrollment_id);
+                                        .eq('student_id', student.student_id!);
                                     }
                                   }}
                                   className="text-red-600 hover:text-red-800"
@@ -964,7 +989,7 @@ export default function CreateQuiz() {
                                   onChange={(e) => {
                                     const file = e.target.files?.[0];
                                     if (file) {
-                                      handleFileUpload(student.enrollment_id, file);
+                                      handleFileUpload(student.enrollment_id, student.student_id!, file);
                                     }
                                   }}
                                   disabled={uploadingStudent === student.enrollment_id}
@@ -1016,7 +1041,7 @@ export default function CreateQuiz() {
                                     .from('quiz_batch_student_files')
                                     .delete()
                                     .eq('quiz_batch_id', quizBatchId)
-                                    .eq('course_student_id', profile.id);
+                                    .eq('student_id', profile.id);
                                 }
                               }}
                               className="text-red-600 hover:text-red-800"
@@ -1032,7 +1057,7 @@ export default function CreateQuiz() {
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
-                                  handleFileUpload(profile.id, file);
+                                  handleFileUpload(null, profile.id, file);
                                 }
                               }}
                               disabled={uploadingStudent === profile.id}
