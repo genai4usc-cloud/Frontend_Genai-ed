@@ -611,15 +611,18 @@ export default function CreateQuiz() {
 
     setGenerating(true);
     try {
-      const response = await fetch(`${base}/api/educator/quiz/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quizBatchId }),
-      });
+    const response = await fetch(`${base}/api/educator/quiz/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quizBatchId }),
+    });
+    
+    if (!response.ok) {
+      const text = await response.text(); // <-- IMPORTANT
+      console.error("Generate failed:", response.status, text);
+      throw new Error(text);
+    }
 
-      if (!response.ok) {
-        throw new Error('Failed to generate quizzes');
-      }
 
       const data = await response.json();
       setGeneratedQuizzes(data.quizzes);
