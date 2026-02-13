@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { uploadFile } from '@/lib/fileUpload';
 
+const base = process.env.NEXT_PUBLIC_BACKEND_BASE;
+
 interface QuizBatch {
   id: string;
   educator_id: string;
@@ -609,7 +611,7 @@ export default function CreateQuiz() {
 
     setGenerating(true);
     try {
-      const response = await fetch('/api/educator/quiz/generate', {
+      const response = await fetch(`${base}/api/educator/quiz/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quizBatchId }),
@@ -666,7 +668,7 @@ export default function CreateQuiz() {
 
     try {
       const response = await fetch(
-        `/api/educator/quiz/download?quizBatchId=${quizBatchId}&type=${type}`
+        `${base}/api/educator/quiz/download?quizBatchId=${quizBatchId}&type=${type}`
       );
 
       if (!response.ok) {
