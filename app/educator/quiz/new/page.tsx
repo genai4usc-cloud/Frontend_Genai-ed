@@ -620,7 +620,11 @@ export default function CreateQuiz() {
     if (selectedMaterialIds.size === 0) {
       const missing = students
         .filter(s => !!s.student_id)
-        .filter(s => !studentFiles.has(s.enrollment_id)); // because your UI map is keyed by enrollment_id
+        .filter(s => {
+          const enrollmentKey = s.enrollment_id;
+          const studentIdKey = s.student_id ?? '';
+          return !studentFiles.has(enrollmentKey) && !studentFiles.has(studentIdKey);
+        });
     
       if (missing.length > 0) {
         alert(
