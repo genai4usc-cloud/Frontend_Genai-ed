@@ -26,6 +26,7 @@ interface QuizBatch {
 }
 
 interface Student {
+  enrollment_id: string;
   student_id: string | null;
   email: string;
   course_id: string;
@@ -45,7 +46,7 @@ interface LectureMaterial {
 }
 
 interface StudentFile {
-  student_id: string;
+  course_student_id: string;
   file_name: string;
   file_url: string;
   storage_path: string;
@@ -254,23 +255,29 @@ export default function CreateQuiz() {
   };
 
   const loadStudentFilesForBatch = async (batchId: string) => {
-    const { data: files } = await supabase
+    const { data: files, error } = await supabase
       .from('quiz_batch_student_files')
-      .select('*')
+      .select('course_student_id, file_name, file_url, storage_path')
       .eq('quiz_batch_id', batchId);
 
-    if (files && files.length > 0) {
-      const filesMap = new Map<string, StudentFile>();
-      files.forEach(file => {
-        filesMap.set(file.student_id, {
-          student_id: file.student_id,
-          file_name: file.file_name,
-          file_url: file.file_url,
-          storage_path: file.storage_path,
-        });
-      });
-      setStudentFiles(filesMap);
+    if (error) {
+      console.error('Error loading batch student files:', error);
+      setStudentFiles(new Map());
+      return;
     }
+
+    const filesMap = new Map<string, StudentFile>();
+    (files || []).forEach((f: any) => {
+      if (!f.course_student_id) return;
+      filesMap.set(f.course_student_id, {
+        course_student_id: f.course_student_id,
+        file_name: f.file_name,
+        file_url: f.file_url,
+        storage_path: f.storage_path,
+      });
+    });
+
+    setStudentFiles(filesMap);
   };
 
   const loadGeneratedQuizzes = async () => {
@@ -380,6 +387,7 @@ export default function CreateQuiz() {
     const { data, error } = await supabase
       .from('course_students')
       .select(`
+        id,
         course_id,
         student_id,
         email,
@@ -388,8 +396,7 @@ export default function CreateQuiz() {
           last_name
         )
       `)
-      .in('course_id', courseIds)
-      .not('student_id', 'is', null);
+      .in('course_id', courseIds);
 
     console.log('loadStudentsForCourses result:', { data, error });
 
@@ -405,13 +412,14 @@ export default function CreateQuiz() {
 
     const uniqueStudents = new Map<string, Student>();
 
-    data.forEach((row: any) => {
-      const sid = row.student_id as string | null;
-      if (!sid) return;
+    (data || []).forEach((row: any) => {
+      const enrollmentId = row.id as string;
+      if (!enrollmentId) return;
 
-      if (!uniqueStudents.has(sid)) {
-        uniqueStudents.set(sid, {
-          student_id: sid,
+      if (!uniqueStudents.has(enrollmentId)) {
+        uniqueStudents.set(enrollmentId, {
+          enrollment_id: enrollmentId,
+          student_id: row.student_id ?? null,
           email: row.email,
           course_id: row.course_id,
           first_name: row.student_profile?.first_name ?? undefined,
@@ -493,47 +501,46 @@ export default function CreateQuiz() {
     setSelectedMaterialIds(newSelected);
   };
 
-  const handleFileUpload = async (studentId: string, file: File) => {
+  const handleFileUpload = async (courseStudentId: string, file: File) => {
     if (!quizBatchId) return;
 
-    setUploadingStudent(studentId);
+    setUploadingStudent(courseStudentId);
 
     try {
-      const storagePath = `quiz-student-files/${quizBatchId}/${studentId}/${file.name}`;
+      const storagePath = `quiz-student-files/${quizBatchId}/${courseStudentId}/${file.name}`;
       const { url, error } = await uploadFile(file, storagePath, 'quiz-student-materials');
 
-      if (error) {
+      if (error || !url) {
         console.error('Upload error:', error);
         alert('Failed to upload file');
         return;
       }
 
-      if (url) {
-        await supabase
-          .from('quiz_batch_student_files')
-          .upsert({
+      await supabase
+        .from('quiz_batch_student_files')
+        .upsert(
+          {
             quiz_batch_id: quizBatchId,
-            student_id: studentId,
+            course_student_id: courseStudentId,
             file_name: file.name,
             file_url: url,
             storage_path: storagePath,
             file_mime: file.type,
             file_size_bytes: file.size,
-          }, {
-            onConflict: 'quiz_batch_id,student_id',
-          });
+          },
+          { onConflict: 'quiz_batch_id,course_student_id' }
+        );
 
-        const newFiles = new Map(studentFiles);
-        newFiles.set(studentId, {
-          student_id: studentId,
-          file_name: file.name,
-          file_url: url,
-          storage_path: storagePath,
-        });
-        setStudentFiles(newFiles);
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
+      const newFiles = new Map(studentFiles);
+      newFiles.set(courseStudentId, {
+        course_student_id: courseStudentId,
+        file_name: file.name,
+        file_url: url,
+        storage_path: storagePath,
+      });
+      setStudentFiles(newFiles);
+    } catch (err) {
+      console.error('Upload error:', err);
       alert('Failed to upload file');
     } finally {
       setUploadingStudent(null);
@@ -679,8 +686,8 @@ export default function CreateQuiz() {
 
   const calculateTargetCount = () => {
     let count = 0;
-    studentFiles.forEach((file, studentId) => {
-      if (studentId !== profile?.id) {
+    studentFiles.forEach((file, courseStudentId) => {
+      if (courseStudentId !== profile?.id) {
         count++;
       }
     });
@@ -892,7 +899,7 @@ export default function CreateQuiz() {
                     ) : (
                       students.map((student, index) => (
                         <div
-                          key={`${student.course_id}-${student.student_id ?? student.email}`}
+                          key={student.enrollment_id}
                           className={`flex items-center justify-between p-4 ${
                             index < students.length - 1 ? 'border-b border-gray-200' : ''
                           }`}
@@ -917,22 +924,22 @@ export default function CreateQuiz() {
                               <div className="text-sm text-red-600">
                                 Student not registered
                               </div>
-                            ) : studentFiles.has(student.student_id) ? (
+                            ) : studentFiles.has(student.enrollment_id) ? (
                               <div className="flex items-center gap-2">
                                 <span className="text-sm text-green-600 font-medium">
-                                  {studentFiles.get(student.student_id)?.file_name}
+                                  {studentFiles.get(student.enrollment_id)?.file_name}
                                 </span>
                                 <button
                                   onClick={() => {
                                     const newFiles = new Map(studentFiles);
-                                    newFiles.delete(student.student_id!);
+                                    newFiles.delete(student.enrollment_id);
                                     setStudentFiles(newFiles);
                                     if (quizBatchId) {
                                       supabase
                                         .from('quiz_batch_student_files')
                                         .delete()
                                         .eq('quiz_batch_id', quizBatchId)
-                                        .eq('student_id', student.student_id!);
+                                        .eq('course_student_id', student.enrollment_id);
                                     }
                                   }}
                                   className="text-red-600 hover:text-red-800"
@@ -948,13 +955,13 @@ export default function CreateQuiz() {
                                   onChange={(e) => {
                                     const file = e.target.files?.[0];
                                     if (file) {
-                                      handleFileUpload(student.student_id!, file);
+                                      handleFileUpload(student.enrollment_id, file);
                                     }
                                   }}
-                                  disabled={uploadingStudent === student.student_id}
+                                  disabled={uploadingStudent === student.enrollment_id}
                                 />
                                 <div className="flex items-center gap-2 text-brand-maroon border border-brand-maroon px-4 py-2 rounded-lg hover:bg-red-50 transition-colors">
-                                  {uploadingStudent === student.student_id ? (
+                                  {uploadingStudent === student.enrollment_id ? (
                                     <>
                                       <div className="w-4 h-4 border-2 border-brand-maroon border-t-transparent rounded-full animate-spin" />
                                       <span className="font-medium text-sm">Uploading...</span>
@@ -1000,7 +1007,7 @@ export default function CreateQuiz() {
                                     .from('quiz_batch_student_files')
                                     .delete()
                                     .eq('quiz_batch_id', quizBatchId)
-                                    .eq('student_id', profile.id);
+                                    .eq('course_student_id', profile.id);
                                 }
                               }}
                               className="text-red-600 hover:text-red-800"
