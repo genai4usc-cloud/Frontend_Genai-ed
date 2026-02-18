@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Home, ClipboardCheck, FileText, GraduationCap, Library, BookOpen, LogOut, User } from 'lucide-react';
+import { Home, ClipboardCheck, FileText, GraduationCap, Library, BookOpen, LogOut, User, Bot } from 'lucide-react';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import Image from 'next/image';
 
@@ -42,6 +42,7 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
     { icon: FileText, label: 'Create Lecture', path: '/educator/lecture/new' },
     { icon: ClipboardCheck, label: 'Policy Suggestor', path: '/educator/policy-suggestor' },
     { icon: GraduationCap, label: 'Create Quiz', path: '/educator/quiz/new' },
+    { icon: Bot, label: 'LLM Playground', path: '/educator/llm-playground' },
   ];
 
   const getInitials = () => {

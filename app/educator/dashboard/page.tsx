@@ -6,7 +6,7 @@ import { supabase, Profile, Course, Lecture } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
 import CourseCard from '@/components/CourseCard';
 import LectureCard from '@/components/LectureCard';
-import { ClipboardCheck, FileText, GraduationCap, Plus } from 'lucide-react';
+import { ClipboardCheck, FileText, GraduationCap, Plus, Bot } from 'lucide-react';
 
 export default function EducatorDashboard() {
   const router = useRouter();
@@ -116,7 +116,7 @@ export default function EducatorDashboard() {
 
         <div>
           <h2 className="text-xl font-semibold text-gray-800 mb-4">What would you like to do today?</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <button
               onClick={() => router.push('/educator/lecture/new')}
               className="bg-white p-6 rounded-xl shadow-md hover:shadow-xl transition-all border border-gray-100 text-left group"
@@ -163,6 +163,20 @@ export default function EducatorDashboard() {
               </div>
               <h3 className="font-semibold text-lg text-gray-900 mb-2">Create Quiz</h3>
               <p className="text-gray-600 text-sm">Design assessments for your students</p>
+            </button>
+
+            <button
+              onClick={() => router.push('/educator/llm-playground')}
+              className="bg-white p-6 rounded-xl shadow-md hover:shadow-xl transition-all border border-gray-100 text-left group"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="bg-purple-600 p-3 rounded-xl">
+                  <Bot className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-gray-400 group-hover:text-gray-600 transition-colors">→</div>
+              </div>
+              <h3 className="font-semibold text-lg text-gray-900 mb-2">LLM Playground</h3>
+              <p className="text-gray-600 text-sm">Experiment with AI models and prompts</p>
             </button>
           </div>
         </div>
