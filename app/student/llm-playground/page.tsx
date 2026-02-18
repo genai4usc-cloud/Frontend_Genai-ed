@@ -136,6 +136,41 @@ async function apiPost(path: string, body: any): Promise<any> {
   return json;
 }
 
+type JudgeAssessment = {
+  targetModelId: string;
+  risk_score: number;
+  risk_label: string; // "LOW" | "MEDIUM" | "HIGH"
+  failure_modes?: string[];
+  evidence?: string[];
+  notes?: string;
+  latencyMs?: number;
+  error?: string | null;
+};
+
+function badgeClassForRisk(label: string) {
+  const v = (label || "").toUpperCase();
+  if (v === "LOW") return "bg-green-100 text-green-800 border-green-200";
+  if (v === "HIGH") return "bg-red-100 text-red-800 border-red-200";
+  return "bg-yellow-100 text-yellow-800 border-yellow-200"; // MEDIUM/default
+}
+
+function formatTooltip(a: JudgeAssessment) {
+  const lines: string[] = [];
+  lines.push(`Risk: ${a.risk_label} (${a.risk_score})`);
+  if (a.failure_modes?.length) lines.push(`Failure modes: ${a.failure_modes.join(", ")}`);
+  if (a.evidence?.length) lines.push(`Evidence: ${a.evidence.join(" | ")}`);
+  if (a.notes) lines.push(`Notes: ${a.notes}`);
+  if (a.latencyMs != null) lines.push(`Latency: ${a.latencyMs}ms`);
+  if (a.error) lines.push(`Error: ${a.error}`);
+  return lines.join("\n");
+}
+
+function safeNumber(x: any, fallback = 0) {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+
 export default function LLMPlayground() {
   const router = useRouter();
 
@@ -1201,9 +1236,10 @@ export default function LLMPlayground() {
               </div>
 
               {/* JUDGE ASSESSMENTS */}
+              {/* JUDGE ASSESSMENTS (MATRIX) */}
               <div>
-                <h4 className="font-semibold text-gray-900 mb-3">Judge Assessments</h4>
-
+                <h4 className="font-semibold text-gray-900 mb-3">Judge Assessments (Matrix)</h4>
+              
                 {hasError ? (
                   <p className="text-sm text-red-600">{(run.meta as any).error}</p>
                 ) : isLoading ? (
@@ -1211,23 +1247,154 @@ export default function LLMPlayground() {
                 ) : run.assessments.length === 0 ? (
                   <p className="text-sm text-gray-500 italic">No assessments returned.</p>
                 ) : (
-                  <div className="space-y-3">
-                    {run.assessments.map((a, idx) => {
-                      const judge = AI_MODELS.find((m) => m.id === a.modelId);
-                      return (
-                        <div key={`${run.id}-judge-${idx}`} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-lg">{judge?.icon}</span>
-                            <div className="font-medium text-gray-900 text-sm">{judge?.name}</div>
-                            <div className="text-xs text-gray-600">{a.latencyMs > 0 ? `${a.latencyMs}ms` : ''}</div>
-                          </div>
-                          <Markdown value={a.content?.value ?? (a.error ? `Error: ${a.error}` : '')} />
-                        </div>
-                      );
-                    })}
-                  </div>
+                  (() => {
+                    // Judges = one EnvelopeItem per judge model
+                    const judgeItems = run.assessments;
+              
+                    // Build judge list
+                    const judgeIds = judgeItems.map((j) => j.modelId);
+              
+                    // Targets (rows) come from primary models (preserve user selection order)
+                    const targetIds = run.primaryModelIds;
+              
+                    // Map: judgeId -> (targetId -> assessment)
+                    const matrix: Record<string, Record<string, JudgeAssessment | null>> = {};
+                    for (const j of judgeItems) {
+                      const perTarget = (j.structured?.assessments || []) as JudgeAssessment[];
+                      const byTarget: Record<string, JudgeAssessment> = {};
+                      for (const a of perTarget) byTarget[a.targetModelId] = a;
+                      matrix[j.modelId] = {};
+                      for (const t of targetIds) matrix[j.modelId][t] = byTarget[t] ?? null;
+                    }
+              
+                    // Optional: consensus stats per target (mean + disagreement)
+                    const consensus: Record<string, { mean: number; min: number; max: number }> = {};
+                    for (const t of targetIds) {
+                      const scores = judgeIds
+                        .map((jid) => matrix[jid]?.[t]?.risk_score)
+                        .filter((v) => v != null)
+                        .map((v) => safeNumber(v, 0));
+              
+                      if (!scores.length) {
+                        consensus[t] = { mean: 0, min: 0, max: 0 };
+                      } else {
+                        const sum = scores.reduce((a, b) => a + b, 0);
+                        consensus[t] = {
+                          mean: sum / scores.length,
+                          min: Math.min(...scores),
+                          max: Math.max(...scores),
+                        };
+                      }
+                    }
+              
+                    return (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full border border-gray-200 rounded-lg overflow-hidden">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="text-left text-xs font-semibold text-gray-700 px-3 py-2 border-b border-gray-200">
+                                Primary Model
+                              </th>
+              
+                              {judgeIds.map((jid) => {
+                                const jm = AI_MODELS.find((m) => m.id === jid);
+                                return (
+                                  <th
+                                    key={jid}
+                                    className="text-left text-xs font-semibold text-gray-700 px-3 py-2 border-b border-gray-200"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-base">{jm?.icon}</span>
+                                      <span>{jm?.name ?? jid}</span>
+                                    </div>
+                                  </th>
+                                );
+                              })}
+              
+                              <th className="text-left text-xs font-semibold text-gray-700 px-3 py-2 border-b border-gray-200">
+                                Consensus
+                              </th>
+                            </tr>
+                          </thead>
+              
+                          <tbody className="bg-white">
+                            {targetIds.map((tid) => {
+                              const tm = AI_MODELS.find((m) => m.id === tid);
+                              const c = consensus[tid];
+              
+                              return (
+                                <tr key={tid} className="border-b border-gray-100">
+                                  {/* Row header: primary model */}
+                                  <td className="px-3 py-3 text-sm text-gray-900">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-lg">{tm?.icon}</span>
+                                      <div>
+                                        <div className="font-medium">{tm?.name ?? tid}</div>
+                                        <div className="text-xs text-gray-500">{tid}</div>
+                                      </div>
+                                    </div>
+                                  </td>
+              
+                                  {/* Cells: one per judge */}
+                                  {judgeIds.map((jid) => {
+                                    const a = matrix[jid]?.[tid] ?? null;
+              
+                                    if (!a) {
+                                      return (
+                                        <td key={`${tid}-${jid}`} className="px-3 py-3 text-sm text-gray-500">
+                                          —
+                                        </td>
+                                      );
+                                    }
+              
+                                    const tooltip = formatTooltip(a);
+                                    const badgeCls = badgeClassForRisk(a.risk_label);
+              
+                                    return (
+                                      <td key={`${tid}-${jid}`} className="px-3 py-3">
+                                        <div
+                                          title={tooltip}
+                                          className={`inline-flex items-center gap-2 px-2 py-1 rounded-md border text-xs font-semibold cursor-help ${badgeCls}`}
+                                        >
+                                          <span>{String(a.risk_label || "MEDIUM").toUpperCase()}</span>
+                                          <span className="opacity-80">({safeNumber(a.risk_score, 0)})</span>
+                                        </div>
+                                        {a.failure_modes?.length ? (
+                                          <div className="mt-1 text-[11px] text-gray-500 line-clamp-1" title={a.failure_modes.join(", ")}>
+                                            {a.failure_modes.join(", ")}
+                                          </div>
+                                        ) : null}
+                                      </td>
+                                    );
+                                  })}
+              
+                                  {/* Consensus column */}
+                                  <td className="px-3 py-3 text-sm">
+                                    <div className="text-xs text-gray-700">
+                                      <div>
+                                        <span className="font-semibold">Mean:</span>{" "}
+                                        {Number.isFinite(c.mean) ? c.mean.toFixed(1) : "—"}
+                                      </div>
+                                      <div className="text-[11px] text-gray-500">
+                                        Min/Max: {c.min} / {c.max}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+              
+                        <p className="text-xs text-gray-500 mt-2">
+                          Hover any cell to see failure modes, evidence, notes, and latency.
+                        </p>
+                      </div>
+                    );
+                  })()
                 )}
               </div>
+
 
               {/* META (DEBUG) */}
               <div>
