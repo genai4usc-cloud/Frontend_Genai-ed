@@ -146,6 +146,21 @@ export default function EducatorDashboard() {
             </button>
 
             <button
+              onClick={() => router.push('/educator/quiz/new')}
+              className="bg-white p-6 rounded-xl shadow-md hover:shadow-xl transition-all border border-gray-100 text-left group"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="bg-green-600 p-3 rounded-xl">
+                  <GraduationCap className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-400 group-hover:text-gray-600 transition-colors">
+                </div>
+              </div>
+              <h3 className="font-semibold text-lg text-gray-900 mb-2">Create Quiz</h3>
+              <p className="text-gray-600 text-sm">Design assessments for your students</p>
+            </button>
+            
+            <button
               onClick={() => router.push('/educator/policy-suggestor')}
               className="bg-white p-6 rounded-xl shadow-md hover:shadow-xl transition-all border border-gray-100 text-left group"
             >
@@ -161,22 +176,6 @@ export default function EducatorDashboard() {
               <h3 className="font-semibold text-lg text-gray-900 mb-2">Policy Suggestor</h3>
               <p className="text-gray-600 text-sm">Get AI-powered policy recommendations</p>
             </button>
-
-            <button
-              onClick={() => router.push('/educator/quiz/new')}
-              className="bg-white p-6 rounded-xl shadow-md hover:shadow-xl transition-all border border-gray-100 text-left group"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="bg-green-600 p-3 rounded-xl">
-                  <GraduationCap className="w-6 h-6 text-white" />
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-400 group-hover:text-gray-600 transition-colors">
-                </div>
-              </div>
-              <h3 className="font-semibold text-lg text-gray-900 mb-2">Create Quiz</h3>
-              <p className="text-gray-600 text-sm">Design assessments for your students</p>
-            </button>
-
 
           </div>
         </div>
