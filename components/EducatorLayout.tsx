@@ -39,10 +39,10 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
 
   const navItems = [
     { icon: Home, label: 'Dashboard', path: '/educator/dashboard' },
-    { icon: FileText, label: 'Create Lecture', path: '/educator/lecture/new' },
-    { icon: ClipboardCheck, label: 'Policy Suggestor', path: '/educator/policy-suggestor' },
-    { icon: GraduationCap, label: 'Create Quiz', path: '/educator/quiz/new' },
     { icon: Bot, label: 'LLM Playground', path: '/educator/llm-playground' },
+    { icon: FileText, label: 'Create Lecture', path: '/educator/lecture/new' },
+    { icon: GraduationCap, label: 'Create Quiz', path: '/educator/quiz/new' },
+    { icon: ClipboardCheck, label: 'Policy Suggestor', path: '/educator/policy-suggestor' },
   ];
 
   const getInitials = () => {
@@ -62,7 +62,7 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
               <p className="text-sm text-white/80">Empowering Education with AI</p>
             </div>
           </div>
-
+ 
           <div className="flex items-center gap-4">
             <button className="bg-brand-yellow text-black px-6 py-2 rounded-lg font-semibold hover:bg-brand-yellow-hover transition-colors flex items-center gap-2">
               <LogOut className="w-4 h-4" />
