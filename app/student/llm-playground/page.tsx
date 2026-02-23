@@ -106,10 +106,17 @@ const AI_MODELS: AIModel[] = [
 
 const BACKEND_BASE = process.env.NEXT_PUBLIC_BACKEND_BASE || 'https://backend-genai-ed.onrender.com';
 
+function getEnvelopeText(item?: EnvelopeItem | null): string {
+  const v = item?.content?.value;
+  if (typeof v === 'string' && v.trim().length > 0) return v;
+  if (item?.error) return `Error: ${item.error}`;
+  return 'No response';
+}
+
 function toLlmOutputs(items: EnvelopeItem[]): LlmOutput[] {
   return (items || []).map((it) => ({
     modelId: it.modelId,
-    text: it.content?.value ?? '',
+    text: (it.content?.value && it.content.value.trim().length > 0) ? it.content.value : '',
     latencyMs: it.latencyMs ?? 0,
     error: it.error ?? undefined,
   }));
@@ -316,7 +323,7 @@ export default function LLMPlayground() {
 
         const env = resp as EnvelopeResponse;
         const item = env.items?.[0];
-        const text = item?.content?.value ?? (item?.error ? `Error: ${item.error}` : 'No response');
+        const text = getEnvelopeText(item);
 
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
@@ -573,7 +580,7 @@ export default function LLMPlayground() {
 
         const judgeEnv = judgeResp as EnvelopeResponse;
         const item = judgeEnv.items?.[0];
-        const report = item?.content?.value ?? (item?.error ? `Error: ${item.error}` : '');
+        const report = getEnvelopeText(item);
 
         setSingleJudgeRuns((prev) =>
           prev.map((r) => {
@@ -636,8 +643,7 @@ export default function LLMPlayground() {
 
       const finalAnswer =
         item?.structured?.finalAnswer ??
-        item?.content?.value ??
-        (item?.error ? `Error: ${item.error}` : '');
+        getEnvelopeText(item);
 
       const rationale =
         item?.structured?.rationale ?? '';
@@ -1034,7 +1040,7 @@ export default function LLMPlayground() {
                           </div>
                         </div>
                         <div className="p-3">
-                          <Markdown value={output.content?.value ?? (output.error ? `Error: ${output.error}` : '')} />
+                          <Markdown value={getEnvelopeText(output)} />
                         </div>
                       </div>
                     );
@@ -1089,7 +1095,7 @@ export default function LLMPlayground() {
                                 </div>
                               </div>
                               <div className="p-3">
-                                <Markdown value={output.content?.value ?? (output.error ? `Error: ${output.error}` : '')} />
+                                <Markdown value={getEnvelopeText(output)} />
                               </div>
                             </div>
                           );
@@ -1374,7 +1380,7 @@ export default function LLMPlayground() {
                             </div>
                           </div>
                           <div className="p-3">
-                            <Markdown value={output.content?.value ?? (output.error ? `Error: ${output.error}` : '')} />
+                            <Markdown value={getEnvelopeText(output)} />
                           </div>
                         </div>
                       );
@@ -1633,10 +1639,7 @@ export default function LLMPlayground() {
 
                               <div className="p-3">
                                 <Markdown
-                                  value={
-                                    output?.content?.value ??
-                                    (output?.error ? `Error: ${output.error}` : 'No response')
-                                  }
+                                  value={getEnvelopeText(output)}
                                 />
                               </div>
                             </div>
