@@ -21,7 +21,6 @@ import {
   Sparkles,
   X,
   Settings2,
-  Sliders,
   ChevronLeft,
   ChevronRight,
   Menu
@@ -145,7 +144,7 @@ async function apiPost(path: string, body: any): Promise<any> {
 type JudgeAssessment = {
   targetModelId: string;
   risk_score: number;
-  risk_label: string; // "LOW" | "MEDIUM" | "HIGH"
+  risk_label: string;
   failure_modes?: string[];
   evidence?: string[];
   notes?: string;
@@ -157,41 +156,13 @@ function badgeClassForRisk(label: string) {
   const v = (label || "").toUpperCase();
   if (v === "LOW") return "bg-green-100 text-green-800 border-green-200";
   if (v === "HIGH") return "bg-red-100 text-red-800 border-red-200";
-  return "bg-yellow-100 text-yellow-800 border-yellow-200"; // MEDIUM/default
-}
-
-function formatTooltip(a: JudgeAssessment) {
-  const lines: string[] = [];
-  lines.push(`Risk: ${a.risk_label} (${a.risk_score})`);
-  if (a.failure_modes?.length) lines.push(`Failure modes: ${a.failure_modes.join(", ")}`);
-  if (a.evidence?.length) lines.push(`Evidence: ${a.evidence.join(" | ")}`);
-  if (a.notes) lines.push(`Notes: ${a.notes}`);
-  if (a.latencyMs != null) lines.push(`Latency: ${a.latencyMs}ms`);
-  if (a.error) lines.push(`Error: ${a.error}`);
-  return lines.join("\n");
+  return "bg-yellow-100 text-yellow-800 border-yellow-200";
 }
 
 function safeNumber(x: any, fallback = 0) {
   const n = Number(x);
   return Number.isFinite(n) ? n : fallback;
 }
-
-function parseAssessmentDetails(content: string): { risk?: string; notes?: string; latency?: string } | null {
-  try {
-    const riskMatch = content.match(/Risk:\s*([^\n]+)/i);
-    const notesMatch = content.match(/Notes:\s*([^\n]+)/i);
-    const latencyMatch = content.match(/Latency:\s*(\d+)\s*ms/i);
-
-    return {
-      risk: riskMatch?.[1]?.trim(),
-      notes: notesMatch?.[1]?.trim(),
-      latency: latencyMatch?.[1]?.trim(),
-    };
-  } catch {
-    return null;
-  }
-}
-
 
 export default function LLMPlayground() {
   const router = useRouter();
@@ -200,7 +171,7 @@ export default function LLMPlayground() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<Mode>('single');
 
-  const [selectedModel, setSelectedModel] = useState<string>('gpt-5.1');
+  const [selectedModel, setSelectedModel] = useState<string>('gpt-5.2-chat');
   const [singleMessages, setSingleMessages] = useState<Message[]>([]);
 
   const [compareModelIds, setCompareModelIds] = useState<string[]>(AI_MODELS.map((m) => m.id));
@@ -212,7 +183,7 @@ export default function LLMPlayground() {
   const [multiJudgeRuns, setMultiJudgeRuns] = useState<MultiJudgeRun[]>([]);
 
   const [singleJudgePrimaryIds, setSingleJudgePrimaryIds] = useState<string[]>(AI_MODELS.map((m) => m.id));
-  const [singleJudgeEvaluatorId, setSingleJudgeEvaluatorId] = useState<string>('claude-opus-4.5');
+  const [singleJudgeEvaluatorId, setSingleJudgeEvaluatorId] = useState<string>('claude-sonnet-4.5');
   const [singleJudgeRuns, setSingleJudgeRuns] = useState<SingleJudgeRun[]>([]);
 
   const [input, setInput] = useState('');
@@ -226,11 +197,9 @@ export default function LLMPlayground() {
   const [expandedOutputs, setExpandedOutputs] = useState<Set<string>>(new Set());
   const [expandedReports, setExpandedReports] = useState<Set<string>>(new Set());
   const [openCell, setOpenCell] = useState<null | { runId: string; primaryId: string; judgeId: string }>(null);
-  const [showMultiJudgeSettings, setShowMultiJudgeSettings] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSettingsOpen, setIsMobileSettingsOpen] = useState(false);
 
-  // These are UI-only fields for the active compare run orchestration controls
   const [orchestratorModelId, setOrchestratorModelId] = useState<string>('');
   const [orchestrationPrompt, setOrchestrationPrompt] = useState<string>('');
 
@@ -244,18 +213,14 @@ export default function LLMPlayground() {
       if (keyEvent.key === 'Escape' && openCell) {
         setOpenCell(null);
       }
-      if (keyEvent.key === 'Escape' && showMultiJudgeSettings) {
-        setShowMultiJudgeSettings(false);
-      }
       if (keyEvent.key === 'Escape' && isMobileSettingsOpen) {
         setIsMobileSettingsOpen(false);
       }
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [openCell, showMultiJudgeSettings, isMobileSettingsOpen]);
+  }, [openCell, isMobileSettingsOpen]);
 
-  // Ensure compare mode always has a valid active run selected when runs exist
   useEffect(() => {
     if (mode !== 'compare') return;
     if (compareRuns.length === 0) {
@@ -267,7 +232,6 @@ export default function LLMPlayground() {
     }
   }, [mode, compareRuns, activeCompareRunId]);
 
-  // Sync orchestration UI controls with the currently active run (so it "exists")
   useEffect(() => {
     if (mode !== 'compare') return;
     const activeRun = compareRuns.find((r) => r.id === activeCompareRunId);
@@ -276,7 +240,6 @@ export default function LLMPlayground() {
       setOrchestrationPrompt('');
       return;
     }
-    // Only prefill if user hasn't typed something already
     setOrchestratorModelId(activeRun.orchestratorModelId ?? '');
     setOrchestrationPrompt(activeRun.orchestrationPrompt ?? '');
   }, [mode, activeCompareRunId, compareRuns]);
@@ -1054,7 +1017,6 @@ export default function LLMPlayground() {
               </div>
 
               <div className="p-4 space-y-4">
-                {/* Side-by-side outputs always */}
                 <div className={`grid grid-cols-1 ${getGridCols(activeRun.outputs.length)} gap-4`}>
                   {activeRun.outputs.map((output) => {
                     const model = AI_MODELS.find(m => m.id === output.modelId);
@@ -1079,7 +1041,6 @@ export default function LLMPlayground() {
                   })}
                 </div>
 
-                {/* If final answer exists, show it + rationale + thread */}
                 {activeRun.finalAnswer && activeRun.rationale ? (
                   <>
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
@@ -1173,7 +1134,6 @@ export default function LLMPlayground() {
                     )}
                   </>
                 ) : (
-                  /* Orchestration UI when final answer not generated yet */
                   <div className="border-t border-gray-200 pt-4">
                     <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-brand-maroon" />
@@ -1391,7 +1351,6 @@ export default function LLMPlayground() {
             </div>
 
             <div className="p-6 space-y-6">
-              {/* PRIMARY MODEL OUTPUTS */}
               <div>
                 <h4 className="font-semibold text-gray-900 mb-3">Primary Model Outputs</h4>
 
@@ -1424,11 +1383,9 @@ export default function LLMPlayground() {
                 )}
               </div>
 
-              {/* JUDGE ASSESSMENTS */}
-              {/* JUDGE ASSESSMENTS (MATRIX) */}
               <div>
                 <h4 className="font-semibold text-gray-900 mb-3">Judge Assessments (Matrix)</h4>
-              
+
                 {hasError ? (
                   <p className="text-sm text-red-600">{(run.meta as any).error}</p>
                 ) : isLoading ? (
@@ -1437,16 +1394,10 @@ export default function LLMPlayground() {
                   <p className="text-sm text-gray-500 italic">No assessments returned.</p>
                 ) : (
                   (() => {
-                    // Judges = one EnvelopeItem per judge model
                     const judgeItems = run.assessments;
-              
-                    // Build judge list
                     const judgeIds = judgeItems.map((j) => j.modelId);
-              
-                    // Targets (rows) come from primary models (preserve user selection order)
                     const targetIds = run.primaryModelIds;
-              
-                    // Map: judgeId -> (targetId -> assessment)
+
                     const matrix: Record<string, Record<string, JudgeAssessment | null>> = {};
                     for (const j of judgeItems) {
                       const perTarget = (j.structured?.assessments || []) as JudgeAssessment[];
@@ -1455,15 +1406,14 @@ export default function LLMPlayground() {
                       matrix[j.modelId] = {};
                       for (const t of targetIds) matrix[j.modelId][t] = byTarget[t] ?? null;
                     }
-              
-                    // Optional: consensus stats per target (mean + disagreement)
+
                     const consensus: Record<string, { mean: number; min: number; max: number }> = {};
                     for (const t of targetIds) {
                       const scores = judgeIds
                         .map((jid) => matrix[jid]?.[t]?.risk_score)
                         .filter((v) => v != null)
                         .map((v) => safeNumber(v, 0));
-              
+
                       if (!scores.length) {
                         consensus[t] = { mean: 0, min: 0, max: 0 };
                       } else {
@@ -1475,7 +1425,7 @@ export default function LLMPlayground() {
                         };
                       }
                     }
-              
+
                     return (
                       <div className="overflow-x-auto">
                         <table className="min-w-full border border-gray-200 rounded-lg overflow-hidden">
@@ -1484,7 +1434,7 @@ export default function LLMPlayground() {
                               <th className="text-left text-xs font-semibold text-gray-700 px-3 py-2 border-b border-gray-200">
                                 Primary Model
                               </th>
-              
+
                               {judgeIds.map((jid) => {
                                 const jm = AI_MODELS.find((m) => m.id === jid);
                                 return (
@@ -1499,21 +1449,20 @@ export default function LLMPlayground() {
                                   </th>
                                 );
                               })}
-              
+
                               <th className="text-left text-xs font-semibold text-gray-700 px-3 py-2 border-b border-gray-200">
                                 Consensus
                               </th>
                             </tr>
                           </thead>
-              
+
                           <tbody className="bg-white">
                             {targetIds.map((tid) => {
                               const tm = AI_MODELS.find((m) => m.id === tid);
                               const c = consensus[tid];
-              
+
                               return (
                                 <tr key={tid} className="border-b border-gray-100">
-                                  {/* Row header: primary model */}
                                   <td className="px-3 py-3 text-sm text-gray-900">
                                     <div className="flex items-center gap-2">
                                       <span className="text-lg">{tm?.icon}</span>
@@ -1523,8 +1472,7 @@ export default function LLMPlayground() {
                                       </div>
                                     </div>
                                   </td>
-              
-                                  {/* Cells: one per judge */}
+
                                   {judgeIds.map((jid) => {
                                     const a = matrix[jid]?.[tid] ?? null;
 
@@ -1555,8 +1503,7 @@ export default function LLMPlayground() {
                                       </td>
                                     );
                                   })}
-              
-                                  {/* Consensus column */}
+
                                   <td className="px-3 py-3 text-sm">
                                     <div className="text-xs text-gray-700">
                                       <div>
@@ -1573,7 +1520,7 @@ export default function LLMPlayground() {
                             })}
                           </tbody>
                         </table>
-              
+
                         <p className="text-xs text-gray-500 mt-2">
                           Click any cell to see detailed assessment including failure modes, evidence, notes, and latency.
                         </p>
@@ -1583,8 +1530,6 @@ export default function LLMPlayground() {
                 )}
               </div>
 
-
-              {/* META (DEBUG) */}
               <div>
                 <h4 className="font-semibold text-gray-900 mb-2">Meta (Debug)</h4>
                 <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-4 rounded-lg overflow-x-auto">
@@ -1642,7 +1587,6 @@ export default function LLMPlayground() {
             </div>
 
             <div className="px-6 py-4 space-y-4">
-              {/* WHEN COLLAPSED: show ONLY evaluation report */}
               {!expandedReports.has(run.id) && (
                 <div>
                   <h4 className="text-sm font-semibold text-gray-900 mb-2">Evaluation Report</h4>
@@ -1657,10 +1601,8 @@ export default function LLMPlayground() {
                 </div>
               )}
 
-              {/* WHEN EXPANDED: show 3-model grid FIRST, then evaluation report */}
               {expandedReports.has(run.id) && (
                 <>
-                  {/* 1) PRIMARY OUTPUTS FIRST (GRID) */}
                   <div>
                     <h4 className="text-sm font-semibold text-gray-900 mb-2">Primary Model Outputs</h4>
 
@@ -1704,7 +1646,6 @@ export default function LLMPlayground() {
                     )}
                   </div>
 
-                  {/* 2) EVALUATION REPORT AFTER */}
                   <div className="border-t border-gray-200 pt-4">
                     <h4 className="text-sm font-semibold text-gray-900 mb-2">Evaluation Report</h4>
 
@@ -1751,7 +1692,7 @@ export default function LLMPlayground() {
       <div className="h-[calc(100vh-80px)] flex flex-col">
         <div className="bg-brand-maroon text-white px-6 py-4 rounded-t-2xl">
           <h1 className="text-2xl font-bold">LLM Playground</h1>
-          <p className="text-sm text-white/90 mt-1">Chat with AI models - GPT 5.1, Gemini 3, and Claude Opus 4.5</p>
+          <p className="text-sm text-white/90 mt-1">Chat with AI models - gpt-5.2-chat, Gemini 2.5-pro, and Claude Sonnet 4.5</p>
         </div>
 
         <div className="px-6 py-4 bg-gray-50 border-b">
@@ -1798,16 +1739,6 @@ export default function LLMPlayground() {
               </button>
             </div>
 
-            {/* Settings Toggle Button - Desktop */}
-            <button
-              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-              className="hidden lg:flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700"
-            >
-              <Sliders className="w-4 h-4" />
-              {isSettingsOpen ? 'Hide Settings' : 'Show Settings'}
-            </button>
-
-            {/* Settings Toggle Button - Mobile */}
             <button
               onClick={() => setIsMobileSettingsOpen(true)}
               className="lg:hidden flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700"
@@ -1819,58 +1750,58 @@ export default function LLMPlayground() {
         </div>
 
         <div className="flex-1 flex overflow-hidden">
-          {/* Unified Collapsible Sidebar - Desktop */}
-          {isSettingsOpen && (
-            <div className="hidden lg:block w-80 bg-white border-r border-gray-200 overflow-y-auto">
-              <div className="p-4 sticky top-0 bg-white border-b border-gray-200 z-10">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Settings2 className="w-5 h-5 text-brand-maroon" />
-                    <div>
-                      <h3 className="font-semibold text-gray-900 text-sm">Settings</h3>
-                      <p className="text-xs text-gray-600">{getModeTitle()}</p>
+          <div className={`hidden lg:block bg-white border-r border-gray-200 overflow-y-auto transition-all duration-200 ${isSidebarCollapsed ? 'w-16' : 'w-80'}`}>
+            {isSidebarCollapsed ? (
+              <div className="flex flex-col items-center py-4 gap-4">
+                <button
+                  onClick={() => setIsSidebarCollapsed(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Expand sidebar"
+                >
+                  <ChevronRight className="w-5 h-5 text-gray-600" />
+                </button>
+                <div className="p-2">
+                  <Settings2 className="w-5 h-5 text-brand-maroon" />
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="p-4 sticky top-0 bg-white border-b border-gray-200 z-10">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Settings2 className="w-5 h-5 text-brand-maroon" />
+                      <div>
+                        <h3 className="font-semibold text-gray-900 text-sm">Settings</h3>
+                        <p className="text-xs text-gray-600">{getModeTitle()}</p>
+                      </div>
                     </div>
+                    <button
+                      onClick={() => setIsSidebarCollapsed(true)}
+                      className="p-1 hover:bg-gray-100 rounded transition-colors"
+                      title="Collapse sidebar"
+                    >
+                      <ChevronLeft className="w-4 h-4 text-gray-600" />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setIsSettingsOpen(false)}
-                    className="p-1 hover:bg-gray-100 rounded transition-colors"
-                    title="Collapse sidebar"
-                  >
-                    <ChevronLeft className="w-4 h-4 text-gray-600" />
-                  </button>
                 </div>
-              </div>
-              <div className="p-4 space-y-6">
-                {renderSidebarForMode(mode)}
+                <div className="p-4 space-y-6">
+                  {renderSidebarForMode(mode)}
 
-                <div className="border-t border-gray-200 pt-4">
-                  <h3 className="font-semibold text-gray-900 mb-2 text-sm">Quick Actions</h3>
-                  <button
-                    onClick={handleClearChat}
-                    className="w-full flex items-center justify-center gap-2 p-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium text-sm"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Clear Chat
-                  </button>
+                  <div className="border-t border-gray-200 pt-4">
+                    <h3 className="font-semibold text-gray-900 mb-2 text-sm">Quick Actions</h3>
+                    <button
+                      onClick={handleClearChat}
+                      className="w-full flex items-center justify-center gap-2 p-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium text-sm"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Clear Chat
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
+              </>
+            )}
+          </div>
 
-          {/* Collapsed Sidebar Rail - Desktop */}
-          {!isSettingsOpen && (
-            <div className="hidden lg:flex flex-col items-center w-14 bg-white border-r border-gray-200 py-4">
-              <button
-                onClick={() => setIsSettingsOpen(true)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Open settings"
-              >
-                <ChevronRight className="w-5 h-5 text-gray-600" />
-              </button>
-            </div>
-          )}
-
-          {/* Mobile Settings Drawer */}
           {isMobileSettingsOpen && (
             <>
               <div
