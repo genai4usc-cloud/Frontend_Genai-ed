@@ -96,9 +96,9 @@ type SingleJudgeRun = {
 };
 
 const AI_MODELS: AIModel[] = [
-  { id: 'gpt-5.1', name: 'OpenAI GPT 5.1', provider: 'OpenAI', icon: '🤖', color: 'bg-green-500' },
-  { id: 'gemini-3', name: 'Google Gemini 3', provider: 'Google', icon: '✨', color: 'bg-blue-500' },
-  { id: 'claude-opus-4.5', name: 'Claude Opus 4.5', provider: 'Anthropic', icon: '🧠', color: 'bg-purple-500' }
+  { id: 'gpt-5.1', name: 'OpenAI gpt-5.2-chat', provider: 'OpenAI', icon: '🤖', color: 'bg-green-500' },
+  { id: 'gemini-3', name: 'Google Gemini 2.5-pro', provider: 'Google', icon: '✨', color: 'bg-blue-500' },
+  { id: 'claude-opus-4.5', name: 'Claude Sonnet 4.5', provider: 'Anthropic', icon: '🧠', color: 'bg-purple-500' }
 ];
 
 const BACKEND_BASE = process.env.NEXT_PUBLIC_BACKEND_BASE || 'https://backend-genai-ed.onrender.com';
