@@ -778,6 +778,12 @@ export default function LLMPlayground() {
     }
   };
 
+  const getGridCols = (count: number) => {
+    if (count <= 1) return 'lg:grid-cols-1';
+    if (count === 2) return 'lg:grid-cols-2';
+    return 'lg:grid-cols-3';
+  };
+
   const renderSingleSidebar = () => (
     <div className="space-y-6">
       <div>
@@ -1049,7 +1055,7 @@ export default function LLMPlayground() {
 
               <div className="p-4 space-y-4">
                 {/* Side-by-side outputs always */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className={`grid grid-cols-1 ${getGridCols(activeRun.outputs.length)} gap-4`}>
                   {activeRun.outputs.map((output) => {
                     const model = AI_MODELS.find(m => m.id === output.modelId);
                     return (
@@ -1107,7 +1113,7 @@ export default function LLMPlayground() {
                     </button>
 
                     {expandedOutputs.has(activeRun.id) && (
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-2">
+                      <div className={`grid grid-cols-1 ${getGridCols(activeRun.outputs.length)} gap-4 pt-2`}>
                         {activeRun.outputs.map((output) => {
                           const model = AI_MODELS.find(m => m.id === output.modelId);
                           return (
@@ -1392,7 +1398,7 @@ export default function LLMPlayground() {
                 {isStillLoadingPrimary ? (
                   <p className="text-sm text-gray-500 italic">Loading primary outputs...</p>
                 ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className={`grid grid-cols-1 ${getGridCols(run.primaryOutputs.length)} gap-4`}>
                     {run.primaryOutputs.map((output) => {
                       const model = AI_MODELS.find((m) => m.id === output.modelId);
                       return (
@@ -1661,7 +1667,7 @@ export default function LLMPlayground() {
                     {isStillLoadingPrimary ? (
                       <p className="text-sm text-gray-500 italic">Loading primary outputs...</p>
                     ) : (
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                      <div className={`grid grid-cols-1 ${getGridCols(run.primaryModelIds.length)} gap-4`}>
                         {run.primaryModelIds.map((modelId) => {
                           const output = run.primaryOutputs.find((o) => o.modelId === modelId);
                           const model = AI_MODELS.find((m) => m.id === modelId);
