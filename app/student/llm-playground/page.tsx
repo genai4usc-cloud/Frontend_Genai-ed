@@ -100,7 +100,7 @@ type SingleJudgeRun = {
 
 const AI_MODELS: AIModel[] = [
   { id: 'gpt-5.2-chat', name: 'OpenAI gpt-5.2-chat', provider: 'OpenAI', icon: '🤖', color: 'bg-green-500' },
-  { id: 'gemini-2.5-pro', name: 'Google Gemini 2.5-pro', provider: 'Google', icon: '✨', color: 'bg-blue-500' },
+  { id: 'gemini-2.5-flash', name: 'Google Gemini 2.5-flash', provider: 'Google', icon: '✨', color: 'bg-blue-500' },
   { id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5', provider: 'Anthropic', icon: '🧠', color: 'bg-purple-500' }
 ];
 
