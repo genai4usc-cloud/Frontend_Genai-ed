@@ -18,7 +18,9 @@ import {
   ChevronUp,
   ShieldAlert,
   FileText,
-  Sparkles
+  Sparkles,
+  X,
+  Settings2
 } from 'lucide-react';
 
 type AIModel = {
@@ -170,6 +172,22 @@ function safeNumber(x: any, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function parseAssessmentDetails(content: string): { risk?: string; notes?: string; latency?: string } | null {
+  try {
+    const riskMatch = content.match(/Risk:\s*([^\n]+)/i);
+    const notesMatch = content.match(/Notes:\s*([^\n]+)/i);
+    const latencyMatch = content.match(/Latency:\s*(\d+)\s*ms/i);
+
+    return {
+      risk: riskMatch?.[1]?.trim(),
+      notes: notesMatch?.[1]?.trim(),
+      latency: latencyMatch?.[1]?.trim(),
+    };
+  } catch {
+    return null;
+  }
+}
+
 
 export default function LLMPlayground() {
   const router = useRouter();
@@ -203,6 +221,8 @@ export default function LLMPlayground() {
 
   const [expandedOutputs, setExpandedOutputs] = useState<Set<string>>(new Set());
   const [expandedReports, setExpandedReports] = useState<Set<string>>(new Set());
+  const [openCell, setOpenCell] = useState<null | { runId: string; primaryId: string; judgeId: string }>(null);
+  const [showMultiJudgeSettings, setShowMultiJudgeSettings] = useState(false);
 
   // These are UI-only fields for the active compare run orchestration controls
   const [orchestratorModelId, setOrchestratorModelId] = useState<string>('');
@@ -211,6 +231,20 @@ export default function LLMPlayground() {
   useEffect(() => {
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    const handleEsc = (e: Event) => {
+      const keyEvent = e as unknown as { key: string };
+      if (keyEvent.key === 'Escape' && openCell) {
+        setOpenCell(null);
+      }
+      if (keyEvent.key === 'Escape' && showMultiJudgeSettings) {
+        setShowMultiJudgeSettings(false);
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [openCell, showMultiJudgeSettings]);
 
   // Ensure compare mode always has a valid active run selected when runs exist
   useEffect(() => {
@@ -1184,6 +1218,131 @@ export default function LLMPlayground() {
     );
   };
 
+  const renderAssessmentPopup = () => {
+    if (!openCell) return null;
+
+    const run = multiJudgeRuns.find(r => r.id === openCell.runId);
+    if (!run) return null;
+
+    const judgeItem = run.assessments.find(a => a.modelId === openCell.judgeId);
+    if (!judgeItem) return null;
+
+    const assessments = (judgeItem.structured?.assessments || []) as JudgeAssessment[];
+    const assessment = assessments.find(a => a.targetModelId === openCell.primaryId);
+
+    const judgeModel = AI_MODELS.find(m => m.id === openCell.judgeId);
+    const primaryModel = AI_MODELS.find(m => m.id === openCell.primaryId);
+
+    return (
+      <>
+        <div
+          className="fixed inset-0 bg-black/50 z-50"
+          onClick={() => setOpenCell(null)}
+        />
+        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+          <div className="bg-white rounded-xl border border-gray-300 shadow-2xl">
+            <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{judgeModel?.icon}</span>
+                <div>
+                  <h3 className="font-semibold text-gray-900">
+                    {judgeModel?.name} assessed {primaryModel?.name}
+                  </h3>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    Judge: {openCell.judgeId} → Primary: {openCell.primaryId}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setOpenCell(null)}
+                className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {assessment ? (
+                <>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <ShieldAlert className="w-4 h-4 text-gray-700" />
+                      <h4 className="font-semibold text-gray-900 text-sm">Risk Assessment</h4>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`inline-flex items-center px-3 py-1.5 rounded-md border font-semibold text-sm ${badgeClassForRisk(
+                          assessment.risk_label
+                        )}`}
+                      >
+                        {String(assessment.risk_label || 'MEDIUM').toUpperCase()}
+                      </span>
+                      <span className="text-gray-700 font-medium">
+                        Score: <span className="font-bold">{safeNumber(assessment.risk_score, 0)}</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {assessment.failure_modes && assessment.failure_modes.length > 0 && (
+                    <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                      <h4 className="font-semibold text-red-900 text-sm mb-2">Failure Modes</h4>
+                      <ul className="list-disc list-inside space-y-1 text-sm text-red-800">
+                        {assessment.failure_modes.map((mode, idx) => (
+                          <li key={idx}>{mode}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {assessment.evidence && assessment.evidence.length > 0 && (
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                      <h4 className="font-semibold text-blue-900 text-sm mb-2">Evidence</h4>
+                      <ul className="list-disc list-inside space-y-1 text-sm text-blue-800">
+                        {assessment.evidence.map((ev, idx) => (
+                          <li key={idx}>{ev}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {assessment.notes && (
+                    <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                      <h4 className="font-semibold text-yellow-900 text-sm mb-2">Notes</h4>
+                      <p className="text-sm text-yellow-800">{assessment.notes}</p>
+                    </div>
+                  )}
+
+                  {assessment.latencyMs != null && assessment.latencyMs > 0 && (
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h4 className="font-semibold text-gray-900 text-sm mb-1">Performance</h4>
+                      <p className="text-sm text-gray-700">Latency: <span className="font-medium">{assessment.latencyMs}ms</span></p>
+                    </div>
+                  )}
+
+                  {assessment.error && (
+                    <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                      <h4 className="font-semibold text-red-900 text-sm mb-2">Error</h4>
+                      <p className="text-sm text-red-800">{assessment.error}</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600">
+                    No detailed assessment available. Displaying raw content:
+                  </p>
+                  <div className="mt-3 p-3 bg-white rounded border border-gray-200">
+                    <Markdown value={judgeItem.content?.value || 'No content'} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  };
+
   const renderMultiJudgeRuns = () => (
     <div className="space-y-6">
       {multiJudgeRuns.map((run) => {
@@ -1338,7 +1497,7 @@ export default function LLMPlayground() {
                                   {/* Cells: one per judge */}
                                   {judgeIds.map((jid) => {
                                     const a = matrix[jid]?.[tid] ?? null;
-              
+
                                     if (!a) {
                                       return (
                                         <td key={`${tid}-${jid}`} className="px-3 py-3 text-sm text-gray-500">
@@ -1346,19 +1505,18 @@ export default function LLMPlayground() {
                                         </td>
                                       );
                                     }
-              
-                                    const tooltip = formatTooltip(a);
+
                                     const badgeCls = badgeClassForRisk(a.risk_label);
-              
+
                                     return (
                                       <td key={`${tid}-${jid}`} className="px-3 py-3">
-                                        <div
-                                          title={tooltip}
-                                          className={`inline-flex items-center gap-2 px-2 py-1 rounded-md border text-xs font-semibold cursor-help ${badgeCls}`}
+                                        <button
+                                          onClick={() => setOpenCell({ runId: run.id, primaryId: tid, judgeId: jid })}
+                                          className={`inline-flex items-center gap-2 px-2 py-1 rounded-md border text-xs font-semibold cursor-pointer transition-all hover:shadow-md hover:scale-105 ${badgeCls}`}
                                         >
                                           <span>{String(a.risk_label || "MEDIUM").toUpperCase()}</span>
                                           <span className="opacity-80">({safeNumber(a.risk_score, 0)})</span>
-                                        </div>
+                                        </button>
                                         {a.failure_modes?.length ? (
                                           <div className="mt-1 text-[11px] text-gray-500 line-clamp-1" title={a.failure_modes.join(", ")}>
                                             {a.failure_modes.join(", ")}
@@ -1387,7 +1545,7 @@ export default function LLMPlayground() {
                         </table>
               
                         <p className="text-xs text-gray-500 mt-2">
-                          Hover any cell to see failure modes, evidence, notes, and latency.
+                          Click any cell to see detailed assessment including failure modes, evidence, notes, and latency.
                         </p>
                       </div>
                     );
@@ -1559,6 +1717,7 @@ export default function LLMPlayground() {
 
   return (
     <StudentLayout profile={profile}>
+      {renderAssessmentPopup()}
       <div className="h-[calc(100vh-80px)] flex flex-col">
         <div className="bg-brand-maroon text-white px-6 py-4 rounded-t-2xl">
           <h1 className="text-2xl font-bold">LLM Playground</h1>
@@ -1610,22 +1769,24 @@ export default function LLMPlayground() {
         </div>
 
         <div className="flex-1 flex overflow-hidden">
-          <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto">
-            <div className="p-4 space-y-4">
-              {renderSidebarForMode(mode)}
+          {mode !== 'multi-judge' && (
+            <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto">
+              <div className="p-4 space-y-4">
+                {renderSidebarForMode(mode)}
 
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-2">Quick Actions</h3>
-                <button
-                  onClick={handleClearChat}
-                  className="w-full flex items-center justify-center gap-2 p-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Clear Chat
-                </button>
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-2">Quick Actions</h3>
+                  <button
+                    onClick={handleClearChat}
+                    className="w-full flex items-center justify-center gap-2 p-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Clear Chat
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="flex-1 flex flex-col bg-gray-50 overflow-hidden">
             <div className="flex-1 overflow-hidden">
@@ -1679,8 +1840,195 @@ export default function LLMPlayground() {
               ) : mode === 'compare' ? (
                 renderCompareRuns()
               ) : mode === 'multi-judge' ? (
-                <div className="h-full overflow-y-auto p-6">
-                  <div className="max-w-6xl mx-auto">{renderMultiJudgeRuns()}</div>
+                <div className="h-full flex overflow-hidden">
+                  {/* Internal Settings Sidebar for Multi-Judge */}
+                  <div className="hidden lg:block w-80 bg-white border-r border-gray-200 overflow-y-auto">
+                    <div className="p-4 sticky top-0 bg-white border-b border-gray-200 z-10">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Settings2 className="w-5 h-5 text-brand-maroon" />
+                        <h3 className="font-semibold text-gray-900">Multi-Judge Settings</h3>
+                      </div>
+                    </div>
+                    <div className="p-4 space-y-6">
+                      <div>
+                        <div className="text-sm font-medium text-gray-700 mb-2">Primary Models:</div>
+                        {AI_MODELS.map((model) => (
+                          <label
+                            key={model.id}
+                            className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer mb-2"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={multiJudgePrimaryIds.includes(model.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) setMultiJudgePrimaryIds((prev) => [...prev, model.id]);
+                                else setMultiJudgePrimaryIds((prev) => prev.filter((id) => id !== model.id));
+                              }}
+                              className="w-4 h-4 text-brand-maroon focus:ring-brand-maroon border-gray-300 rounded"
+                            />
+                            <span className="text-lg">{model.icon}</span>
+                            <span className="font-medium text-gray-900 text-sm">{model.name}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      <div className="border-t border-gray-200 pt-4">
+                        <div className="text-sm font-medium text-gray-700 mb-2">Judge Models:</div>
+                        {AI_MODELS.map((model) => (
+                          <label
+                            key={model.id}
+                            className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer mb-2"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={multiJudgeJudgeIds.includes(model.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) setMultiJudgeJudgeIds((prev) => [...prev, model.id]);
+                                else setMultiJudgeJudgeIds((prev) => prev.filter((id) => id !== model.id));
+                              }}
+                              className="w-4 h-4 text-brand-maroon focus:ring-brand-maroon border-gray-300 rounded"
+                            />
+                            <span className="text-lg">{model.icon}</span>
+                            <span className="font-medium text-gray-900 text-sm">{model.name}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      <div className="border-t border-gray-200 pt-4">
+                        <h4 className="font-semibold text-gray-900 mb-3 text-sm">Generation Settings</h4>
+                        <GenerationSettings
+                          temperature={temperature}
+                          maxTokens={maxTokens}
+                          includeSystemInstruction={includeSystemInstruction}
+                          systemPrompt={systemPrompt}
+                          onTemperatureChange={setTemperature}
+                          onMaxTokensChange={setMaxTokens}
+                          onIncludeSystemInstructionChange={setIncludeSystemInstruction}
+                          onSystemPromptChange={setSystemPrompt}
+                        />
+                      </div>
+
+                      <div className="border-t border-gray-200 pt-4">
+                        <h4 className="font-semibold text-gray-900 mb-2 text-sm">Quick Actions</h4>
+                        <button
+                          onClick={handleClearChat}
+                          className="w-full flex items-center justify-center gap-2 p-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium text-sm"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Clear Chat
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mobile Settings Button */}
+                  <button
+                    onClick={() => setShowMultiJudgeSettings(true)}
+                    className="lg:hidden fixed bottom-24 right-6 z-40 w-14 h-14 bg-brand-maroon text-white rounded-full shadow-lg flex items-center justify-center hover:bg-red-800 transition-colors"
+                  >
+                    <Settings2 className="w-6 h-6" />
+                  </button>
+
+                  {/* Mobile Settings Drawer */}
+                  {showMultiJudgeSettings && (
+                    <>
+                      <div
+                        className="lg:hidden fixed inset-0 bg-black/50 z-50"
+                        onClick={() => setShowMultiJudgeSettings(false)}
+                      />
+                      <div className="lg:hidden fixed right-0 top-0 bottom-0 w-80 bg-white z-50 overflow-y-auto shadow-2xl">
+                        <div className="p-4 sticky top-0 bg-white border-b border-gray-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <Settings2 className="w-5 h-5 text-brand-maroon" />
+                              <h3 className="font-semibold text-gray-900">Multi-Judge Settings</h3>
+                            </div>
+                            <button
+                              onClick={() => setShowMultiJudgeSettings(false)}
+                              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                              <X className="w-5 h-5 text-gray-600" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="p-4 space-y-6">
+                          <div>
+                            <div className="text-sm font-medium text-gray-700 mb-2">Primary Models:</div>
+                            {AI_MODELS.map((model) => (
+                              <label
+                                key={model.id}
+                                className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer mb-2"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={multiJudgePrimaryIds.includes(model.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) setMultiJudgePrimaryIds((prev) => [...prev, model.id]);
+                                    else setMultiJudgePrimaryIds((prev) => prev.filter((id) => id !== model.id));
+                                  }}
+                                  className="w-4 h-4 text-brand-maroon focus:ring-brand-maroon border-gray-300 rounded"
+                                />
+                                <span className="text-lg">{model.icon}</span>
+                                <span className="font-medium text-gray-900 text-sm">{model.name}</span>
+                              </label>
+                            ))}
+                          </div>
+
+                          <div className="border-t border-gray-200 pt-4">
+                            <div className="text-sm font-medium text-gray-700 mb-2">Judge Models:</div>
+                            {AI_MODELS.map((model) => (
+                              <label
+                                key={model.id}
+                                className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer mb-2"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={multiJudgeJudgeIds.includes(model.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) setMultiJudgeJudgeIds((prev) => [...prev, model.id]);
+                                    else setMultiJudgeJudgeIds((prev) => prev.filter((id) => id !== model.id));
+                                  }}
+                                  className="w-4 h-4 text-brand-maroon focus:ring-brand-maroon border-gray-300 rounded"
+                                />
+                                <span className="text-lg">{model.icon}</span>
+                                <span className="font-medium text-gray-900 text-sm">{model.name}</span>
+                              </label>
+                            ))}
+                          </div>
+
+                          <div className="border-t border-gray-200 pt-4">
+                            <h4 className="font-semibold text-gray-900 mb-3 text-sm">Generation Settings</h4>
+                            <GenerationSettings
+                              temperature={temperature}
+                              maxTokens={maxTokens}
+                              includeSystemInstruction={includeSystemInstruction}
+                              systemPrompt={systemPrompt}
+                              onTemperatureChange={setTemperature}
+                              onMaxTokensChange={setMaxTokens}
+                              onIncludeSystemInstructionChange={setIncludeSystemInstruction}
+                              onSystemPromptChange={setSystemPrompt}
+                            />
+                          </div>
+
+                          <div className="border-t border-gray-200 pt-4">
+                            <h4 className="font-semibold text-gray-900 mb-2 text-sm">Quick Actions</h4>
+                            <button
+                              onClick={handleClearChat}
+                              className="w-full flex items-center justify-center gap-2 p-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium text-sm"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Clear Chat
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Results Panel */}
+                  <div className="flex-1 overflow-y-auto p-6">
+                    <div className="max-w-6xl mx-auto">{renderMultiJudgeRuns()}</div>
+                  </div>
                 </div>
               ) : mode === 'single-judge' ? (
                 <div className="h-full overflow-y-auto p-6">
