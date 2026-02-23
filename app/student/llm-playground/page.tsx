@@ -1695,7 +1695,7 @@ export default function LLMPlayground() {
       <div className="h-[calc(100vh-80px)] flex flex-col">
         <div className="bg-brand-maroon text-white px-6 py-4 rounded-t-2xl">
           <h1 className="text-2xl font-bold">LLM Playground</h1>
-          <p className="text-sm text-white/90 mt-1">Chat with AI models - gpt-5.2-chat, Gemini 2.5-pro, and Claude Sonnet 4.5</p>
+          <p className="text-sm text-white/90 mt-1">Chat with AI models - gpt-5.2-chat, Gemini 2.5-Flash, and Claude Sonnet 4.5</p>
         </div>
 
         <div className="px-6 py-4 bg-gray-50 border-b">
