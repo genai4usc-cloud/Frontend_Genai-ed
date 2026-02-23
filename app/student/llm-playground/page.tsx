@@ -20,7 +20,11 @@ import {
   FileText,
   Sparkles,
   X,
-  Settings2
+  Settings2,
+  Sliders,
+  ChevronLeft,
+  ChevronRight,
+  Menu
 } from 'lucide-react';
 
 type AIModel = {
@@ -223,6 +227,8 @@ export default function LLMPlayground() {
   const [expandedReports, setExpandedReports] = useState<Set<string>>(new Set());
   const [openCell, setOpenCell] = useState<null | { runId: string; primaryId: string; judgeId: string }>(null);
   const [showMultiJudgeSettings, setShowMultiJudgeSettings] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(true);
+  const [isMobileSettingsOpen, setIsMobileSettingsOpen] = useState(false);
 
   // These are UI-only fields for the active compare run orchestration controls
   const [orchestratorModelId, setOrchestratorModelId] = useState<string>('');
@@ -241,10 +247,13 @@ export default function LLMPlayground() {
       if (keyEvent.key === 'Escape' && showMultiJudgeSettings) {
         setShowMultiJudgeSettings(false);
       }
+      if (keyEvent.key === 'Escape' && isMobileSettingsOpen) {
+        setIsMobileSettingsOpen(false);
+      }
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [openCell, showMultiJudgeSettings]);
+  }, [openCell, showMultiJudgeSettings, isMobileSettingsOpen]);
 
   // Ensure compare mode always has a valid active run selected when runs exist
   useEffect(() => {
@@ -751,6 +760,21 @@ export default function LLMPlayground() {
         return 'Enter a prompt to evaluate for safety risks (single-judge)...';
       default:
         return 'Type your message...';
+    }
+  };
+
+  const getModeTitle = () => {
+    switch (mode) {
+      case 'single':
+        return 'Single Model';
+      case 'compare':
+        return 'Compare & Orchestrate';
+      case 'multi-judge':
+        return 'Multi-Judge Evaluation';
+      case 'single-judge':
+        return 'Single-Judge Evaluation';
+      default:
+        return 'Settings';
     }
   };
 
@@ -1725,60 +1749,99 @@ export default function LLMPlayground() {
         </div>
 
         <div className="px-6 py-4 bg-gray-50 border-b">
-          <div className="flex gap-2 bg-white p-1.5 rounded-xl border border-gray-200 shadow-sm max-w-fit">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex gap-2 bg-white p-1.5 rounded-xl border border-gray-200 shadow-sm">
+              <button
+                onClick={() => setMode('single')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all text-sm ${
+                  mode === 'single' ? 'bg-brand-maroon text-white shadow-md' : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                Single Model
+              </button>
+
+              <button
+                onClick={() => setMode('compare')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all text-sm ${
+                  mode === 'compare' ? 'bg-brand-maroon text-white shadow-md' : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <ArrowLeftRight className="w-4 h-4" />
+                Compare and Orchestrate
+              </button>
+
+              <button
+                onClick={() => setMode('multi-judge')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all text-sm ${
+                  mode === 'multi-judge' ? 'bg-brand-maroon text-white shadow-md' : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                Multi Judge
+              </button>
+
+              <button
+                onClick={() => setMode('single-judge')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all text-sm ${
+                  mode === 'single-judge' ? 'bg-brand-maroon text-white shadow-md' : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <User className="w-4 h-4" />
+                Single Judge
+              </button>
+            </div>
+
+            {/* Settings Toggle Button - Desktop */}
             <button
-              onClick={() => setMode('single')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all text-sm ${
-                mode === 'single' ? 'bg-brand-maroon text-white shadow-md' : 'text-gray-700 hover:bg-gray-50'
-              }`}
+              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+              className="hidden lg:flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700"
             >
-              <MessageSquare className="w-4 h-4" />
-              Single Model
+              <Sliders className="w-4 h-4" />
+              {isSettingsOpen ? 'Hide Settings' : 'Show Settings'}
             </button>
 
+            {/* Settings Toggle Button - Mobile */}
             <button
-              onClick={() => setMode('compare')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all text-sm ${
-                mode === 'compare' ? 'bg-brand-maroon text-white shadow-md' : 'text-gray-700 hover:bg-gray-50'
-              }`}
+              onClick={() => setIsMobileSettingsOpen(true)}
+              className="lg:hidden flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700"
             >
-              <ArrowLeftRight className="w-4 h-4" />
-              Compare and Orchestrate
-            </button>
-
-            <button
-              onClick={() => setMode('multi-judge')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all text-sm ${
-                mode === 'multi-judge' ? 'bg-brand-maroon text-white shadow-md' : 'text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              Multi Judge
-            </button>
-
-            <button
-              onClick={() => setMode('single-judge')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all text-sm ${
-                mode === 'single-judge' ? 'bg-brand-maroon text-white shadow-md' : 'text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <User className="w-4 h-4" />
-              Single Judge
+              <Menu className="w-4 h-4" />
+              Settings
             </button>
           </div>
         </div>
 
         <div className="flex-1 flex overflow-hidden">
-          {mode !== 'multi-judge' && (
-            <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto">
-              <div className="p-4 space-y-4">
+          {/* Unified Collapsible Sidebar - Desktop */}
+          {isSettingsOpen && (
+            <div className="hidden lg:block w-80 bg-white border-r border-gray-200 overflow-y-auto">
+              <div className="p-4 sticky top-0 bg-white border-b border-gray-200 z-10">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Settings2 className="w-5 h-5 text-brand-maroon" />
+                    <div>
+                      <h3 className="font-semibold text-gray-900 text-sm">Settings</h3>
+                      <p className="text-xs text-gray-600">{getModeTitle()}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsSettingsOpen(false)}
+                    className="p-1 hover:bg-gray-100 rounded transition-colors"
+                    title="Collapse sidebar"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-gray-600" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-4 space-y-6">
                 {renderSidebarForMode(mode)}
 
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-2">Quick Actions</h3>
+                <div className="border-t border-gray-200 pt-4">
+                  <h3 className="font-semibold text-gray-900 mb-2 text-sm">Quick Actions</h3>
                   <button
                     onClick={handleClearChat}
-                    className="w-full flex items-center justify-center gap-2 p-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium"
+                    className="w-full flex items-center justify-center gap-2 p-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium text-sm"
                   >
                     <Trash2 className="w-4 h-4" />
                     Clear Chat
@@ -1786,6 +1849,62 @@ export default function LLMPlayground() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Collapsed Sidebar Rail - Desktop */}
+          {!isSettingsOpen && (
+            <div className="hidden lg:flex flex-col items-center w-14 bg-white border-r border-gray-200 py-4">
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Open settings"
+              >
+                <ChevronRight className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+          )}
+
+          {/* Mobile Settings Drawer */}
+          {isMobileSettingsOpen && (
+            <>
+              <div
+                className="lg:hidden fixed inset-0 bg-black/50 z-50"
+                onClick={() => setIsMobileSettingsOpen(false)}
+              />
+              <div className="lg:hidden fixed left-0 top-0 bottom-0 w-80 bg-white z-50 overflow-y-auto shadow-2xl">
+                <div className="p-4 sticky top-0 bg-white border-b border-gray-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Settings2 className="w-5 h-5 text-brand-maroon" />
+                      <div>
+                        <h3 className="font-semibold text-gray-900 text-sm">Settings</h3>
+                        <p className="text-xs text-gray-600">{getModeTitle()}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setIsMobileSettingsOpen(false)}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <X className="w-5 h-5 text-gray-600" />
+                    </button>
+                  </div>
+                </div>
+                <div className="p-4 space-y-6">
+                  {renderSidebarForMode(mode)}
+
+                  <div className="border-t border-gray-200 pt-4">
+                    <h3 className="font-semibold text-gray-900 mb-2 text-sm">Quick Actions</h3>
+                    <button
+                      onClick={handleClearChat}
+                      className="w-full flex items-center justify-center gap-2 p-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium text-sm"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Clear Chat
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
 
           <div className="flex-1 flex flex-col bg-gray-50 overflow-hidden">
@@ -1840,195 +1959,8 @@ export default function LLMPlayground() {
               ) : mode === 'compare' ? (
                 renderCompareRuns()
               ) : mode === 'multi-judge' ? (
-                <div className="h-full flex overflow-hidden">
-                  {/* Internal Settings Sidebar for Multi-Judge */}
-                  <div className="hidden lg:block w-80 bg-white border-r border-gray-200 overflow-y-auto">
-                    <div className="p-4 sticky top-0 bg-white border-b border-gray-200 z-10">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Settings2 className="w-5 h-5 text-brand-maroon" />
-                        <h3 className="font-semibold text-gray-900">Multi-Judge Settings</h3>
-                      </div>
-                    </div>
-                    <div className="p-4 space-y-6">
-                      <div>
-                        <div className="text-sm font-medium text-gray-700 mb-2">Primary Models:</div>
-                        {AI_MODELS.map((model) => (
-                          <label
-                            key={model.id}
-                            className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer mb-2"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={multiJudgePrimaryIds.includes(model.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) setMultiJudgePrimaryIds((prev) => [...prev, model.id]);
-                                else setMultiJudgePrimaryIds((prev) => prev.filter((id) => id !== model.id));
-                              }}
-                              className="w-4 h-4 text-brand-maroon focus:ring-brand-maroon border-gray-300 rounded"
-                            />
-                            <span className="text-lg">{model.icon}</span>
-                            <span className="font-medium text-gray-900 text-sm">{model.name}</span>
-                          </label>
-                        ))}
-                      </div>
-
-                      <div className="border-t border-gray-200 pt-4">
-                        <div className="text-sm font-medium text-gray-700 mb-2">Judge Models:</div>
-                        {AI_MODELS.map((model) => (
-                          <label
-                            key={model.id}
-                            className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer mb-2"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={multiJudgeJudgeIds.includes(model.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) setMultiJudgeJudgeIds((prev) => [...prev, model.id]);
-                                else setMultiJudgeJudgeIds((prev) => prev.filter((id) => id !== model.id));
-                              }}
-                              className="w-4 h-4 text-brand-maroon focus:ring-brand-maroon border-gray-300 rounded"
-                            />
-                            <span className="text-lg">{model.icon}</span>
-                            <span className="font-medium text-gray-900 text-sm">{model.name}</span>
-                          </label>
-                        ))}
-                      </div>
-
-                      <div className="border-t border-gray-200 pt-4">
-                        <h4 className="font-semibold text-gray-900 mb-3 text-sm">Generation Settings</h4>
-                        <GenerationSettings
-                          temperature={temperature}
-                          maxTokens={maxTokens}
-                          includeSystemInstruction={includeSystemInstruction}
-                          systemPrompt={systemPrompt}
-                          onTemperatureChange={setTemperature}
-                          onMaxTokensChange={setMaxTokens}
-                          onIncludeSystemInstructionChange={setIncludeSystemInstruction}
-                          onSystemPromptChange={setSystemPrompt}
-                        />
-                      </div>
-
-                      <div className="border-t border-gray-200 pt-4">
-                        <h4 className="font-semibold text-gray-900 mb-2 text-sm">Quick Actions</h4>
-                        <button
-                          onClick={handleClearChat}
-                          className="w-full flex items-center justify-center gap-2 p-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium text-sm"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Clear Chat
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Mobile Settings Button */}
-                  <button
-                    onClick={() => setShowMultiJudgeSettings(true)}
-                    className="lg:hidden fixed bottom-24 right-6 z-40 w-14 h-14 bg-brand-maroon text-white rounded-full shadow-lg flex items-center justify-center hover:bg-red-800 transition-colors"
-                  >
-                    <Settings2 className="w-6 h-6" />
-                  </button>
-
-                  {/* Mobile Settings Drawer */}
-                  {showMultiJudgeSettings && (
-                    <>
-                      <div
-                        className="lg:hidden fixed inset-0 bg-black/50 z-50"
-                        onClick={() => setShowMultiJudgeSettings(false)}
-                      />
-                      <div className="lg:hidden fixed right-0 top-0 bottom-0 w-80 bg-white z-50 overflow-y-auto shadow-2xl">
-                        <div className="p-4 sticky top-0 bg-white border-b border-gray-200">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <Settings2 className="w-5 h-5 text-brand-maroon" />
-                              <h3 className="font-semibold text-gray-900">Multi-Judge Settings</h3>
-                            </div>
-                            <button
-                              onClick={() => setShowMultiJudgeSettings(false)}
-                              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            >
-                              <X className="w-5 h-5 text-gray-600" />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="p-4 space-y-6">
-                          <div>
-                            <div className="text-sm font-medium text-gray-700 mb-2">Primary Models:</div>
-                            {AI_MODELS.map((model) => (
-                              <label
-                                key={model.id}
-                                className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer mb-2"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={multiJudgePrimaryIds.includes(model.id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) setMultiJudgePrimaryIds((prev) => [...prev, model.id]);
-                                    else setMultiJudgePrimaryIds((prev) => prev.filter((id) => id !== model.id));
-                                  }}
-                                  className="w-4 h-4 text-brand-maroon focus:ring-brand-maroon border-gray-300 rounded"
-                                />
-                                <span className="text-lg">{model.icon}</span>
-                                <span className="font-medium text-gray-900 text-sm">{model.name}</span>
-                              </label>
-                            ))}
-                          </div>
-
-                          <div className="border-t border-gray-200 pt-4">
-                            <div className="text-sm font-medium text-gray-700 mb-2">Judge Models:</div>
-                            {AI_MODELS.map((model) => (
-                              <label
-                                key={model.id}
-                                className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer mb-2"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={multiJudgeJudgeIds.includes(model.id)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) setMultiJudgeJudgeIds((prev) => [...prev, model.id]);
-                                    else setMultiJudgeJudgeIds((prev) => prev.filter((id) => id !== model.id));
-                                  }}
-                                  className="w-4 h-4 text-brand-maroon focus:ring-brand-maroon border-gray-300 rounded"
-                                />
-                                <span className="text-lg">{model.icon}</span>
-                                <span className="font-medium text-gray-900 text-sm">{model.name}</span>
-                              </label>
-                            ))}
-                          </div>
-
-                          <div className="border-t border-gray-200 pt-4">
-                            <h4 className="font-semibold text-gray-900 mb-3 text-sm">Generation Settings</h4>
-                            <GenerationSettings
-                              temperature={temperature}
-                              maxTokens={maxTokens}
-                              includeSystemInstruction={includeSystemInstruction}
-                              systemPrompt={systemPrompt}
-                              onTemperatureChange={setTemperature}
-                              onMaxTokensChange={setMaxTokens}
-                              onIncludeSystemInstructionChange={setIncludeSystemInstruction}
-                              onSystemPromptChange={setSystemPrompt}
-                            />
-                          </div>
-
-                          <div className="border-t border-gray-200 pt-4">
-                            <h4 className="font-semibold text-gray-900 mb-2 text-sm">Quick Actions</h4>
-                            <button
-                              onClick={handleClearChat}
-                              className="w-full flex items-center justify-center gap-2 p-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium text-sm"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              Clear Chat
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Results Panel */}
-                  <div className="flex-1 overflow-y-auto p-6">
-                    <div className="max-w-6xl mx-auto">{renderMultiJudgeRuns()}</div>
-                  </div>
+                <div className="h-full overflow-y-auto p-6">
+                  <div className="max-w-6xl mx-auto">{renderMultiJudgeRuns()}</div>
                 </div>
               ) : mode === 'single-judge' ? (
                 <div className="h-full overflow-y-auto p-6">
