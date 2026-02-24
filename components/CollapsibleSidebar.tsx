@@ -2,7 +2,7 @@
 
 import { ReactNode, useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { LucideIcon, LogOut, ChevronLeft, ChevronRight, Pin } from 'lucide-react';
+import { LucideIcon, LogOut, ChevronLeft, ChevronRight, Pin, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface NavItem {
@@ -12,9 +12,18 @@ export interface NavItem {
   badge?: number;
 }
 
+export interface AddButtonItem {
+  type: 'add-button';
+  label: string;
+  onClick: () => void;
+  icon?: LucideIcon;
+}
+
+export type NavSectionItem = NavItem | AddButtonItem | ReactNode;
+
 export interface NavSection {
   title?: string;
-  items: (NavItem | ReactNode)[];
+  items: NavSectionItem[];
   collapsible?: boolean;
 }
 
@@ -119,7 +128,8 @@ export default function CollapsibleSidebar({
 
             <nav className="space-y-1 px-2">
               {section.items.map((item, itemIndex) => {
-                if (typeof item === 'object' && item !== null && 'icon' in item) {
+                // Handle NavItem
+                if (typeof item === 'object' && item !== null && 'icon' in item && 'path' in item) {
                   const navItem = item as NavItem;
                   const Icon = navItem.icon;
                   const isActive = pathname === navItem.path;
@@ -162,11 +172,55 @@ export default function CollapsibleSidebar({
                   );
                 }
 
-                return (
-                  <div key={itemIndex}>
-                    {item}
-                  </div>
-                );
+                // Handle AddButtonItem
+                if (typeof item === 'object' && item !== null && 'type' in item && item.type === 'add-button') {
+                  const addButton = item as AddButtonItem;
+                  const ButtonIcon = addButton.icon || Plus;
+
+                  return (
+                    <div key={`add-button-${itemIndex}`} className="relative group">
+                      {isExpanded ? (
+                        // Expanded: Show full button with text and dashed border
+                        <button
+                          onClick={addButton.onClick}
+                          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border-2 border-dashed border-gray-300 text-gray-600 hover:border-brand-maroon hover:text-brand-maroon hover:bg-red-50 transition-all duration-200 text-sm font-medium transform hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                          <ButtonIcon className="w-4 h-4 font-bold" strokeWidth={2.5} />
+                          <span>{addButton.label}</span>
+                        </button>
+                      ) : (
+                        // Collapsed: Show compact circular "+" button
+                        <>
+                          <button
+                            onClick={addButton.onClick}
+                            className="w-full flex items-center justify-center px-3 py-2.5 transition-all duration-200"
+                          >
+                            <div className="w-9 h-9 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-600 hover:border-brand-maroon hover:text-brand-maroon hover:bg-red-50 transition-all duration-200 transform hover:scale-110 active:scale-95">
+                              <ButtonIcon className="w-5 h-5" strokeWidth={2.5} />
+                            </div>
+                          </button>
+
+                          {/* Tooltip when collapsed */}
+                          <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 delay-300 pointer-events-none whitespace-nowrap z-50 shadow-xl">
+                            {addButton.label}
+                            <div className="absolute right-full top-1/2 -translate-y-1/2 border-[6px] border-transparent border-r-gray-900" />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                }
+
+                // Handle custom ReactNode (only if it's a valid React element)
+                if (typeof item === 'object' && item !== null && 'type' in item) {
+                  return (
+                    <div key={itemIndex}>
+                      {item as ReactNode}
+                    </div>
+                  );
+                }
+
+                return null;
               })}
             </nav>
           </div>

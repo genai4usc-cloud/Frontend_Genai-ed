@@ -4,7 +4,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Home, ClipboardCheck, FileText, GraduationCap, Library, BookOpen, LogOut, User, Bot } from 'lucide-react';
 import { supabase, Profile, Course } from '@/lib/supabase';
-import CollapsibleSidebar, { NavItem, NavSection } from './CollapsibleSidebar';
+import CollapsibleSidebar, { NavItem, NavSection, AddButtonItem } from './CollapsibleSidebar';
 
 interface EducatorLayoutProps {
   children: ReactNode;
@@ -51,6 +51,12 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
     path: `/educator/course/${course.id}`,
   }));
 
+  const addCourseButton: AddButtonItem = {
+    type: 'add-button',
+    label: 'Add Course',
+    onClick: () => router.push('/educator/course/new'),
+  };
+
   const sections: NavSection[] = [
     {
       items: mainNavItems,
@@ -59,14 +65,7 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
       title: 'My Courses',
       items: [
         ...courseNavItems,
-        <button
-          key="add-course"
-          onClick={() => router.push('/educator/course/new')}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border-2 border-dashed border-gray-300 text-gray-600 hover:border-brand-maroon hover:text-brand-maroon hover:bg-red-50 transition-all duration-200 text-sm font-medium transform hover:scale-[1.02] active:scale-[0.98]"
-        >
-          <span className="text-lg leading-none font-bold">+</span>
-          <span>Add Course</span>
-        </button>
+        addCourseButton,
       ],
     },
     {
