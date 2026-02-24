@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import {
@@ -10,15 +9,11 @@ import {
   Video,
   ClipboardCheck,
   BookOpen,
-  User,
-  ChevronDown,
-  ChevronRight,
-  Menu,
-  X,
-  LogOut,
-  Library
+  Library,
+  Bot
 } from 'lucide-react';
 import { supabase, Profile } from '@/lib/supabase';
+import CollapsibleSidebar, { NavItem, NavSection } from './CollapsibleSidebar';
 
 interface Course {
   id: string;
@@ -71,12 +66,39 @@ export default function StudentLayout({ children, profile }: StudentLayoutProps)
     router.push('/');
   };
 
-  const navItems = [
-    { name: 'Dashboard', href: '/student/dashboard', icon: Home },
-    { name: 'LLM Playground', href: '/student/llm-playground', icon: MessageSquare },
-    { name: 'Brainstorming', href: '/student/brainstorming', icon: Lightbulb },
-    { name: 'Create Mini-Lecture', href: '/student/create-lecture', icon: Video },
-    { name: 'Test Knowledge', href: '/student/test-knowledge', icon: ClipboardCheck },
+  const mainNavItems: NavItem[] = [
+    { icon: Home, label: 'Dashboard', path: '/student/dashboard' },
+    { icon: Bot, label: 'LLM Playground', path: '/student/llm-playground' },
+    { icon: Lightbulb, label: 'Brainstorming', path: '/student/brainstorming' },
+    { icon: Video, label: 'Create Mini-Lecture', path: '/student/create-lecture' },
+    { icon: ClipboardCheck, label: 'Test Knowledge', path: '/student/test-knowledge' },
+  ];
+
+  const courseNavItems: NavItem[] = courses.map(course => ({
+    icon: BookOpen,
+    label: `${course.course_number}`,
+    path: `/student/course/${course.id}`,
+    badge: course.newLecturesCount,
+  }));
+
+  const sections: NavSection[] = [
+    {
+      items: mainNavItems,
+    },
+    {
+      title: 'My Courses',
+      items: courseNavItems.length > 0 ? courseNavItems : [
+        <div key="no-courses" className="px-4 py-2 text-xs text-gray-500">
+          No courses enrolled
+        </div>
+      ],
+    },
+    {
+      title: 'Resources',
+      items: [
+        { icon: Library, label: 'USC Library', path: '/student/usc-library' },
+      ],
+    },
   ];
 
   const getInitials = () => {
@@ -118,107 +140,13 @@ export default function StudentLayout({ children, profile }: StudentLayoutProps)
       </header>
 
       <div className="flex max-w-screen-2xl mx-auto">
-        <aside className="w-64 bg-white min-h-[calc(100vh-80px)] border-r border-gray-200 p-4">
-          <nav className="space-y-2">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href;
-              return (
-                <button
-                  key={item.href}
-                  onClick={() => router.push(item.href)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-brand-maroon text-white'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="font-medium">{item.name}</span>
-                </button>
-              );
-            })}
-          </nav>
+        <CollapsibleSidebar
+          sections={sections}
+          onSignOut={handleSignOut}
+          variant="student"
+        />
 
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <button
-              onClick={() => setCoursesExpanded(!coursesExpanded)}
-              className="w-full flex items-center justify-between px-4 py-2 text-sm font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 transition-colors"
-            >
-              <span>My Courses</span>
-              {coursesExpanded ? (
-                <ChevronDown className="w-4 h-4" />
-              ) : (
-                <ChevronRight className="w-4 h-4" />
-              )}
-            </button>
-
-            {coursesExpanded && (
-              <nav className="space-y-1 mt-3">
-                {courses.map((course) => {
-                  const isActive = pathname.includes(`/student/course/${course.id}`);
-                  return (
-                    <button
-                      key={course.id}
-                      onClick={() => router.push(`/student/course/${course.id}`)}
-                      className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-                        isActive
-                          ? 'bg-brand-maroon text-white'
-                          : 'text-gray-700 hover:bg-gray-100'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm truncate">{course.course_number}</div>
-                          <div className={`text-xs mt-0.5 truncate ${
-                            isActive ? 'text-white/80' : 'text-gray-500'
-                          }`}>
-                            {course.semester}
-                          </div>
-                        </div>
-                        {course.newLecturesCount && course.newLecturesCount > 0 && (
-                          <span className="ml-2 px-2 py-0.5 bg-brand-yellow text-black text-xs font-bold rounded-full flex-shrink-0">
-                            {course.newLecturesCount} new
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-                {courses.length === 0 && (
-                  <div className="px-4 py-2 text-xs text-gray-500">
-                    No courses enrolled
-                  </div>
-                )}
-              </nav>
-            )}
-          </div>
-
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 mb-3">
-              USC Library
-            </h3>
-            <button
-              onClick={() => router.push('/student/usc-library')}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
-            >
-              <Library className="w-5 h-5" />
-              <span className="font-medium">USC Library</span>
-            </button>
-          </div>
-
-          <div className="mt-auto pt-8">
-            <button
-              onClick={handleSignOut}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
-            >
-              <LogOut className="w-5 h-5" />
-              <span className="font-medium">Sign Out</span>
-            </button>
-          </div>
-        </aside>
-
-        <main className="flex-1 p-8">{children}</main>
+        <main className="flex-1 p-8 transition-all duration-300">{children}</main>
       </div>
     </div>
   );

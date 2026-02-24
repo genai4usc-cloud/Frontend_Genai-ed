@@ -4,7 +4,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Home, ClipboardCheck, FileText, GraduationCap, Library, BookOpen, LogOut, User, Bot } from 'lucide-react';
 import { supabase, Profile, Course } from '@/lib/supabase';
-import Image from 'next/image';
+import CollapsibleSidebar, { NavItem, NavSection } from './CollapsibleSidebar';
 
 interface EducatorLayoutProps {
   children: ReactNode;
@@ -37,12 +37,44 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
     router.push('/');
   };
 
-  const navItems = [
+  const mainNavItems: NavItem[] = [
     { icon: Home, label: 'Dashboard', path: '/educator/dashboard' },
     { icon: Bot, label: 'LLM Playground', path: '/educator/llm-playground' },
     { icon: FileText, label: 'Create Lecture', path: '/educator/lecture/new' },
     { icon: GraduationCap, label: 'Create Quiz', path: '/educator/quiz/new' },
     { icon: ClipboardCheck, label: 'Policy Suggestor', path: '/educator/policy-suggestor' },
+  ];
+
+  const courseNavItems: NavItem[] = courses.map(course => ({
+    icon: BookOpen,
+    label: course.title,
+    path: `/educator/course/${course.id}`,
+  }));
+
+  const sections: NavSection[] = [
+    {
+      items: mainNavItems,
+    },
+    {
+      title: 'My Courses',
+      items: [
+        ...courseNavItems,
+        <button
+          key="add-course"
+          onClick={() => router.push('/educator/course/new')}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border-2 border-dashed border-gray-300 text-gray-600 hover:border-brand-maroon hover:text-brand-maroon hover:bg-red-50 transition-all duration-200 text-sm font-medium transform hover:scale-[1.02] active:scale-[0.98]"
+        >
+          <span className="text-lg leading-none font-bold">+</span>
+          <span>Add Course</span>
+        </button>
+      ],
+    },
+    {
+      title: 'Resources',
+      items: [
+        { icon: Library, label: 'Library', path: '/educator/library' },
+      ],
+    },
   ];
 
   const getInitials = () => {
@@ -84,86 +116,13 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
       </header>
 
       <div className="flex max-w-screen-2xl mx-auto">
-        <aside className="w-64 bg-white min-h-[calc(100vh-80px)] border-r border-gray-200 p-4">
-          <nav className="space-y-2">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.path;
-              return (
-                <button
-                  key={item.path}
-                  onClick={() => router.push(item.path)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-brand-maroon text-white'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="font-medium">{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
+        <CollapsibleSidebar
+          sections={sections}
+          onSignOut={handleSignOut}
+          variant="educator"
+        />
 
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 mb-3">
-              My Courses
-            </h3>
-            <nav className="space-y-1">
-              {courses.map((course) => {
-                const isActive = pathname === `/educator/course/${course.id}`;
-                return (
-                  <button
-                    key={course.id}
-                    onClick={() => router.push(`/educator/course/${course.id}`)}
-                    className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-                      isActive
-                        ? 'bg-brand-maroon text-white'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <div className="font-medium text-sm truncate">{course.title}</div>
-                    <div className={`text-xs mt-0.5 truncate ${
-                      isActive ? 'text-white/80' : 'text-gray-500'
-                    }`}>
-                      {course.course_number} - {course.semester}
-                    </div>
-                  </button>
-                );
-              })}
-              <button
-                onClick={() => router.push('/educator/course/new')}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-gray-300 text-gray-600 hover:border-gray-400 hover:text-gray-900 transition-colors text-sm font-medium mt-2"
-              >
-                <span className="text-lg">+</span>
-                <span>Add My Course</span>
-              </button>
-            </nav>
-          </div>
-
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <button
-              onClick={() => router.push('/educator/library')}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
-            >
-              <Library className="w-5 h-5" />
-              <span className="font-medium">Library</span>
-            </button>
-          </div>
-
-          <div className="mt-auto pt-8">
-            <button
-              onClick={handleSignOut}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
-            >
-              <LogOut className="w-5 h-5" />
-              <span className="font-medium">Sign Out</span>
-            </button>
-          </div>
-        </aside>
-
-        <main className="flex-1 p-8">{children}</main>
+        <main className="flex-1 p-8 transition-all duration-300">{children}</main>
       </div>
     </div>
   );
