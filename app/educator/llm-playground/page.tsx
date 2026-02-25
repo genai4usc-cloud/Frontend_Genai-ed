@@ -6,6 +6,7 @@ import { supabase, Profile } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
 import GenerationSettings from '@/components/GenerationSettings';
 import Markdown from '@/components/Markdown';
+import { ModelOutputExpandModal, ExpandButton } from '@/components/ModelOutputExpandModal';
 import {
   Bot,
   Send,
@@ -206,6 +207,13 @@ export default function LLMPlayground() {
   const [openCell, setOpenCell] = useState<null | { runId: string; primaryId: string; judgeId: string }>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSettingsOpen, setIsMobileSettingsOpen] = useState(false);
+  const [expandedModal, setExpandedModal] = useState<{
+    modelId: string;
+    modelName: string;
+    modelIcon: string;
+    content: string;
+    latencyMs: number;
+  } | null>(null);
 
   const [orchestratorModelId, setOrchestratorModelId] = useState<string>('');
   const [orchestrationPrompt, setOrchestrationPrompt] = useState<string>('');
@@ -1029,14 +1037,27 @@ export default function LLMPlayground() {
                     return (
                       <div key={output.modelId} className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
                         <div className="bg-gray-100 px-3 py-2 border-b border-gray-200">
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg">{model?.icon}</span>
-                            <div>
-                              <div className="font-medium text-gray-900 text-sm">{model?.name}</div>
-                              <div className="text-xs text-gray-500">
-                                {output.latencyMs > 0 ? `${output.latencyMs}ms` : 'Pending'}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">{model?.icon}</span>
+                              <div>
+                                <div className="font-medium text-gray-900 text-sm">{model?.name}</div>
+                                <div className="text-xs text-gray-500">
+                                  {output.latencyMs > 0 ? `${output.latencyMs}ms` : 'Pending'}
+                                </div>
                               </div>
                             </div>
+                            <ExpandButton
+                              onClick={() =>
+                                setExpandedModal({
+                                  modelId: output.modelId,
+                                  modelName: model?.name || output.modelId,
+                                  modelIcon: model?.icon || '🤖',
+                                  content: getEnvelopeText(output),
+                                  latencyMs: output.latencyMs || 0,
+                                })
+                              }
+                            />
                           </div>
                         </div>
                         <div className="p-3">
@@ -1086,12 +1107,25 @@ export default function LLMPlayground() {
                           return (
                             <div key={`${activeRun.id}-${output.modelId}`} className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
                               <div className="bg-gray-100 px-3 py-2 border-b border-gray-200">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-lg">{model?.icon}</span>
-                                  <div>
-                                    <div className="font-medium text-gray-900 text-xs">{model?.name}</div>
-                                    <div className="text-xs text-gray-500">{output.latencyMs}ms</div>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-lg">{model?.icon}</span>
+                                    <div>
+                                      <div className="font-medium text-gray-900 text-xs">{model?.name}</div>
+                                      <div className="text-xs text-gray-500">{output.latencyMs}ms</div>
+                                    </div>
                                   </div>
+                                  <ExpandButton
+                                    onClick={() =>
+                                      setExpandedModal({
+                                        modelId: output.modelId,
+                                        modelName: model?.name || output.modelId,
+                                        modelIcon: model?.icon || '🤖',
+                                        content: getEnvelopeText(output),
+                                        latencyMs: output.latencyMs || 0,
+                                      })
+                                    }
+                                  />
                                 </div>
                               </div>
                               <div className="p-3">
@@ -1369,14 +1403,27 @@ export default function LLMPlayground() {
                       return (
                         <div key={output.modelId} className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
                           <div className="bg-gray-100 px-3 py-2 border-b border-gray-200">
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg">{model?.icon}</span>
-                              <div>
-                                <div className="font-medium text-gray-900 text-sm">{model?.name}</div>
-                                <div className="text-xs text-gray-500">
-                                  {output.latencyMs > 0 ? `${output.latencyMs}ms` : '—'}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{model?.icon}</span>
+                                <div>
+                                  <div className="font-medium text-gray-900 text-sm">{model?.name}</div>
+                                  <div className="text-xs text-gray-500">
+                                    {output.latencyMs > 0 ? `${output.latencyMs}ms` : '—'}
+                                  </div>
                                 </div>
                               </div>
+                              <ExpandButton
+                                onClick={() =>
+                                  setExpandedModal({
+                                    modelId: output.modelId,
+                                    modelName: model?.name || output.modelId,
+                                    modelIcon: model?.icon || '🤖',
+                                    content: getEnvelopeText(output),
+                                    latencyMs: output.latencyMs || 0,
+                                  })
+                                }
+                              />
                             </div>
                           </div>
                           <div className="p-3">
@@ -1626,14 +1673,27 @@ export default function LLMPlayground() {
                               className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden"
                             >
                               <div className="bg-gray-100 px-3 py-2 border-b border-gray-200">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-lg">{model?.icon}</span>
-                                  <div>
-                                    <div className="font-medium text-gray-900 text-sm">{model?.name}</div>
-                                    <div className="text-xs text-gray-500">
-                                      {output?.latencyMs && output.latencyMs > 0 ? `${output.latencyMs}ms` : '—'}
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-lg">{model?.icon}</span>
+                                    <div>
+                                      <div className="font-medium text-gray-900 text-sm">{model?.name}</div>
+                                      <div className="text-xs text-gray-500">
+                                        {output?.latencyMs && output.latencyMs > 0 ? `${output.latencyMs}ms` : '—'}
+                                      </div>
                                     </div>
                                   </div>
+                                  <ExpandButton
+                                    onClick={() =>
+                                      setExpandedModal({
+                                        modelId: modelId,
+                                        modelName: model?.name || modelId,
+                                        modelIcon: model?.icon || '🤖',
+                                        content: getEnvelopeText(output),
+                                        latencyMs: output?.latencyMs || 0,
+                                      })
+                                    }
+                                  />
                                 </div>
                               </div>
 
@@ -1692,6 +1752,14 @@ export default function LLMPlayground() {
   return (
     <EducatorLayout profile={profile}>
       {renderAssessmentPopup()}
+      <ModelOutputExpandModal
+        isOpen={expandedModal !== null}
+        onClose={() => setExpandedModal(null)}
+        modelName={expandedModal?.modelName || ''}
+        modelIcon={expandedModal?.modelIcon}
+        content={expandedModal?.content || ''}
+        latencyMs={expandedModal?.latencyMs}
+      />
       <div className="h-[calc(100vh-80px)] flex flex-col">
         <div className="bg-brand-maroon text-white px-6 py-4 rounded-t-2xl">
           <h1 className="text-2xl font-bold">LLM Playground</h1>
