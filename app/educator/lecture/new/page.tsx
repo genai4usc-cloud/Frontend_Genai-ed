@@ -17,6 +17,9 @@ type MaterialWithType = {
   sourceCourseId?: string;
   courseTitle?: string;
   courseCode?: string;
+  materialId?: string;
+  storagePath?: string;
+  sourceType?: 'course_preloaded' | 'uploaded';
 };
 
 
@@ -94,6 +97,8 @@ export default function CreateLecture() {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const jobIdsRef = useRef<string[]>([]);
   const finishedAtRef = useRef<number | null>(null);
+  const materialNameDebounceRefs = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const isMountedRef = useRef(true);
   const voice = selectedCharacter ? AvatarVoiceMap[selectedCharacter].voiceId : null;
 
   useEffect(() => {
@@ -126,13 +131,17 @@ export default function CreateLecture() {
   }, [selectedCourseIds]);
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       if (scriptSaveTimeoutRef.current) {
         clearTimeout(scriptSaveTimeoutRef.current);
       }
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
       }
+      materialNameDebounceRefs.current.forEach(timeout => clearTimeout(timeout));
+      materialNameDebounceRefs.current.clear();
     };
   }, []);
 
@@ -243,7 +252,10 @@ export default function CreateLecture() {
             name: fileName,
             displayName: displayName,
             type: material.material_type as 'main' | 'background',
-            sourceCourseId: material.source_course_id
+            sourceCourseId: material.source_course_id,
+            materialId: material.id,
+            storagePath: material.storage_path,
+            sourceType: material.source_type as 'course_preloaded' | 'uploaded'
           };
 
           loadedMaterials.push(newMaterial);
@@ -507,21 +519,11 @@ export default function CreateLecture() {
       setSelectedPreloadedMaterialUrls(prev => [...prev, url]);
 
       const displayName = extractFileNameWithoutExtension(material.url);
-      const newMaterial = {
-        url: material.url,
-        name: material.name,
-        displayName: displayName,
-        type: material.defaultType,
-        sourceCourseId: material.sourceCourseId,
-        courseTitle: material.courseTitle,
-        courseCode: material.courseCode
-      };
-
-      setAllMaterials(prev => [...prev, newMaterial]);
+      let materialId: string | undefined;
 
       if (lectureId) {
         try {
-          const { error } = await supabase
+          const { data: insertedMaterial, error } = await supabase
             .from('lecture_materials')
             .insert({
               lecture_id: lectureId,
@@ -530,14 +532,35 @@ export default function CreateLecture() {
               material_type: material.defaultType,
               source_course_id: material.sourceCourseId,
               source_type: 'course_preloaded'
-            });
+            })
+            .select('id')
+            .single();
 
           if (error) throw error;
+          materialId = insertedMaterial?.id;
         } catch (error) {
           console.error('Error adding material:', error);
           toast.error('Failed to add material');
         }
       }
+
+      const newMaterial: MaterialWithType = {
+        url: material.url,
+        name: material.name,
+        displayName: displayName,
+        type: material.defaultType,
+        sourceCourseId: material.sourceCourseId,
+        courseTitle: material.courseTitle,
+        courseCode: material.courseCode,
+        materialId: materialId,
+        sourceType: 'course_preloaded'
+      };
+
+      setAllMaterials(prev => {
+        const exists = prev.find(m => m.url === url);
+        if (exists) return prev;
+        return [...prev, newMaterial];
+      });
     }
   };
 
@@ -587,7 +610,7 @@ export default function CreateLecture() {
           .from('course-files')
           .getPublicUrl(filePath);
 
-        const { error: insertError } = await supabase
+        const { data: insertedMaterial, error: insertError } = await supabase
           .from('lecture_materials')
           .insert({
             lecture_id: lectureId,
@@ -599,19 +622,30 @@ export default function CreateLecture() {
             file_mime: file.type,
             file_size_bytes: file.size,
             storage_path: filePath
-          });
+          })
+          .select('id')
+          .single();
 
         if (insertError) throw insertError;
 
         validFiles.push(file);
 
         const displayName = extractFileNameWithoutExtension(publicUrl);
-        setAllMaterials(prev => [...prev, {
+        const newMaterial: MaterialWithType = {
           url: publicUrl,
           name: file.name,
           displayName: displayName,
-          type: 'main'
-        }]);
+          type: 'main',
+          materialId: insertedMaterial?.id,
+          storagePath: filePath,
+          sourceType: 'uploaded'
+        };
+
+        setAllMaterials(prev => {
+          const exists = prev.find(m => m.url === publicUrl);
+          if (exists) return prev;
+          return [...prev, newMaterial];
+        });
 
         toast.success(`${file.name} uploaded`);
       } catch (error) {
@@ -630,40 +664,46 @@ export default function CreateLecture() {
     const fileToRemove = additionalFiles[index];
     if (!fileToRemove) return;
 
-    const materialToRemove = allMaterials.find(m => m.url.includes(fileToRemove.name));
+    const materialToRemove = allMaterials.find(m => {
+      if (m.materialId) {
+        return m.storagePath && m.storagePath.includes(fileToRemove.name);
+      }
+      return m.url.includes(fileToRemove.name);
+    });
+
     if (!materialToRemove) return;
 
-    setAllMaterials(prev => prev.filter(m => !m.url.includes(fileToRemove.name)));
+    setAllMaterials(prev => prev.filter(m => m !== materialToRemove));
     setAdditionalFiles(prev => prev.filter((_, i) => i !== index));
 
     if (lectureId) {
       try {
-        const { data: material, error: fetchError } = await supabase
-          .from('lecture_materials')
-          .select('storage_path, source_type')
-          .eq('lecture_id', lectureId)
-          .eq('material_url', materialToRemove.url)
-          .maybeSingle();
-
-        if (fetchError) throw fetchError;
-
-        if (material?.storage_path && material.source_type === 'uploaded') {
+        if (materialToRemove.storagePath && materialToRemove.sourceType === 'uploaded') {
           const { error: storageError } = await supabase.storage
             .from('course-files')
-            .remove([material.storage_path]);
+            .remove([materialToRemove.storagePath]);
 
           if (storageError) {
             console.error('Error removing from storage:', storageError);
           }
         }
 
-        const { error: dbError } = await supabase
-          .from('lecture_materials')
-          .delete()
-          .eq('lecture_id', lectureId)
-          .eq('material_url', materialToRemove.url);
+        if (materialToRemove.materialId) {
+          const { error: dbError } = await supabase
+            .from('lecture_materials')
+            .delete()
+            .eq('id', materialToRemove.materialId);
 
-        if (dbError) throw dbError;
+          if (dbError) throw dbError;
+        } else {
+          const { error: dbError } = await supabase
+            .from('lecture_materials')
+            .delete()
+            .eq('lecture_id', lectureId)
+            .eq('material_url', materialToRemove.url);
+
+          if (dbError) throw dbError;
+        }
 
         toast.success('File removed');
       } catch (error) {
@@ -849,27 +889,48 @@ export default function CreateLecture() {
     }
   };
 
-  const updateMaterialDisplayName = async (url: string, newDisplayName: string) => {
+  const updateMaterialDisplayName = (url: string, newDisplayName: string) => {
     setAllMaterials(prev =>
       prev.map(m => (m.url === url ? { ...m, displayName: newDisplayName } : m))
     );
 
-    if (lectureId) {
-      try {
-        const { error } = await supabase
-          .from('lecture_materials')
-          .update({
-            material_name: newDisplayName
-          })
-          .eq('lecture_id', lectureId)
-          .eq('material_url', url);
+    if (!lectureId) return;
 
-        if (error) throw error;
+    const material = allMaterials.find(m => m.url === url);
+    const debounceKey = material?.materialId || url;
+
+    const existingTimeout = materialNameDebounceRefs.current.get(debounceKey);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+
+    const timeout = setTimeout(async () => {
+      try {
+        if (material?.materialId) {
+          const { error } = await supabase
+            .from('lecture_materials')
+            .update({ material_name: newDisplayName })
+            .eq('id', material.materialId);
+
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('lecture_materials')
+            .update({ material_name: newDisplayName })
+            .eq('lecture_id', lectureId)
+            .eq('material_url', url);
+
+          if (error) throw error;
+        }
       } catch (error) {
         console.error('Error updating material name:', error);
         toast.error('Failed to update material name');
+      } finally {
+        materialNameDebounceRefs.current.delete(debounceKey);
       }
-    }
+    }, 800);
+
+    materialNameDebounceRefs.current.set(debounceKey, timeout);
   };
 
   const toggleContentStyle = (style: string) => {
@@ -966,6 +1027,7 @@ export default function CreateLecture() {
 
       if (scriptSaveError) throw scriptSaveError;
 
+      setScriptMode('ai');
       setGeneratedScript(realScript);
       setScriptGenerated(true);
       toast.success('Script generated successfully!');
@@ -1012,7 +1074,7 @@ export default function CreateLecture() {
 Background Materials: ${backgroundMaterials.length > 0 ? backgroundMaterials.join(', ') : 'None'}`;
 
         scriptTextFormatted = `TITLE:
-Untitled Lecture
+${lectureTitle.trim() || 'Untitled Lecture'}
 
 ${materialsSummary}
 
@@ -1104,6 +1166,8 @@ SLIDE 1: Untitled Lecture
 
       if (artifactsError) throw artifactsError;
 
+      if (!isMountedRef.current) return;
+
       const jobsMap: Record<string, { status: string; progress: number; error?: string }> = {};
       jobs?.forEach(job => {
         jobsMap[job.job_type] = {
@@ -1119,6 +1183,8 @@ SLIDE 1: Untitled Lecture
           artifactsMap[artifact.artifact_type] = artifact.file_url;
         }
       });
+
+      if (!isMountedRef.current) return;
 
       setJobsByType(jobsMap);
       setArtifactsByType(artifactsMap);
