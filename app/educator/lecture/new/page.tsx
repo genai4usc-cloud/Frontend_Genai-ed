@@ -1187,6 +1187,16 @@ SLIDE 1: Untitled Lecture
     toast.info('Starting content generation...');
 
     try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+  
+      const token = session?.access_token;
+      if (!token) {
+        toast.error('Session expired. Please log in again.');
+        setIsGenerating(false);
+        return;
+      }
+      
       const resp = await fetch(`${BACKEND_URL}/api/lectures/${lectureId}/generate-content`, {
         method: 'POST',
         headers: { 
