@@ -1189,7 +1189,10 @@ SLIDE 1: Untitled Lecture
     try {
       const resp = await fetch(`${BACKEND_URL}/api/lectures/${lectureId}/generate-content`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        }
       });
 
       if (!resp.ok) {
