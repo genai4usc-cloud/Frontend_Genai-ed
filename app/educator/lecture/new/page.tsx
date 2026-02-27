@@ -7,6 +7,7 @@ import EducatorLayout from '@/components/EducatorLayout';
 import { ArrowLeft, Upload, File, Check, ChevronDown, ChevronUp, Info, Video, Mic, FileText, Sparkles, Download, Eye, Play, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { validateFileSize } from '@/lib/fileUpload';
+import { AvatarName, AvatarVoiceMap } from "@/lib/avatarVoiceMap";
 
 type MaterialWithType = {
   url: string;
@@ -18,7 +19,9 @@ type MaterialWithType = {
   courseCode?: string;
 };
 
-type AvatarCharacter = 'lisa' | 'lori' | 'meg' | 'jeff' | 'max' | 'harry';
+
+type AvatarCharacter = AvatarName;
+
 
 type AvatarStyles = {
   lisa: 'casual-sitting' | 'graceful-sitting' | 'graceful-standing' | 'technical-sitting' | 'technical-standing';
