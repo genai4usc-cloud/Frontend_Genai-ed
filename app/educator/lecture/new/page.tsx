@@ -1066,7 +1066,6 @@ SLIDE 1: Untitled Lecture
         .update({
           avatar_character: selectedCharacter,
           avatar_style: selectedStyle,
-          avatar_voice_id: selectedVoice, 
         })
         .eq('id', lectureId);
 
