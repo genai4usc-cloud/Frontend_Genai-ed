@@ -94,6 +94,7 @@ export default function CreateLecture() {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const jobIdsRef = useRef<string[]>([]);
   const finishedAtRef = useRef<number | null>(null);
+  const voice = selectedCharacter ? AvatarVoiceMap[selectedCharacter].voiceId : null;
 
   useEffect(() => {
     checkAuth();
@@ -264,7 +265,7 @@ export default function CreateLecture() {
     try {
       const { data: lectureData, error } = await supabase
         .from('lectures')
-        .select('title, selected_course_ids, library_personal, library_usc, content_style, avatar_character, avatar_style, status, script_mode, script_text, script_prompt, video_length')
+        .select('title, selected_course_ids, library_personal, library_usc, content_style, avatar_character, avatar_style, avatar_voice_id, status, script_mode, script_text, script_prompt, video_length')
         .eq('id', lectureIdToLoad)
         .maybeSingle();
 
@@ -373,6 +374,7 @@ export default function CreateLecture() {
           content_style: originalLecture.content_style,
           avatar_character: originalLecture.avatar_character,
           avatar_style: originalLecture.avatar_style,
+          avatar_voice_id: originalLecture.avatar_voice_id,
           script_mode: originalLecture.script_mode,
           script_text: originalLecture.script_text,
           script_prompt: originalLecture.script_prompt,
@@ -1069,6 +1071,7 @@ SLIDE 1: Untitled Lecture
         .update({
           avatar_character: selectedCharacter,
           avatar_style: selectedStyle,
+          avatar_voice_id: voice,
         })
         .eq('id', lectureId);
 
