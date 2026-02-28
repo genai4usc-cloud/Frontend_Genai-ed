@@ -4,10 +4,11 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
-import { ArrowLeft, Upload, File, Check, ChevronDown, ChevronUp, Info, Video, Mic, FileText, Sparkles, Download, Eye, Play, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Upload, Check, ChevronDown, ChevronUp, Info, Video, Mic, FileText, Sparkles, Download, Eye, Play, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { validateFileSize } from '@/lib/fileUpload';
 import { AvatarName, AvatarVoiceMap } from "@/lib/avatarVoiceMap";
+import { File as FileIcon } from 'lucide-react';
 
 type MaterialWithType = {
   url: string;
@@ -1155,25 +1156,37 @@ SLIDE 1: Untitled Lecture
   };
 
   const pollJobsAndArtifacts = async (lectureIdToPoll: string, jobIds: string[]) => {
-    if (!jobIds || jobIds.length === 0) return;
-
     try {
-      const { data: jobs, error: jobsError } = await supabase
+      // Decide what jobs to look for
+      const requiredJobs: string[] = contentStyles
+        .map(style => STYLE_TO_JOB[style])
+        .filter(Boolean);
+  
+      // Build base query: always tie to lecture_id
+      const jobsBaseQuery = supabase
         .from('lecture_jobs')
         .select('*')
-        .in('id', jobIds);
-
+        .eq('lecture_id', lectureIdToPoll);
+  
+      // If we have jobIds, use them (exact). Otherwise fallback to lecture_id + job_types.
+      const { data: jobs, error: jobsError } =
+        jobIds && jobIds.length > 0
+          ? await jobsBaseQuery.in('id', jobIds)
+          : requiredJobs.length > 0
+            ? await jobsBaseQuery.in('job_type', requiredJobs)
+            : await jobsBaseQuery; // extreme fallback
+  
       if (jobsError) throw jobsError;
-
+  
       const { data: artifacts, error: artifactsError } = await supabase
         .from('lecture_artifacts')
         .select('*')
         .eq('lecture_id', lectureIdToPoll);
-
+  
       if (artifactsError) throw artifactsError;
-
+  
       if (!isMountedRef.current) return;
-
+  
       const jobsMap: Record<string, { status: string; progress: number; error?: string }> = {};
       jobs?.forEach(job => {
         jobsMap[job.job_type] = {
@@ -1182,57 +1195,50 @@ SLIDE 1: Untitled Lecture
           error: job.error_message || (job.result as any)?.error
         };
       });
-
+  
       const artifactsMap: Record<string, string> = {};
       artifacts?.forEach(artifact => {
         if (artifact.file_url) {
           artifactsMap[artifact.artifact_type] = artifact.file_url;
         }
       });
-
+  
       if (!isMountedRef.current) return;
-
+  
       setJobsByType(jobsMap);
       setArtifactsByType(artifactsMap);
-
-      const requiredJobs: string[] = contentStyles
-        .map(style => STYLE_TO_JOB[style])
-        .filter(Boolean);
-
-      const allJobsFinished = requiredJobs.every(jobType => {
-        const job = jobsMap[jobType];
-        return job && (job.status === 'succeeded' || job.status === 'failed');
-      });
-
+  
+      // ✅ Determine completion using requiredJobs (same as before)
+      const allJobsFinished =
+        requiredJobs.length > 0 &&
+        requiredJobs.every(jobType => {
+          const job = jobsMap[jobType];
+          return job && (job.status === 'succeeded' || job.status === 'failed');
+        });
+  
       if (allJobsFinished) {
         const anySucceeded = requiredJobs.some(jobType => jobsMap[jobType]?.status === 'succeeded');
-
+  
         // Grace window: give artifacts time to show up after job success
         if (anySucceeded && Object.keys(artifactsMap).length === 0) {
           if (!finishedAtRef.current) finishedAtRef.current = Date.now();
-
-          // wait up to 10 seconds for artifacts to appear
           if (Date.now() - finishedAtRef.current < 10_000) {
-            return; // keep polling
+            return;
           }
         }
-
-        // stop polling
+  
         finishedAtRef.current = null;
-
+  
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
           pollingIntervalRef.current = null;
         }
-
+  
         setIsGenerating(false);
-
+  
         if (anySucceeded && Object.keys(artifactsMap).length > 0) {
           setContentGenerated(true);
-          await supabase
-            .from('lectures')
-            .update({ status: 'generated' })
-            .eq('id', lectureIdToPoll);
+          await supabase.from('lectures').update({ status: 'generated' }).eq('id', lectureIdToPoll);
           toast.success('Content generated successfully!');
         } else {
           toast.error('Content generation failed. Please check errors and try again.');
@@ -1242,7 +1248,6 @@ SLIDE 1: Untitled Lecture
       console.error('Error polling jobs and artifacts:', error);
     }
   };
-
   const checkExistingGeneration = async (): Promise<{ blocked: boolean; reason: string; jobs: any[] }> => {
     if (!lectureId) return { blocked: false, reason: '', jobs: [] };
 
@@ -1416,53 +1421,44 @@ SLIDE 1: Untitled Lecture
   };
 
   const handleGenerateContent = async () => {
+    console.log('handleGenerateContent clicked', { lectureId, isGenerating, gate: isStartingGenerationRef.current });
     if (!lectureId) {
       toast.error('No lecture draft found');
       return;
     }
-
-    if (isStartingGenerationRef.current) {
-      return;
-    }
-
+  
+    if (isStartingGenerationRef.current) return;
     isStartingGenerationRef.current = true;
-
+  
     try {
       const checkResult = await checkExistingGeneration();
-
+  
       if (checkResult.blocked) {
         setGenerationBlocked(true);
         setGenerationBlockReason(checkResult.reason);
         setExistingJobs(checkResult.jobs);
-        isStartingGenerationRef.current = false;
-        return;
+        return; // ok because finally will reset the ref
       }
-
+  
       setGenerationBlocked(false);
       setGenerationBlockReason('');
-    } catch (error) {
-      console.error('Error in precheck:', error);
-    }
-
-    setIsGenerating(true);
-    setContentGenerated(false);
-    setJobsByType({});
-    setArtifactsByType({});
-    finishedAtRef.current = null;
-    jobIdsRef.current = [];
-
-    toast.info('Starting content generation...');
-
-    try {
+  
+      setIsGenerating(true);
+      setContentGenerated(false);
+      setJobsByType({});
+      setArtifactsByType({});
+      finishedAtRef.current = null;
+      jobIdsRef.current = [];
+  
+      toast.info('Starting content generation...');
+  
       await supabase
         .from('lectures')
         .update({ last_generate_attempt_at: new Date().toISOString() })
         .eq('id', lectureId);
-
-      const requiredJobs = contentStyles
-        .map(style => STYLE_TO_JOB[style])
-        .filter(Boolean);
-
+  
+      const requiredJobs = contentStyles.map(s => STYLE_TO_JOB[s]).filter(Boolean);
+  
       const { data: clientRun } = await supabase
         .from('lecture_generation_client_runs')
         .insert({
@@ -1472,82 +1468,85 @@ SLIDE 1: Untitled Lecture
         })
         .select()
         .single();
-
-      const clientRunId = clientRun?.id;
-
-      try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) throw sessionError;
   
-      const token = session?.access_token;
-      if (!token) {
-        toast.error('Session expired. Please log in again.');
-        setIsGenerating(false);
-        return;
-      }
-      
-      const resp = await fetch(`${BACKEND_URL}/api/lectures/${lectureId}/generate-content`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
+      const clientRunId = clientRun?.id;
+  
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+  
+        const token = session?.access_token;
+        if (!token) throw new Error('Session expired. Please log in again.');
+  
+        const resp = await fetch(`${BACKEND_URL}/api/lectures/${lectureId}/generate-content`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          }
+        });
+  
+        if (!resp.ok) {
+          const errText = await resp.text();
+          throw new Error(`Backend error (${resp.status}): ${errText}`);
         }
-      });
-
-      if (!resp.ok) {
-        const errText = await resp.text();
-        throw new Error(`Backend error (${resp.status}): ${errText}`);
+  
+        const started = await resp.json();
+        const jobIdsMap = started?.job_ids || {};
+        const jobIds = Object.values(jobIdsMap).filter(Boolean) as string[];
+  
+        if (!Array.isArray(jobIds) || jobIds.length === 0) {
+          throw new Error(`Backend returned success but started no jobs: ${JSON.stringify(started)}`);
+        }
+  
+        jobIdsRef.current = jobIds;
+  
+        toast.info('Backend processing started. Monitoring progress...');
+  
+        if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+  
+        await pollJobsAndArtifacts(lectureId, jobIds);
+  
+        pollingIntervalRef.current = setInterval(() => {
+          pollJobsAndArtifacts(lectureId, jobIdsRef.current);
+        }, 2000);
+  
+        if (clientRunId) {
+          await supabase
+            .from('lecture_generation_client_runs')
+            .update({ status: 'completed' })
+            .eq('id', clientRunId);
+        }
+      } catch (innerError) {
+        console.error('Error calling backend:', innerError);
+  
+        toast.error('Backend call failed, but generation may have started. Monitoring DB...');
+  
+        if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+  
+        await pollJobsAndArtifacts(lectureId, []);
+        pollingIntervalRef.current = setInterval(() => {
+          pollJobsAndArtifacts(lectureId, []);
+        }, 2000);
+  
+        if (clientRunId) {
+          await supabase
+            .from('lecture_generation_client_runs')
+            .update({
+              status: 'error',
+              reason: innerError instanceof Error ? innerError.message : 'Unknown error'
+            })
+            .eq('id', clientRunId);
+        }
+  
+        return; // keep polling
       }
-
-      const started = await resp.json();
-
-      const jobIdsMap = started?.job_ids || {};
-      const jobIds = Object.values(jobIdsMap).filter(Boolean) as string[];
-
-      if (!Array.isArray(jobIds) || jobIds.length === 0) {
-        throw new Error(`Backend returned success but started no jobs: ${JSON.stringify(started)}`);
-      }
-
-      jobIdsRef.current = jobIds;
-
-      toast.info('Backend processing started. Monitoring progress...');
-
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
-
-      await pollJobsAndArtifacts(lectureId, jobIds);
-
-      pollingIntervalRef.current = setInterval(() => {
-        pollJobsAndArtifacts(lectureId, jobIdsRef.current);
-      }, 2000);
-
-      if (clientRunId) {
-        await supabase
-          .from('lecture_generation_client_runs')
-          .update({ status: 'completed' })
-          .eq('id', clientRunId);
-      }
-    } catch (innerError) {
-      console.error('Error calling backend:', innerError);
-
-      if (clientRunId) {
-        await supabase
-          .from('lecture_generation_client_runs')
-          .update({
-            status: 'error',
-            reason: innerError instanceof Error ? innerError.message : 'Unknown error'
-          })
-          .eq('id', clientRunId);
-      }
-
-      throw innerError;
-    }
-    } catch (error) {
-      console.error('Error generating content:', error);
-      toast.error('Failed to start content generation');
+    } catch (e) {
+      console.error('handleGenerateContent outer error:', e);
+      toast.error('Failed to start generation');
       setIsGenerating(false);
     } finally {
+      // ✅ THIS is the key fix
       isStartingGenerationRef.current = false;
     }
   };
@@ -2093,7 +2092,7 @@ SLIDE 1: Untitled Lecture
                           <input
                             ref={scriptFileInputRef}
                             type="file"
-                            accept=".txt,.doc,.docx,.pdf"
+                            accept=".txt,.docx,.pdf"
                             onChange={handleScriptFileSelect}
                             className="hidden"
                           />
