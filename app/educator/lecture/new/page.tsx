@@ -90,6 +90,11 @@ export default function CreateLecture() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [jobsByType, setJobsByType] = useState<Record<string, { status: string; progress: number; error?: string }>>({});
   const [artifactsByType, setArtifactsByType] = useState<Record<string, string>>({});
+  const [generationBlocked, setGenerationBlocked] = useState(false);
+  const [generationBlockReason, setGenerationBlockReason] = useState('');
+  const [existingJobs, setExistingJobs] = useState<any[]>([]);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
 
   const additionalFilesInputRef = useRef<HTMLInputElement>(null);
   const scriptFileInputRef = useRef<HTMLInputElement>(null);
@@ -99,6 +104,7 @@ export default function CreateLecture() {
   const finishedAtRef = useRef<number | null>(null);
   const materialNameDebounceRefs = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const isMountedRef = useRef(true);
+  const isStartingGenerationRef = useRef(false);
   const voice = selectedCharacter ? AvatarVoiceMap[selectedCharacter].voiceId : null;
 
   useEffect(() => {
@@ -1237,10 +1243,205 @@ SLIDE 1: Untitled Lecture
     }
   };
 
+  const checkExistingGeneration = async (): Promise<{ blocked: boolean; reason: string; jobs: any[] }> => {
+    if (!lectureId) return { blocked: false, reason: '', jobs: [] };
+
+    try {
+      const requiredJobs = contentStyles
+        .map(style => STYLE_TO_JOB[style])
+        .filter(Boolean);
+
+      if (requiredJobs.length === 0) {
+        return { blocked: false, reason: '', jobs: [] };
+      }
+
+      const { data: existingJobsData, error: jobsError } = await supabase
+        .from('lecture_jobs')
+        .select('*')
+        .eq('lecture_id', lectureId)
+        .in('job_type', requiredJobs);
+
+      if (jobsError) throw jobsError;
+
+      if (existingJobsData && existingJobsData.length > 0) {
+        const jobTypes = existingJobsData.map(j => j.job_type).join(', ');
+        return {
+          blocked: true,
+          reason: `Generation already exists for this lecture (${jobTypes}). Regenerating on the same lecture causes a duplicate-job error.`,
+          jobs: existingJobsData
+        };
+      }
+
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+      const { data: recentRuns, error: runsError } = await supabase
+        .from('lecture_generation_client_runs')
+        .select('*')
+        .eq('lecture_id', lectureId)
+        .eq('status', 'started')
+        .gte('created_at', twoMinutesAgo)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (runsError) throw runsError;
+
+      if (recentRuns && recentRuns.length > 0) {
+        return {
+          blocked: true,
+          reason: 'Generation already in progress. Please wait for it to complete.',
+          jobs: []
+        };
+      }
+
+      return { blocked: false, reason: '', jobs: [] };
+    } catch (error) {
+      console.error('Error checking existing generation:', error);
+      return { blocked: false, reason: '', jobs: [] };
+    }
+  };
+
+  const handleCloneAndRegenerate = async () => {
+    if (!lectureId) return;
+
+    try {
+      const { data: lectureData, error: fetchError } = await supabase
+        .from('lectures')
+        .select('*')
+        .eq('id', lectureId)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+      if (!lectureData) {
+        toast.error('Lecture not found');
+        return;
+      }
+
+      const { data: newLecture, error: insertError } = await supabase
+        .from('lectures')
+        .insert({
+          educator_id: lectureData.educator_id,
+          title: `${lectureData.title} (Copy)`,
+          selected_course_ids: lectureData.selected_course_ids,
+          library_personal: lectureData.library_personal,
+          library_usc: lectureData.library_usc,
+          content_style: lectureData.content_style,
+          script_mode: lectureData.script_mode,
+          script_text: lectureData.script_text,
+          script_prompt: lectureData.script_prompt,
+          video_length: lectureData.video_length,
+          avatar_character: lectureData.avatar_character,
+          avatar_style: lectureData.avatar_style,
+          avatar_voice_id: lectureData.avatar_voice_id,
+          status: 'draft'
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      const { data: materialsData } = await supabase
+        .from('lecture_materials')
+        .select('*')
+        .eq('lecture_id', lectureId);
+
+      if (materialsData && materialsData.length > 0) {
+        const materialsCopy = materialsData.map(m => ({
+          lecture_id: newLecture.id,
+          material_url: m.material_url,
+          material_name: m.material_name,
+          material_type: m.material_type,
+          source_type: m.source_type,
+          source_course_id: m.source_course_id,
+          file_mime: m.file_mime,
+          file_size_bytes: m.file_size_bytes,
+          storage_path: m.storage_path
+        }));
+
+        await supabase.from('lecture_materials').insert(materialsCopy);
+      }
+
+      toast.success('Lecture cloned! Redirecting...');
+      router.push(`/educator/lecture/new?id=${newLecture.id}`);
+    } catch (error) {
+      console.error('Error cloning lecture:', error);
+      toast.error('Failed to clone lecture');
+    }
+  };
+
+  const handleResetGeneration = async () => {
+    if (!lectureId || resetConfirmText !== 'RESET') {
+      toast.error('Please type RESET to confirm');
+      return;
+    }
+
+    try {
+      const requiredJobs = contentStyles
+        .map(style => STYLE_TO_JOB[style])
+        .filter(Boolean);
+
+      const requiredArtifacts = contentStyles
+        .map(style => JOB_TO_ARTIFACT[STYLE_TO_JOB[style]])
+        .filter(Boolean);
+
+      await supabase
+        .from('lecture_jobs')
+        .delete()
+        .eq('lecture_id', lectureId)
+        .in('job_type', requiredJobs);
+
+      await supabase
+        .from('lecture_artifacts')
+        .delete()
+        .eq('lecture_id', lectureId)
+        .in('artifact_type', requiredArtifacts);
+
+      await supabase
+        .from('lectures')
+        .update({ status: 'draft', last_generate_block_reason: null })
+        .eq('id', lectureId);
+
+      setGenerationBlocked(false);
+      setGenerationBlockReason('');
+      setExistingJobs([]);
+      setJobsByType({});
+      setArtifactsByType({});
+      setContentGenerated(false);
+      setShowResetModal(false);
+      setResetConfirmText('');
+
+      toast.success('Generation state reset. You can now generate content again.');
+    } catch (error) {
+      console.error('Error resetting generation:', error);
+      toast.error('Failed to reset generation state');
+    }
+  };
+
   const handleGenerateContent = async () => {
     if (!lectureId) {
       toast.error('No lecture draft found');
       return;
+    }
+
+    if (isStartingGenerationRef.current) {
+      return;
+    }
+
+    isStartingGenerationRef.current = true;
+
+    try {
+      const checkResult = await checkExistingGeneration();
+
+      if (checkResult.blocked) {
+        setGenerationBlocked(true);
+        setGenerationBlockReason(checkResult.reason);
+        setExistingJobs(checkResult.jobs);
+        isStartingGenerationRef.current = false;
+        return;
+      }
+
+      setGenerationBlocked(false);
+      setGenerationBlockReason('');
+    } catch (error) {
+      console.error('Error in precheck:', error);
     }
 
     setIsGenerating(true);
@@ -1253,6 +1454,28 @@ SLIDE 1: Untitled Lecture
     toast.info('Starting content generation...');
 
     try {
+      await supabase
+        .from('lectures')
+        .update({ last_generate_attempt_at: new Date().toISOString() })
+        .eq('id', lectureId);
+
+      const requiredJobs = contentStyles
+        .map(style => STYLE_TO_JOB[style])
+        .filter(Boolean);
+
+      const { data: clientRun } = await supabase
+        .from('lecture_generation_client_runs')
+        .insert({
+          lecture_id: lectureId,
+          status: 'started',
+          job_types: requiredJobs
+        })
+        .select()
+        .single();
+
+      const clientRunId = clientRun?.id;
+
+      try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
   
@@ -1298,10 +1521,34 @@ SLIDE 1: Untitled Lecture
       pollingIntervalRef.current = setInterval(() => {
         pollJobsAndArtifacts(lectureId, jobIdsRef.current);
       }, 2000);
+
+      if (clientRunId) {
+        await supabase
+          .from('lecture_generation_client_runs')
+          .update({ status: 'completed' })
+          .eq('id', clientRunId);
+      }
+    } catch (innerError) {
+      console.error('Error calling backend:', innerError);
+
+      if (clientRunId) {
+        await supabase
+          .from('lecture_generation_client_runs')
+          .update({
+            status: 'error',
+            reason: innerError instanceof Error ? innerError.message : 'Unknown error'
+          })
+          .eq('id', clientRunId);
+      }
+
+      throw innerError;
+    }
     } catch (error) {
       console.error('Error generating content:', error);
       toast.error('Failed to start content generation');
       setIsGenerating(false);
+    } finally {
+      isStartingGenerationRef.current = false;
     }
   };
 
@@ -2016,26 +2263,81 @@ SLIDE 1: Untitled Lecture
                   <div className="p-6 pt-0 space-y-6">
                     {!contentGenerated ? (
                       <>
-                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
-                          <Sparkles className="w-16 h-16 text-brand-maroon mx-auto mb-4" />
-                          <h3 className="text-xl font-bold text-gray-900 mb-2">Ready to Generate!</h3>
-                          <p className="text-gray-600 mb-6">
-                            Your lecture is configured and ready. Click the button below to start generating your AI-powered content.
-                          </p>
-                          <button
-                            onClick={handleGenerateContent}
-                            disabled={isGenerating}
-                            className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-4 px-12 rounded-lg transition-colors text-lg disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-3 mx-auto"
-                          >
+                        {generationBlocked && (
+                          <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-6 mb-6">
+                            <div className="flex items-start gap-3 mb-4">
+                              <Info className="w-6 h-6 text-amber-600 flex-shrink-0 mt-1" />
+                              <div>
+                                <h3 className="text-lg font-bold text-amber-900 mb-2">Generation Already Exists</h3>
+                                <p className="text-amber-800 mb-4">{generationBlockReason}</p>
+                                {existingJobs.length > 0 && (
+                                  <div className="bg-white rounded-lg p-3 mb-4 text-sm">
+                                    <p className="font-semibold text-gray-900 mb-2">Existing Jobs:</p>
+                                    <ul className="space-y-1">
+                                      {existingJobs.map((job, idx) => (
+                                        <li key={idx} className="text-gray-700">
+                                          <span className="font-medium">{job.job_type}</span>: {job.status}
+                                          {job.progress > 0 && ` (${job.progress}%)`}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-3">
+                              {Object.keys(artifactsByType).length > 0 && (
+                                <button
+                                  onClick={() => {
+                                    setCurrentStep(7);
+                                    setExpandedStep(7);
+                                  }}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                  View Existing Output
+                                </button>
+                              )}
+                              <button
+                                onClick={handleCloneAndRegenerate}
+                                className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
+                              >
+                                <Sparkles className="w-4 h-4" />
+                                Regenerate Safely (Clone Lecture)
+                              </button>
+                              <button
+                                onClick={() => setShowResetModal(true)}
+                                className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center gap-2"
+                              >
+                                <Info className="w-4 h-4" />
+                                Reset Generation (Advanced)
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {!generationBlocked && (
+                          <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center">
+                            <Sparkles className="w-16 h-16 text-brand-maroon mx-auto mb-4" />
+                            <h3 className="text-xl font-bold text-gray-900 mb-2">Ready to Generate!</h3>
+                            <p className="text-gray-600 mb-6">
+                              Your lecture is configured and ready. Click the button below to start generating your AI-powered content.
+                            </p>
+                            <button
+                              onClick={handleGenerateContent}
+                              disabled={isGenerating}
+                              className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-4 px-12 rounded-lg transition-colors text-lg disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-3 mx-auto"
+                            >
+                              {isGenerating && (
+                                <div className="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                              )}
+                              {isGenerating ? 'Generating...' : 'Generate Content'}
+                            </button>
                             {isGenerating && (
-                              <div className="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                              <p className="text-sm text-gray-600 mt-3">Starting jobs and polling status...</p>
                             )}
-                            {isGenerating ? 'Generating...' : 'Generate Content'}
-                          </button>
-                          {isGenerating && (
-                            <p className="text-sm text-gray-600 mt-3">Starting jobs and polling status...</p>
-                          )}
-                        </div>
+                          </div>
+                        )}
 
                         {isGenerating && (
                           <div className="border border-gray-200 rounded-xl p-6 space-y-4">
@@ -2351,6 +2653,66 @@ SLIDE 1: Untitled Lecture
           })}
         </div>
       </div>
+
+      {showResetModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="bg-red-100 p-2 rounded-lg">
+                <Info className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Reset Generation State (Advanced)</h3>
+                <p className="text-gray-700 mb-4">
+                  This will delete all lecture_jobs and lecture_artifacts for the selected content types from the database.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-4">
+              <p className="text-sm text-amber-900 font-semibold mb-2">Warning:</p>
+              <ul className="text-sm text-amber-800 space-y-1 list-disc list-inside">
+                <li>This only cleans database records, not backend storage files</li>
+                <li>Generated files may remain orphaned in storage</li>
+                <li>This action cannot be undone</li>
+                <li>Recommended: Use "Clone Lecture" instead for safe regeneration</li>
+              </ul>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Type <span className="font-mono bg-gray-100 px-2 py-1 rounded">RESET</span> to confirm:
+              </label>
+              <input
+                type="text"
+                value={resetConfirmText}
+                onChange={(e) => setResetConfirmText(e.target.value)}
+                placeholder="Type RESET here"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowResetModal(false);
+                  setResetConfirmText('');
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleResetGeneration}
+                disabled={resetConfirmText !== 'RESET'}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                Reset Generation State
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </EducatorLayout>
   );
 }
