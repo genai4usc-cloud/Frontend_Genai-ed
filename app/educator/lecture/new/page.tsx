@@ -4,11 +4,10 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
-import { ArrowLeft, Upload, Check, ChevronDown, ChevronUp, Info, Video, Mic, FileText, Sparkles, Download, Eye, Play, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Upload, Check, ChevronDown, ChevronUp, Info, Video, Mic, FileText, Sparkles, Download, Eye, CheckCircle, File } from 'lucide-react';
 import { toast } from 'sonner';
 import { validateFileSize } from '@/lib/fileUpload';
 import { AvatarName, AvatarVoiceMap } from "@/lib/avatarVoiceMap";
-import { File as FileIcon } from 'lucide-react';
 
 type MaterialWithType = {
   url: string;
