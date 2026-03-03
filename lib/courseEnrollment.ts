@@ -1,3 +1,5 @@
+import { supabase } from './supabase';
+
 type CourseStudentInsert = {
   course_id: string;
   email: string;
@@ -31,6 +33,22 @@ export async function buildCourseStudentRecords(
   }
 
   const profileIdByEmail = new Map<string, string>();
+
+  const { data: resolvedProfiles, error: resolveError } = await supabase.rpc(
+    'resolve_student_profiles_by_emails',
+    { p_emails: normalizedEmails }
+  );
+
+  if (resolveError && resolveError.code !== 'PGRST202') {
+    throw resolveError;
+  }
+
+  (resolvedProfiles ?? []).forEach((row: { email: string; student_id: string | null }) => {
+    if (row.email && row.student_id) {
+      profileIdByEmail.set(row.email.toLowerCase(), row.student_id);
+    }
+  });
+
   options.existingStudentIdsByEmail?.forEach((studentId, email) => {
     if (studentId) {
       profileIdByEmail.set(email.toLowerCase(), studentId);
