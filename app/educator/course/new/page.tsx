@@ -7,6 +7,7 @@ import EducatorLayout from '@/components/EducatorLayout';
 import { ArrowLeft, GraduationCap, FileText, Users, BookOpen, FolderOpen, Upload, Plus, X, Save, File } from 'lucide-react';
 import { toast } from 'sonner';
 import { uploadCourseFile, uploadMultipleFiles, parseStudentCSV, validateFileSize, validateFileType } from '@/lib/fileUpload';
+import { buildCourseStudentRecords } from '@/lib/courseEnrollment';
 
 export default function CreateCourse() {
   const router = useRouter();
@@ -289,15 +290,24 @@ export default function CreateCourse() {
           course_id: courseData.id,
           email: email,
         }));
-        await supabase.from('course_teaching_assistants').insert(taRecords);
+        const { error: taInsertError } = await supabase
+          .from('course_teaching_assistants')
+          .insert(taRecords);
+
+        if (taInsertError) {
+          throw taInsertError;
+        }
       }
 
       if (students.length > 0) {
-        const studentRecords = students.map(email => ({
-          course_id: courseData.id,
-          email: email,
-        }));
-        await supabase.from('course_students').insert(studentRecords);
+        const studentRecords = await buildCourseStudentRecords(courseData.id, students);
+        const { error: studentInsertError } = await supabase
+          .from('course_students')
+          .insert(studentRecords);
+
+        if (studentInsertError) {
+          throw studentInsertError;
+        }
       }
 
       if (textbooks.length > 0) {
@@ -305,7 +315,13 @@ export default function CreateCourse() {
           course_id: courseData.id,
           title_isbn: titleIsbn,
         }));
-        await supabase.from('course_textbooks').insert(textbookRecords);
+        const { error: textbookInsertError } = await supabase
+          .from('course_textbooks')
+          .insert(textbookRecords);
+
+        if (textbookInsertError) {
+          throw textbookInsertError;
+        }
       }
 
       toast.success('Course created successfully!');

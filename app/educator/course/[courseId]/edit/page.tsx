@@ -7,6 +7,7 @@ import EducatorLayout from '@/components/EducatorLayout';
 import { ArrowLeft, GraduationCap, FileText, Users, BookOpen, FolderOpen, Upload, Plus, X, Save, File, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { uploadCourseFile, uploadMultipleFiles, parseStudentCSV, validateFileSize, validateFileType } from '@/lib/fileUpload';
+import { buildCourseStudentRecords } from '@/lib/courseEnrollment';
 
 export default function EditCourse() {
   const router = useRouter();
@@ -345,31 +346,70 @@ export default function EditCourse() {
         throw updateError;
       }
 
-      await supabase.from('course_teaching_assistants').delete().eq('course_id', courseId);
+      const { error: taDeleteError } = await supabase
+        .from('course_teaching_assistants')
+        .delete()
+        .eq('course_id', courseId);
+
+      if (taDeleteError) {
+        throw taDeleteError;
+      }
+
       if (teachingAssistants.length > 0) {
         const taRecords = teachingAssistants.map(email => ({
           course_id: courseId,
           email: email,
         }));
-        await supabase.from('course_teaching_assistants').insert(taRecords);
+        const { error: taInsertError } = await supabase
+          .from('course_teaching_assistants')
+          .insert(taRecords);
+
+        if (taInsertError) {
+          throw taInsertError;
+        }
       }
 
-      await supabase.from('course_students').delete().eq('course_id', courseId);
+      const { error: studentDeleteError } = await supabase
+        .from('course_students')
+        .delete()
+        .eq('course_id', courseId);
+
+      if (studentDeleteError) {
+        throw studentDeleteError;
+      }
+
       if (students.length > 0) {
-        const studentRecords = students.map(email => ({
-          course_id: courseId,
-          email: email,
-        }));
-        await supabase.from('course_students').insert(studentRecords);
+        const studentRecords = await buildCourseStudentRecords(courseId, students);
+        const { error: studentInsertError } = await supabase
+          .from('course_students')
+          .insert(studentRecords);
+
+        if (studentInsertError) {
+          throw studentInsertError;
+        }
       }
 
-      await supabase.from('course_textbooks').delete().eq('course_id', courseId);
+      const { error: textbookDeleteError } = await supabase
+        .from('course_textbooks')
+        .delete()
+        .eq('course_id', courseId);
+
+      if (textbookDeleteError) {
+        throw textbookDeleteError;
+      }
+
       if (textbooks.length > 0) {
         const textbookRecords = textbooks.map(titleIsbn => ({
           course_id: courseId,
           title_isbn: titleIsbn,
         }));
-        await supabase.from('course_textbooks').insert(textbookRecords);
+        const { error: textbookInsertError } = await supabase
+          .from('course_textbooks')
+          .insert(textbookRecords);
+
+        if (textbookInsertError) {
+          throw textbookInsertError;
+        }
       }
 
       toast.success('Course updated successfully!');
