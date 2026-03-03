@@ -1,5 +1,3 @@
-import { supabase } from './supabase';
-
 type CourseStudentInsert = {
   course_id: string;
   email: string;
@@ -32,22 +30,7 @@ export async function buildCourseStudentRecords(
     return [];
   }
 
-  const emailFilter = emailPairs
-    .map(({ original }) => `email.ilike.${original.replace(/,/g, '\\,')}`)
-    .join(',');
-
-  const { data: profiles, error } = await supabase
-    .from('profiles')
-    .select('id, email')
-    .or(emailFilter);
-
-  if (error) {
-    throw error;
-  }
-
-  const profileIdByEmail = new Map(
-    (profiles ?? []).map(profile => [profile.email.toLowerCase(), profile.id])
-  );
+  const profileIdByEmail = new Map<string, string>();
   options.existingStudentIdsByEmail?.forEach((studentId, email) => {
     if (studentId) {
       profileIdByEmail.set(email.toLowerCase(), studentId);
@@ -58,7 +41,9 @@ export async function buildCourseStudentRecords(
 
   if (unresolvedEmails.length > 0) {
     throw new Error(
-      `These students must sign up before they can be enrolled: ${unresolvedEmails.join(', ')}`
+      `Unable to resolve student IDs for: ${unresolvedEmails.join(', ')}. ` +
+      `This deployment does not allow the educator client to look up other users' profiles. ` +
+      `Use an existing enrollment row, a server-side lookup, or make course_students.student_id nullable.`
     );
   }
 
