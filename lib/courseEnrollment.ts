@@ -48,11 +48,11 @@ export async function buildCourseStudentRecords(
   const profileIdByEmail = new Map(
     (profiles ?? []).map(profile => [profile.email.toLowerCase(), profile.id])
   );
-  for (const [email, studentId] of options.existingStudentIdsByEmail ?? new Map()) {
+  options.existingStudentIdsByEmail?.forEach((studentId, email) => {
     if (studentId) {
       profileIdByEmail.set(email.toLowerCase(), studentId);
     }
-  }
+  });
 
   const unresolvedEmails = normalizedEmails.filter(email => !profileIdByEmail.has(email));
 
