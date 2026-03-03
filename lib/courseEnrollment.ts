@@ -6,9 +6,14 @@ type CourseStudentInsert = {
   student_id?: string | null;
 };
 
+type BuildCourseStudentRecordsOptions = {
+  existingStudentIdsByEmail?: Map<string, string>;
+};
+
 export async function buildCourseStudentRecords(
   courseId: string,
-  emails: string[]
+  emails: string[],
+  options: BuildCourseStudentRecordsOptions = {}
 ): Promise<CourseStudentInsert[]> {
   const emailPairs = Array.from(
     new Set(
@@ -43,11 +48,17 @@ export async function buildCourseStudentRecords(
   const profileIdByEmail = new Map(
     (profiles ?? []).map(profile => [profile.email.toLowerCase(), profile.id])
   );
-  const missingEmails = normalizedEmails.filter(email => !profileIdByEmail.has(email));
+  for (const [email, studentId] of options.existingStudentIdsByEmail ?? new Map()) {
+    if (studentId) {
+      profileIdByEmail.set(email.toLowerCase(), studentId);
+    }
+  }
 
-  if (missingEmails.length > 0) {
+  const unresolvedEmails = normalizedEmails.filter(email => !profileIdByEmail.has(email));
+
+  if (unresolvedEmails.length > 0) {
     throw new Error(
-      `These students must sign up before they can be enrolled: ${missingEmails.join(', ')}`
+      `These students must sign up before they can be enrolled: ${unresolvedEmails.join(', ')}`
     );
   }
 

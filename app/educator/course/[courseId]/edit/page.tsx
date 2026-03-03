@@ -346,6 +346,21 @@ export default function EditCourse() {
         throw updateError;
       }
 
+      const { data: existingStudentRows, error: existingStudentsError } = await supabase
+        .from('course_students')
+        .select('email, student_id')
+        .eq('course_id', courseId);
+
+      if (existingStudentsError) {
+        throw existingStudentsError;
+      }
+
+      const existingStudentIdsByEmail = new Map(
+        (existingStudentRows ?? [])
+          .filter(row => row.student_id)
+          .map(row => [row.email.toLowerCase(), row.student_id as string])
+      );
+
       const { error: taDeleteError } = await supabase
         .from('course_teaching_assistants')
         .delete()
@@ -379,7 +394,9 @@ export default function EditCourse() {
       }
 
       if (students.length > 0) {
-        const studentRecords = await buildCourseStudentRecords(courseId, students);
+        const studentRecords = await buildCourseStudentRecords(courseId, students, {
+          existingStudentIdsByEmail,
+        });
         const { error: studentInsertError } = await supabase
           .from('course_students')
           .insert(studentRecords);
