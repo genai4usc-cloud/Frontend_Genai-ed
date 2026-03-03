@@ -34,10 +34,17 @@ export async function buildCourseStudentRecords(
   const profileIdByEmail = new Map(
     (profiles ?? []).map(profile => [profile.email.toLowerCase(), profile.id])
   );
+  const missingEmails = normalizedEmails.filter(email => !profileIdByEmail.has(email));
+
+  if (missingEmails.length > 0) {
+    throw new Error(
+      `These students must sign up before they can be enrolled: ${missingEmails.join(', ')}`
+    );
+  }
 
   return normalizedEmails.map(email => ({
     course_id: courseId,
     email,
-    student_id: profileIdByEmail.get(email) ?? null,
+    student_id: profileIdByEmail.get(email)!,
   }));
 }
