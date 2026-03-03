@@ -10,22 +10,31 @@ export async function buildCourseStudentRecords(
   courseId: string,
   emails: string[]
 ): Promise<CourseStudentInsert[]> {
-  const normalizedEmails = Array.from(
+  const emailPairs = Array.from(
     new Set(
       emails
-        .map(email => email.trim().toLowerCase())
+        .map(email => email.trim())
         .filter(Boolean)
     )
-  );
+  ).map(email => ({
+    original: email,
+    normalized: email.toLowerCase(),
+  }));
+
+  const normalizedEmails = emailPairs.map(({ normalized }) => normalized);
 
   if (normalizedEmails.length === 0) {
     return [];
   }
 
+  const emailFilter = emailPairs
+    .map(({ original }) => `email.ilike.${original.replace(/,/g, '\\,')}`)
+    .join(',');
+
   const { data: profiles, error } = await supabase
     .from('profiles')
     .select('id, email')
-    .in('email', normalizedEmails);
+    .or(emailFilter);
 
   if (error) {
     throw error;
@@ -42,9 +51,9 @@ export async function buildCourseStudentRecords(
     );
   }
 
-  return normalizedEmails.map(email => ({
+  return emailPairs.map(({ original, normalized }) => ({
     course_id: courseId,
-    email,
-    student_id: profileIdByEmail.get(email)!,
+    email: original,
+    student_id: profileIdByEmail.get(normalized)!,
   }));
 }
