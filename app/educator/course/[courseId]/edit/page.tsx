@@ -364,14 +364,14 @@ export default function EditCourse() {
         throw existingStudentsError;
       }
 
-      const existingStudentIdsByEmail = new Map<string, string>(
-        [
-          ...Object.entries(studentIdsByEmail),
-          ...(existingStudentRows ?? [])
-          .filter(row => row.student_id)
-          .map(row => [row.email.toLowerCase(), row.student_id as string]),
-        ]
-      );
+      const existingStudentEntries: Array<[string, string]> = [
+        ...Object.entries(studentIdsByEmail),
+        ...(existingStudentRows ?? [])
+          .filter((row): row is { email: string; student_id: string } => Boolean(row.student_id))
+          .map(row => [row.email.toLowerCase(), row.student_id]),
+      ];
+
+      const existingStudentIdsByEmail = new Map<string, string>(existingStudentEntries);
 
       const studentRecords = await buildCourseStudentRecords(courseId, students, {
         existingStudentIdsByEmail,
