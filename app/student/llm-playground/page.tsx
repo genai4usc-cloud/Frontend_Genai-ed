@@ -105,7 +105,11 @@ const AI_MODELS: AIModel[] = [
   { id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5', provider: 'Anthropic', icon: '🧠', color: 'bg-purple-500' }
 ];
 
-const BACKEND_BASE = process.env.NEXT_PUBLIC_BACKEND_BASE || 'https://backend-genai-ed.onrender.com';
+const BACKEND_BASE =
+  process.env.NEXT_PUBLIC_BACKEND_BASE ||
+  (process.env.NODE_ENV === 'development'
+    ? 'http://127.0.0.1:8000'
+    : 'https://backend-genai-ed.onrender.com');
 
 function getEnvelopeText(item?: EnvelopeItem | null): string {
   const v = item?.content?.value;
