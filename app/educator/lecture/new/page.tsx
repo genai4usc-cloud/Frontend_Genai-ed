@@ -1659,10 +1659,10 @@ SLIDE 1: Untitled Lecture
 
   const avatarOptions = [
     { id: 'lisa' as AvatarCharacter, label: 'Lisa', file: 'Lisa.png' },
-    { id: 'lori' as AvatarCharacter, label: 'Lori', file: 'Lori.png' },
-    { id: 'meg' as AvatarCharacter, label: 'Meg', file: 'Meg.png' },
-    { id: 'jeff' as AvatarCharacter, label: 'Jeff', file: 'Jeff.png' },
-    { id: 'max' as AvatarCharacter, label: 'Max', file: 'Max.png' },
+    // { id: 'lori' as AvatarCharacter, label: 'Lori', file: 'Lori.png' },
+    // { id: 'meg' as AvatarCharacter, label: 'Meg', file: 'Meg.png' },
+    // { id: 'jeff' as AvatarCharacter, label: 'Jeff', file: 'Jeff.png' },
+    // { id: 'max' as AvatarCharacter, label: 'Max', file: 'Max.png' },
     { id: 'harry' as AvatarCharacter, label: 'Harry', file: 'Harry.png' },
   ].map((a) => {
     const { data } = supabase.storage.from('media').getPublicUrl(`Images/${a.file}`);
@@ -2147,13 +2147,11 @@ SLIDE 1: Untitled Lecture
                             onChange={(e) => setVideoLength(Number(e.target.value))}
                             className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
                           >
+                            <option value={1}>1 minute</option>
+                            <option value={2}>2 minutes</option>
+                            <option value={3}>3 minutes</option>
+                            <option value={4}>4 minutes</option>
                             <option value={5}>5 minutes</option>
-                            <option value={10}>10 minutes</option>
-                            <option value={15}>15 minutes</option>
-                            <option value={20}>20 minutes</option>
-                            <option value={30}>30 minutes</option>
-                            <option value={45}>45 minutes</option>
-                            <option value={60}>60 minutes</option>
                           </select>
                         </div>
 

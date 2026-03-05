@@ -34,7 +34,7 @@ export default function EditCourse() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const [semester, setSemester] = useState('Fall 2025');
+  const [semester, setSemester] = useState('Fall 2026');
   const [courseNumber, setCourseNumber] = useState('');
   const [section, setSection] = useState('');
   const [courseTitle, setCourseTitle] = useState('');
@@ -590,11 +590,12 @@ export default function EditCourse() {
                   onChange={(e) => setSemester(e.target.value)}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
                 >
-                  <option value="Fall 2025">Fall 2025</option>
-                  <option value="Spring 2025">Spring 2025</option>
-                  <option value="Summer 2025">Summer 2025</option>
-                  <option value="Fall 2024">Fall 2024</option>
-                  <option value="Spring 2024">Spring 2024</option>
+                  <option value="Spring 2026">Spring 2026</option>
+                  <option value="Summer 2026">Summer 2026</option>
+                  <option value="Fall 2026">Fall 2026</option>
+                  <option value="Spring 2027">Spring 2027</option>
+                  <option value="Summer 2027">Summer 2027</option>
+                  <option value="Fall 2027">Fall 2027</option>
                 </select>
               </div>
 
