@@ -2,12 +2,26 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { supabase, Profile, Course, CourseTeachingAssistant, CourseStudent, CourseTextbook } from '@/lib/supabase';
+import { supabase, Profile, Course } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
 import { ArrowLeft, GraduationCap, FileText, Users, BookOpen, FolderOpen, Upload, Plus, X, Save, File, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { uploadCourseFile, uploadMultipleFiles, parseStudentCSV, validateFileSize, validateFileType } from '@/lib/fileUpload';
-import { buildCourseStudentRecords } from '@/lib/courseEnrollment';
+import { uploadCourseFile, uploadMultipleFiles, validateFileSize, validateFileType } from '@/lib/fileUpload';
+import {
+  createEmptyStudentEntry,
+  mergeStudentRosterEntries,
+  parseStudentRosterFile,
+  StudentRosterEntry,
+} from '@/lib/studentRoster';
+
+type CourseStudentRosterRow = {
+  course_student_id: string;
+  student_id: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  created_at: string;
+};
 
 export default function EditCourse() {
   const router = useRouter();
@@ -29,9 +43,8 @@ export default function EditCourse() {
   const [teachingAssistants, setTeachingAssistants] = useState<string[]>([]);
   const [taInput, setTaInput] = useState('');
 
-  const [students, setStudents] = useState<string[]>([]);
-  const [studentIdsByEmail, setStudentIdsByEmail] = useState<Record<string, string>>({});
-  const [studentInput, setStudentInput] = useState('');
+  const [students, setStudents] = useState<StudentRosterEntry[]>([]);
+  const [studentInput, setStudentInput] = useState<StudentRosterEntry>(createEmptyStudentEntry());
 
   const [textbooks, setTextbooks] = useState<string[]>([]);
   const [textbookInput, setTextbookInput] = useState('');
@@ -123,19 +136,20 @@ export default function EditCourse() {
           setTeachingAssistants(tasData.map(ta => ta.email));
         }
 
-        const { data: studentsData } = await supabase
-          .from('course_students')
-          .select('email, student_id')
-          .eq('course_id', courseId);
+        const { data: studentsData, error: studentsError } = await supabase
+          .rpc('get_course_student_roster', { p_course_id: courseId });
+        if (studentsError) {
+          throw studentsError;
+        }
         if (studentsData) {
-          setStudents(studentsData.map(s => s.email));
-          setStudentIdsByEmail(
-            studentsData.reduce<Record<string, string>>((acc, row) => {
-              if (row.student_id) {
-                acc[row.email.toLowerCase()] = row.student_id;
-              }
-              return acc;
-            }, {})
+          setStudents(
+            (studentsData as CourseStudentRosterRow[]).map(student => ({
+              id: student.course_student_id,
+              firstName: student.first_name ?? '',
+              lastName: student.last_name ?? '',
+              email: student.email ?? '',
+              studentId: student.student_id,
+            }))
           );
         }
 
@@ -168,16 +182,39 @@ export default function EditCourse() {
   };
 
   const addStudent = () => {
-    if (studentInput.trim() && studentInput.includes('@')) {
-      setStudents([...students, studentInput.trim()]);
-      setStudentInput('');
-    } else {
+    const email = studentInput.email.trim();
+
+    if (!email || !email.includes('@')) {
       toast.error('Please enter a valid email address');
+      return;
     }
+
+    setStudents(prev =>
+      mergeStudentRosterEntries(prev, [
+        {
+          ...studentInput,
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+          email,
+        },
+      ])
+    );
+    setStudentInput(createEmptyStudentEntry());
   };
 
   const removeStudent = (index: number) => {
     setStudents(students.filter((_, i) => i !== index));
+  };
+
+  const updateStudent = (
+    index: number,
+    field: 'firstName' | 'lastName' | 'email',
+    value: string
+  ) => {
+    setStudents(prev =>
+      prev.map((student, currentIndex) =>
+        currentIndex === index ? { ...student, [field]: value } : student
+      )
+    );
   };
 
   const addTextbook = () => {
@@ -229,18 +266,13 @@ export default function EditCourse() {
 
     setStudentRosterFile(file);
 
-    if (file.type === 'text/csv') {
-      const text = await file.text();
-      const emails = parseStudentCSV(text);
+    const parsedStudents = await parseStudentRosterFile(file);
 
-      if (emails.length > 0) {
-        setStudents(prev => Array.from(new Set([...prev, ...emails])));
-        toast.success(`Added ${emails.length} students from CSV`);
-      } else {
-        toast.error('No valid email addresses found in CSV');
-      }
+    if (parsedStudents.length > 0) {
+      setStudents(prev => mergeStudentRosterEntries(prev, parsedStudents));
+      toast.success(`Added ${parsedStudents.length} students from roster`);
     } else {
-      toast.info('Excel file uploaded. Students will be processed when course is saved.');
+      toast.error('No valid student rows found in the uploaded file');
     }
   };
 
@@ -355,29 +387,24 @@ export default function EditCourse() {
         throw updateError;
       }
 
-      const { data: existingStudentRows, error: existingStudentsError } = await supabase
-        .from('course_students')
-        .select('email, student_id')
-        .eq('course_id', courseId);
+      const studentPayload = students.map(student => ({
+        first_name: student.firstName.trim(),
+        last_name: student.lastName.trim(),
+        email: student.email.trim(),
+      }));
 
-      if (existingStudentsError) {
-        throw existingStudentsError;
+      const seenEmails = new Set<string>();
+      for (const student of studentPayload) {
+        if (!student.email || !student.email.includes('@')) {
+          throw new Error('Every student must have a valid email address.');
+        }
+
+        const normalizedEmail = student.email.toLowerCase();
+        if (seenEmails.has(normalizedEmail)) {
+          throw new Error(`Duplicate student email found: ${student.email}`);
+        }
+        seenEmails.add(normalizedEmail);
       }
-
-      const existingStudentEntries: Array<[string, string]> = [
-        ...Object.keys(studentIdsByEmail).map(
-          (email): [string, string] => [email, studentIdsByEmail[email]]
-        ),
-        ...(existingStudentRows ?? [])
-          .filter((row): row is { email: string; student_id: string } => Boolean(row.student_id))
-          .map((row): [string, string] => [row.email.toLowerCase(), row.student_id]),
-      ];
-
-      const existingStudentIdsByEmail = new Map<string, string>(existingStudentEntries);
-
-      const studentRecords = await buildCourseStudentRecords(courseId, students, {
-        existingStudentIdsByEmail,
-      });
 
       const { error: taDeleteError } = await supabase
         .from('course_teaching_assistants')
@@ -402,24 +429,27 @@ export default function EditCourse() {
         }
       }
 
-      const { error: studentDeleteError } = await supabase
-        .from('course_students')
-        .delete()
-        .eq('course_id', courseId);
-
-      if (studentDeleteError) {
-        throw studentDeleteError;
-      }
-
-      if (studentRecords.length > 0) {
-        const { error: studentInsertError } = await supabase
-          .from('course_students')
-          .insert(studentRecords);
-
-        if (studentInsertError) {
-          throw studentInsertError;
+      const { data: syncedStudents, error: syncStudentsError } = await supabase.rpc(
+        'sync_course_student_roster',
+        {
+          p_course_id: courseId,
+          p_students: studentPayload,
         }
+      );
+
+      if (syncStudentsError) {
+        throw syncStudentsError;
       }
+
+      setStudents(
+        ((syncedStudents ?? []) as CourseStudentRosterRow[]).map(student => ({
+          id: student.course_student_id,
+          firstName: student.first_name ?? '',
+          lastName: student.last_name ?? '',
+          email: student.email ?? '',
+          studentId: student.student_id,
+        }))
+      );
 
       const { error: textbookDeleteError } = await supabase
         .from('course_textbooks')
@@ -762,31 +792,65 @@ export default function EditCourse() {
               <p className="text-gray-700 font-medium text-sm">Upload student list (Excel/CSV)</p>
             </button>
 
-            <div className="flex gap-2 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1.4fr_auto] gap-2 mb-4">
+              <input
+                type="text"
+                value={studentInput.firstName}
+                onChange={(e) => setStudentInput(prev => ({ ...prev, firstName: e.target.value }))}
+                placeholder="First name"
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
+              />
+              <input
+                type="text"
+                value={studentInput.lastName}
+                onChange={(e) => setStudentInput(prev => ({ ...prev, lastName: e.target.value }))}
+                placeholder="Last name"
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
+              />
               <input
                 type="email"
-                value={studentInput}
-                onChange={(e) => setStudentInput(e.target.value)}
+                value={studentInput.email}
+                onChange={(e) => setStudentInput(prev => ({ ...prev, email: e.target.value }))}
                 onKeyPress={(e) => e.key === 'Enter' && addStudent()}
                 placeholder="Enter student email"
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
               />
               <button
                 onClick={addStudent}
-                className="bg-brand-yellow hover:bg-brand-yellow-hover p-3 rounded-lg transition-colors"
+                className="bg-brand-yellow hover:bg-brand-yellow-hover p-3 rounded-lg transition-colors h-[52px]"
               >
                 <Plus className="w-6 h-6 text-black" />
               </button>
             </div>
 
             {students.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {students.map((student, index) => (
-                  <div key={index} className="flex items-center justify-between bg-gray-50 px-4 py-3 rounded-lg">
-                    <span className="text-gray-700">{student}</span>
+                  <div key={student.id} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1.4fr_auto] gap-2 bg-gray-50 px-4 py-3 rounded-lg">
+                    <input
+                      type="text"
+                      value={student.firstName}
+                      onChange={(e) => updateStudent(index, 'firstName', e.target.value)}
+                      placeholder="First name"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent bg-white"
+                    />
+                    <input
+                      type="text"
+                      value={student.lastName}
+                      onChange={(e) => updateStudent(index, 'lastName', e.target.value)}
+                      placeholder="Last name"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent bg-white"
+                    />
+                    <input
+                      type="email"
+                      value={student.email}
+                      onChange={(e) => updateStudent(index, 'email', e.target.value)}
+                      placeholder="Email"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent bg-white"
+                    />
                     <button
                       onClick={() => removeStudent(index)}
-                      className="text-gray-400 hover:text-red-600 transition-colors"
+                      className="text-gray-400 hover:text-red-600 transition-colors justify-self-end self-center"
                     >
                       <X className="w-5 h-5" />
                     </button>
