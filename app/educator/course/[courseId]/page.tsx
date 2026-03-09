@@ -405,7 +405,7 @@ export default function CourseLectures() {
             </DropdownMenu>
             <button
               onClick={() => router.push(`/educator/course/${courseId}/edit`)}
-              className="border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 px-5 rounded-md transition-colors flex items-center gap-2"
+              className="border border-gray-300 hover:bg-gray-100 hover:border-gray-400 text-gray-700 hover:text-gray-900 font-semibold py-2.5 px-5 rounded-md transition-all duration-200 flex items-center gap-2 shadow-sm hover:shadow"
             >
               <Settings className="w-4 h-4" />
               Edit Course
