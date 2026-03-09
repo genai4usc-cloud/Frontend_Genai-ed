@@ -48,34 +48,48 @@ export default function QuizCard({
 
   return (
     <div
-      className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
+      className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 transition-all cursor-pointer"
       onClick={onClick}
     >
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between mb-3">
         <div className="flex-1">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="bg-brand-maroon p-2 rounded-lg">
-              <FileCheck className="w-5 h-5 text-white" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900">{title}</h3>
+          <div className="flex items-center gap-2 mb-2">
+            <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor()}`}>
+              {status.charAt(0).toUpperCase() + status.slice(1)}
+            </span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-gray-600">
+          <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
             {mcqCount > 0 && <span>{mcqCount} MCQ</span>}
             {mcqCount > 0 && shortAnswerCount > 0 && <span>•</span>}
             {shortAnswerCount > 0 && <span>{shortAnswerCount} Short Answer</span>}
+            {(mcqCount > 0 || shortAnswerCount > 0) && <span>•</span>}
+            <span>{totalMarks} pts</span>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-gray-500">
+            <div className="flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5" />
+              <span>{new Date(createdAt).toLocaleDateString()}</span>
+            </div>
+            {duration && (
+              <div className="flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" />
+                <span>{duration} min</span>
+              </div>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {onView && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onView();
               }}
-              className="text-gray-400 hover:text-green-600 transition-colors p-2 rounded-lg hover:bg-green-50"
+              className="text-gray-400 hover:text-gray-700 transition-colors p-1.5 rounded hover:bg-gray-100"
               title="View quiz"
             >
-              <Eye className="w-5 h-5" />
+              <Eye className="w-4 h-4" />
             </button>
           )}
           {onEdit && (
@@ -84,10 +98,10 @@ export default function QuizCard({
                 e.stopPropagation();
                 onEdit();
               }}
-              className="text-gray-400 hover:text-blue-600 transition-colors p-2 rounded-lg hover:bg-blue-50"
+              className="text-gray-400 hover:text-gray-700 transition-colors p-1.5 rounded hover:bg-gray-100"
               title="Edit quiz"
             >
-              <Edit className="w-5 h-5" />
+              <Edit className="w-4 h-4" />
             </button>
           )}
           {onDelete && (
@@ -96,44 +110,24 @@ export default function QuizCard({
                 e.stopPropagation();
                 onDelete();
               }}
-              className="text-gray-400 hover:text-red-600 transition-colors p-2 rounded-lg hover:bg-red-50"
+              className="text-gray-400 hover:text-red-600 transition-colors p-1.5 rounded hover:bg-red-50"
               title="Delete quiz"
             >
-              <Trash2 className="w-5 h-5" />
+              <Trash2 className="w-4 h-4" />
             </button>
           )}
         </div>
       </div>
 
-      <div className="flex items-center gap-4 text-sm text-gray-500 mb-3">
-        <div className="flex items-center gap-1">
-          <Calendar className="w-4 h-4" />
-          <span>{new Date(createdAt).toLocaleDateString()}</span>
-        </div>
-        {duration && (
-          <div className="flex items-center gap-1">
-            <Clock className="w-4 h-4" />
-            <span>{duration} min</span>
-          </div>
-        )}
-        <div className="flex items-center gap-1">
-          <Award className="w-4 h-4" />
-          <span>{totalMarks} marks</span>
-        </div>
-        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor()}`}>
-          {status.charAt(0).toUpperCase() + status.slice(1)}
-        </span>
-      </div>
-
       {completionRate !== undefined && (
-        <div className="border-t border-gray-200 pt-3 mt-3">
-          <div className="flex items-center justify-between text-sm mb-2">
+        <div className="border-t border-gray-100 pt-3 mt-3">
+          <div className="flex items-center justify-between text-xs mb-2">
             <span className="text-gray-600">Completion Rate</span>
-            <span className="font-bold text-gray-900">{completionRate}%</span>
+            <span className="font-semibold text-gray-900">{completionRate}%</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="w-full bg-gray-200 rounded-full h-1.5">
             <div
-              className="bg-brand-maroon h-2 rounded-full transition-all"
+              className="bg-brand-maroon h-1.5 rounded-full transition-all"
               style={{ width: `${completionRate}%` }}
             />
           </div>

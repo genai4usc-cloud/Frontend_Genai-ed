@@ -5,10 +5,16 @@ import { useRouter, useParams } from 'next/navigation';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import AssignmentCard from '@/components/AssignmentCard';
 import QuizCard from '@/components/QuizCard';
 import CourseSummaryStats from '@/components/CourseSummaryStats';
-import { ArrowLeft, Settings, Video, Mic, FileText, Play, Download, Clock, Calendar, Trash2, X, CreditCard as Edit, Plus } from 'lucide-react';
+import { ArrowLeft, Settings, Video, Mic, FileText, Play, Download, Clock, Calendar, Trash2, X, CreditCard as Edit, Plus, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 type Lecture = {
@@ -64,6 +70,7 @@ export default function CourseLectures() {
   const [showDeleteArtifactModal, setShowDeleteArtifactModal] = useState<{ lectureId: string; artifactId: string; type: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [playingMedia, setPlayingMedia] = useState<{ lectureId: string; type: 'video' | 'audio'; url: string } | null>(null);
+  const [activeTab, setActiveTab] = useState('lectures');
 
   const dummyAssignments: Assignment[] = [
     {
@@ -358,272 +365,262 @@ export default function CourseLectures() {
 
   return (
     <EducatorLayout profile={profile}>
-      <div className="max-w-6xl mx-auto space-y-8">
+      <div className="max-w-6xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.push('/educator/dashboard')}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors px-4 py-2 rounded-lg hover:bg-gray-100"
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
-              <span className="font-medium">Back</span>
             </button>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">{course.title}</h1>
-              <p className="text-gray-600 mt-1">{course.course_number} {course.section ? `- Section ${course.section}` : ''}</p>
+              <p className="text-gray-600 mt-1">{course.course_number} {course.section ? `- Section ${course.section}` : ''} • {course.semester}</p>
             </div>
           </div>
-          <button
-            onClick={() => router.push(`/educator/course/${courseId}/edit`)}
-            className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2"
-          >
-            <Settings className="w-5 h-5" />
-            Edit Course
-          </button>
+          <div className="flex items-center gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-4 rounded-lg transition-colors flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  Create
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => router.push('/educator/lecture/new')} className="cursor-pointer">
+                  <Video className="w-4 h-4 mr-2" />
+                  Lecture
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push('/educator/assignment/new')} className="cursor-pointer">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Assignment
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push('/educator/quiz/new')} className="cursor-pointer">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Quiz
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <button
+              onClick={() => router.push(`/educator/course/${courseId}/edit`)}
+              className="border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 px-4 rounded-lg transition-colors flex items-center gap-2"
+            >
+              <Settings className="w-4 h-4" />
+              Edit Course
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push('/educator/lecture/new')}
-            className="flex-1 bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            Create New Lecture
-          </button>
-          <button
-            onClick={() => router.push('/educator/assignment/new')}
-            className="flex-1 bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            Create New Assignment
-          </button>
-          <button
-            onClick={() => router.push('/educator/quiz/new')}
-            className="flex-1 bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            Create New Quiz
-          </button>
-        </div>
-
-        <Tabs defaultValue="lectures" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1 rounded-lg">
-            <TabsTrigger
-              value="lectures"
-              className="data-[state=active]:bg-white data-[state=active]:text-brand-maroon font-bold"
-            >
-              Lectures
-            </TabsTrigger>
-            <TabsTrigger
-              value="assignments"
-              className="data-[state=active]:bg-white data-[state=active]:text-brand-maroon font-bold"
-            >
-              Assignments
-            </TabsTrigger>
-            <TabsTrigger
-              value="quiz"
-              className="data-[state=active]:bg-white data-[state=active]:text-brand-maroon font-bold"
-            >
-              Quiz
-            </TabsTrigger>
-            <TabsTrigger
-              value="summary"
-              className="data-[state=active]:bg-white data-[state=active]:text-brand-maroon font-bold"
-            >
-              Summary
-            </TabsTrigger>
-          </TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <div className="border-b border-gray-200">
+            <TabsList className="bg-transparent h-auto p-0 space-x-8">
+              <TabsTrigger
+                value="lectures"
+                className="bg-transparent border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900"
+              >
+                Lectures ({lectures.length})
+              </TabsTrigger>
+              <TabsTrigger
+                value="assignments"
+                className="bg-transparent border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900"
+              >
+                Assignments ({dummyAssignments.length})
+              </TabsTrigger>
+              <TabsTrigger
+                value="quiz"
+                className="bg-transparent border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900"
+              >
+                Quiz ({quizzes.length})
+              </TabsTrigger>
+              <TabsTrigger
+                value="summary"
+                className="bg-transparent border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900"
+              >
+                Summary
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="lectures" className="mt-6">
-            <div className="bg-brand-maroon text-white rounded-2xl p-8 mb-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold mb-2">Course Lectures</h2>
-                  <p className="text-white/90">{lectures.length} lecture{lectures.length !== 1 ? 's' : ''} available</p>
-                </div>
-                <div className="flex items-center gap-3 text-white/90">
-                  <Calendar className="w-5 h-5" />
-                  <span className="font-medium">{course.semester}</span>
-                </div>
-              </div>
-            </div>
-
             {lectures.length === 0 ? (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center">
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
                 <div className="max-w-md mx-auto">
-                  <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <Video className="w-10 h-10 text-gray-400" />
+                  <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Video className="w-8 h-8 text-gray-400" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">No Lectures Yet</h3>
-                  <p className="text-gray-600 mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Lectures Yet</h3>
+                  <p className="text-gray-600 text-sm mb-6">
                     This course doesn't have any lectures yet. Create a new lecture by selecting this course in the lecture creation flow.
                   </p>
                   <button
                     onClick={() => router.push('/educator/lecture/new')}
-                    className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-8 rounded-lg transition-colors"
+                    className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-6 rounded-lg transition-colors"
                   >
                     Create Lecture
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-6">
+              <div className="space-y-3">
                 {lectures.map((lecture) => {
                   const videoArtifact = getArtifactByType(lecture.artifacts, 'video_avatar');
                   const audioArtifact = getArtifactByType(lecture.artifacts, 'audio');
                   const pptxArtifact = getArtifactByType(lecture.artifacts, 'pptx');
 
                   return (
-                    <div key={lecture.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-                      <div className="p-6">
-                        <div className="flex items-start justify-between mb-4">
+                    <div key={lecture.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:border-gray-300 transition-all">
+                      <div className="p-5">
+                        <div className="flex items-start justify-between mb-3">
                           <div className="flex-1">
-                            <h3 className="text-xl font-bold text-gray-900 mb-2">{lecture.title}</h3>
-                            {lecture.description && (
-                              <p className="text-gray-600 text-sm mb-3">{lecture.description}</p>
-                            )}
-                            <div className="flex items-center gap-4 text-sm text-gray-500">
-                              <div className="flex items-center gap-1">
-                                <Clock className="w-4 h-4" />
-                                <span>{lecture.video_length} minutes</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Calendar className="w-4 h-4" />
-                                <span>{new Date(lecture.created_at).toLocaleDateString()}</span>
-                              </div>
-                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                lecture.status === 'published' ? 'bg-green-100 text-green-700' :
-                                lecture.status === 'generated' ? 'bg-blue-100 text-blue-700' :
-                                'bg-gray-100 text-gray-700'
+                            <div className="flex items-center gap-3 mb-2">
+                              <h3 className="text-lg font-semibold text-gray-900">{lecture.title}</h3>
+                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                lecture.status === 'published' ? 'bg-green-50 text-green-700 border border-green-200' :
+                                lecture.status === 'generated' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                                'bg-gray-50 text-gray-700 border border-gray-200'
                               }`}>
                                 {lecture.status.charAt(0).toUpperCase() + lecture.status.slice(1)}
                               </span>
                             </div>
+                            {lecture.description && (
+                              <p className="text-gray-600 text-sm mb-2">{lecture.description}</p>
+                            )}
+                            <div className="flex items-center gap-4 text-xs text-gray-500">
+                              <div className="flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>{lecture.video_length} min</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Calendar className="w-3.5 h-3.5" />
+                                <span>{new Date(lecture.created_at).toLocaleDateString()}</span>
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1">
                             <button
                               onClick={() => router.push(`/educator/lecture/new?id=${lecture.id}&mode=edit`)}
-                              className="text-gray-400 hover:text-blue-600 transition-colors p-2 rounded-lg hover:bg-blue-50"
+                              className="text-gray-400 hover:text-gray-700 transition-colors p-1.5 rounded hover:bg-gray-100"
                               title="Edit lecture"
                             >
-                              <Edit className="w-5 h-5" />
+                              <Edit className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => setShowDeleteLectureModal(lecture.id)}
-                              className="text-gray-400 hover:text-red-600 transition-colors p-2 rounded-lg hover:bg-red-50"
-                              title="Delete entire lecture"
+                              className="text-gray-400 hover:text-red-600 transition-colors p-1.5 rounded hover:bg-red-50"
+                              title="Delete lecture"
                             >
-                              <Trash2 className="w-5 h-5" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
 
-                        <div className="border-t border-gray-200 pt-4">
-                          <h4 className="text-sm font-semibold text-gray-700 mb-3">Available Content</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="border-t border-gray-100 pt-3">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             {videoArtifact && (
-                              <div className="border-2 border-brand-maroon rounded-xl p-4 bg-red-50">
-                                <div className="flex items-center justify-between mb-3">
+                              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
+                                <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center gap-2">
-                                    <div className="bg-brand-maroon p-2 rounded-lg">
-                                      <Video className="w-5 h-5 text-white" />
+                                    <div className="bg-brand-maroon p-1.5 rounded">
+                                      <Video className="w-4 h-4 text-white" />
                                     </div>
-                                    <span className="font-bold text-gray-900">Video</span>
+                                    <span className="font-medium text-sm text-gray-900">Video</span>
                                   </div>
                                   <button
                                     onClick={() => setShowDeleteArtifactModal({ lectureId: lecture.id, artifactId: videoArtifact.id, type: 'video' })}
                                     className="text-gray-400 hover:text-red-600 transition-colors"
                                     title="Delete video"
                                   >
-                                    <Trash2 className="w-4 h-4" />
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
                                 <div className="flex gap-2">
                                   <button
                                     onClick={() => setPlayingMedia({ lectureId: lecture.id, type: 'video', url: videoArtifact.file_url })}
-                                    className="flex-1 flex items-center justify-center gap-2 bg-brand-maroon hover:bg-brand-maroon-hover text-white font-medium py-2 px-3 rounded-lg transition-colors text-sm"
+                                    className="flex-1 flex items-center justify-center gap-1.5 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-medium py-1.5 px-2 rounded transition-colors text-xs"
                                   >
-                                    <Play className="w-4 h-4" />
+                                    <Play className="w-3.5 h-3.5" />
                                     Play
                                   </button>
                                   <a
                                     href={videoArtifact.file_url}
                                     download
-                                    className="flex items-center justify-center bg-white hover:bg-gray-50 border border-gray-300 p-2 rounded-lg transition-colors"
+                                    className="flex items-center justify-center bg-white hover:bg-gray-50 border border-gray-300 p-1.5 rounded transition-colors"
                                   >
-                                    <Download className="w-4 h-4 text-gray-700" />
+                                    <Download className="w-3.5 h-3.5 text-gray-700" />
                                   </a>
                                 </div>
                               </div>
                             )}
 
                             {audioArtifact && (
-                              <div className="border-2 border-blue-600 rounded-xl p-4 bg-blue-50">
-                                <div className="flex items-center justify-between mb-3">
+                              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
+                                <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center gap-2">
-                                    <div className="bg-blue-600 p-2 rounded-lg">
-                                      <Mic className="w-5 h-5 text-white" />
+                                    <div className="bg-blue-600 p-1.5 rounded">
+                                      <Mic className="w-4 h-4 text-white" />
                                     </div>
-                                    <span className="font-bold text-gray-900">Audio</span>
+                                    <span className="font-medium text-sm text-gray-900">Audio</span>
                                   </div>
                                   <button
                                     onClick={() => setShowDeleteArtifactModal({ lectureId: lecture.id, artifactId: audioArtifact.id, type: 'audio' })}
                                     className="text-gray-400 hover:text-red-600 transition-colors"
                                     title="Delete audio"
                                   >
-                                    <Trash2 className="w-4 h-4" />
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
                                 <div className="flex gap-2">
                                   <button
                                     onClick={() => setPlayingMedia({ lectureId: lecture.id, type: 'audio', url: audioArtifact.file_url })}
-                                    className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-3 rounded-lg transition-colors text-sm"
+                                    className="flex-1 flex items-center justify-center gap-1.5 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-medium py-1.5 px-2 rounded transition-colors text-xs"
                                   >
-                                    <Play className="w-4 h-4" />
+                                    <Play className="w-3.5 h-3.5" />
                                     Play
                                   </button>
                                   <a
                                     href={audioArtifact.file_url}
                                     download
-                                    className="flex items-center justify-center bg-white hover:bg-gray-50 border border-gray-300 p-2 rounded-lg transition-colors"
+                                    className="flex items-center justify-center bg-white hover:bg-gray-50 border border-gray-300 p-1.5 rounded transition-colors"
                                   >
-                                    <Download className="w-4 h-4 text-gray-700" />
+                                    <Download className="w-3.5 h-3.5 text-gray-700" />
                                   </a>
                                 </div>
                               </div>
                             )}
 
                             {pptxArtifact && (
-                              <div className="border-2 border-green-600 rounded-xl p-4 bg-green-50">
-                                <div className="flex items-center justify-between mb-3">
+                              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
+                                <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center gap-2">
-                                    <div className="bg-green-600 p-2 rounded-lg">
-                                      <FileText className="w-5 h-5 text-white" />
+                                    <div className="bg-green-600 p-1.5 rounded">
+                                      <FileText className="w-4 h-4 text-white" />
                                     </div>
-                                    <span className="font-bold text-gray-900">PowerPoint</span>
+                                    <span className="font-medium text-sm text-gray-900">Slides</span>
                                   </div>
                                   <button
                                     onClick={() => setShowDeleteArtifactModal({ lectureId: lecture.id, artifactId: pptxArtifact.id, type: 'pptx' })}
                                     className="text-gray-400 hover:text-red-600 transition-colors"
-                                    title="Delete PowerPoint"
+                                    title="Delete slides"
                                   >
-                                    <Trash2 className="w-4 h-4" />
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
                                 <a
                                   href={pptxArtifact.file_url}
                                   download
-                                  className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-3 rounded-lg transition-colors text-sm"
+                                  className="w-full flex items-center justify-center gap-1.5 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-medium py-1.5 px-2 rounded transition-colors text-xs"
                                 >
-                                  <Download className="w-4 h-4" />
+                                  <Download className="w-3.5 h-3.5" />
                                   Download
                                 </a>
                               </div>
                             )}
 
                             {!videoArtifact && !audioArtifact && !pptxArtifact && (
-                              <div className="col-span-3 text-center py-6 text-gray-500">
-                                <p className="text-sm">No content artifacts available yet</p>
+                              <div className="col-span-3 text-center py-4 text-gray-500">
+                                <p className="text-xs">No content available</p>
                               </div>
                             )}
                           </div>
@@ -637,35 +634,26 @@ export default function CourseLectures() {
           </TabsContent>
 
           <TabsContent value="assignments" className="mt-6">
-            <div className="bg-brand-maroon text-white rounded-2xl p-8 mb-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold mb-2">Course Assignments</h2>
-                  <p className="text-white/90">{dummyAssignments.length} assignment{dummyAssignments.length !== 1 ? 's' : ''} created</p>
-                </div>
-              </div>
-            </div>
-
             {dummyAssignments.length === 0 ? (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center">
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
                 <div className="max-w-md mx-auto">
-                  <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <FileText className="w-10 h-10 text-gray-400" />
+                  <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FileText className="w-8 h-8 text-gray-400" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">No Assignments Yet</h3>
-                  <p className="text-gray-600 mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Assignments Yet</h3>
+                  <p className="text-gray-600 text-sm mb-6">
                     This course doesn't have any assignments yet. Create your first assignment to get started.
                   </p>
                   <button
                     onClick={() => router.push('/educator/assignment/new')}
-                    className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-8 rounded-lg transition-colors"
+                    className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-6 rounded-lg transition-colors"
                   >
                     Create Assignment
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-6">
+              <div className="space-y-3">
                 {dummyAssignments.map((assignment) => (
                   <AssignmentCard
                     key={assignment.id}
@@ -686,35 +674,26 @@ export default function CourseLectures() {
           </TabsContent>
 
           <TabsContent value="quiz" className="mt-6">
-            <div className="bg-brand-maroon text-white rounded-2xl p-8 mb-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold mb-2">Course Quizzes</h2>
-                  <p className="text-white/90">{quizzes.length} quiz{quizzes.length !== 1 ? 'zes' : ''} created</p>
-                </div>
-              </div>
-            </div>
-
             {quizzes.length === 0 ? (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center">
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
                 <div className="max-w-md mx-auto">
-                  <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <FileText className="w-10 h-10 text-gray-400" />
+                  <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FileText className="w-8 h-8 text-gray-400" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">No Quizzes Yet</h3>
-                  <p className="text-gray-600 mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Quizzes Yet</h3>
+                  <p className="text-gray-600 text-sm mb-6">
                     This course doesn't have any quizzes yet. Create your first quiz to get started.
                   </p>
                   <button
                     onClick={() => router.push('/educator/quiz/new')}
-                    className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-8 rounded-lg transition-colors"
+                    className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-6 rounded-lg transition-colors"
                   >
                     Create Quiz
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-6">
+              <div className="space-y-3">
                 {quizzes.map((quiz) => {
                   const totalQuestions = quiz.mcq_count + quiz.short_answer_count;
                   const totalMarks = (quiz.mcq_count * 2) + (quiz.short_answer_count * 5);
@@ -740,15 +719,6 @@ export default function CourseLectures() {
           </TabsContent>
 
           <TabsContent value="summary" className="mt-6">
-            <div className="bg-brand-maroon text-white rounded-2xl p-8 mb-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold mb-2">Course Summary</h2>
-                  <p className="text-white/90">Overview of student progress and performance</p>
-                </div>
-              </div>
-            </div>
-
             <CourseSummaryStats {...dummySummaryStats} />
           </TabsContent>
         </Tabs>
