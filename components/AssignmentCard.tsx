@@ -1,6 +1,6 @@
 'use client';
 
-import { FileText, Calendar, Clock, Edit, Trash2 } from 'lucide-react';
+import { FileText, Calendar, Clock, CreditCard as Edit, Trash2 } from 'lucide-react';
 
 interface AssignmentCardProps {
   title: string;

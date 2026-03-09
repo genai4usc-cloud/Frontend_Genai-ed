@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AssignmentCard from '@/components/AssignmentCard';
 import QuizCard from '@/components/QuizCard';
 import CourseSummaryStats from '@/components/CourseSummaryStats';
-import { ArrowLeft, Settings, Video, Mic, FileText, Play, Download, Clock, Calendar, Trash2, X, Edit, Plus } from 'lucide-react';
+import { ArrowLeft, Settings, Video, Mic, FileText, Play, Download, Clock, Calendar, Trash2, X, CreditCard as Edit, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 type Lecture = {

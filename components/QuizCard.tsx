@@ -1,6 +1,6 @@
 'use client';
 
-import { FileCheck, Calendar, Clock, Award, Edit, Trash2, Eye } from 'lucide-react';
+import { FileCheck, Calendar, Clock, Award, CreditCard as Edit, Trash2, Eye } from 'lucide-react';
 
 interface QuizCardProps {
   title: string;
