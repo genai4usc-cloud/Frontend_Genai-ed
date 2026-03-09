@@ -555,17 +555,17 @@ export default function EditCourse() {
             <button
               onClick={() => setShowDeleteConfirm(true)}
               disabled={saving || deleting}
-              className="border-2 border-red-600 text-red-600 hover:bg-red-50 font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="border border-[#DC2626] text-[#DC2626] hover:bg-red-50 font-semibold py-2.5 px-5 rounded-md transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Trash2 className="w-5 h-5" />
+              <Trash2 className="w-4 h-4" />
               Delete Course
             </button>
             <button
               onClick={handleUpdateCourse}
               disabled={saving || deleting}
-              className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-[#8B1A1A] hover:bg-[#6B1414] text-white font-semibold py-2.5 px-5 rounded-md transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Save className="w-5 h-5" />
+              <Save className="w-4 h-4" />
               {saving ? 'Updating...' : 'Update Course'}
             </button>
           </div>

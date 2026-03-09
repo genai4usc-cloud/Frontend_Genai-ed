@@ -382,7 +382,7 @@ export default function CourseLectures() {
           <div className="flex items-center gap-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-4 rounded-lg transition-colors flex items-center gap-2">
+                <button className="bg-[#8B1A1A] hover:bg-[#6B1414] text-white font-semibold py-2.5 px-5 rounded-md transition-colors flex items-center gap-2">
                   <Plus className="w-4 h-4" />
                   Create
                   <ChevronDown className="w-4 h-4" />
@@ -405,7 +405,7 @@ export default function CourseLectures() {
             </DropdownMenu>
             <button
               onClick={() => router.push(`/educator/course/${courseId}/edit`)}
-              className="border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 px-4 rounded-lg transition-colors flex items-center gap-2"
+              className="border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 px-5 rounded-md transition-colors flex items-center gap-2"
             >
               <Settings className="w-4 h-4" />
               Edit Course
