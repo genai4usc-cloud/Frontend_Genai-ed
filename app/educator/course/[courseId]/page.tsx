@@ -418,25 +418,25 @@ export default function CourseLectures() {
             <TabsList className="bg-transparent h-auto p-0 space-x-8">
               <TabsTrigger
                 value="lectures"
-                className="bg-transparent border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900"
+                className="bg-transparent shadow-none border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon data-[state=active]:bg-transparent rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900 hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
               >
                 Lectures ({lectures.length})
               </TabsTrigger>
               <TabsTrigger
                 value="assignments"
-                className="bg-transparent border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900"
+                className="bg-transparent shadow-none border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon data-[state=active]:bg-transparent rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900 hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
               >
                 Assignments ({dummyAssignments.length})
               </TabsTrigger>
               <TabsTrigger
                 value="quiz"
-                className="bg-transparent border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900"
+                className="bg-transparent shadow-none border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon data-[state=active]:bg-transparent rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900 hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
               >
                 Quiz ({quizzes.length})
               </TabsTrigger>
               <TabsTrigger
                 value="summary"
-                className="bg-transparent border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900"
+                className="bg-transparent shadow-none border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon data-[state=active]:bg-transparent rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900 hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
               >
                 Summary
               </TabsTrigger>
