@@ -1,6 +1,6 @@
 'use client';
 
-import { FileText, Calendar, Award, Eye, Upload, CheckCircle, Clock } from 'lucide-react';
+import { FileText, Calendar, Award, Eye, Upload, CircleCheck as CheckCircle, Clock } from 'lucide-react';
 
 interface StudentAssignmentCardProps {
   title: string;

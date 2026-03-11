@@ -1,6 +1,6 @@
 'use client';
 
-import { FileCheck, Calendar, Clock, Award, Eye, PlayCircle, CheckCircle } from 'lucide-react';
+import { FileCheck, Calendar, Clock, Award, Eye, CirclePlay as PlayCircle, CircleCheck as CheckCircle } from 'lucide-react';
 
 interface StudentQuizCardProps {
   title: string;

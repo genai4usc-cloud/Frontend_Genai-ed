@@ -8,19 +8,7 @@ import StudentQuizCard from '@/components/StudentQuizCard';
 import StudentAssignmentCard from '@/components/StudentAssignmentCard';
 import StudentPerformanceSummary from '@/components/StudentPerformanceSummary';
 import { supabase, Profile } from '@/lib/supabase';
-import {
-  BookOpen,
-  MessageSquare,
-  Upload,
-  FileText,
-  Trash2,
-  Send,
-  Video,
-  CheckSquare,
-  FileCheck,
-  ClipboardList,
-  BarChart3
-} from 'lucide-react';
+import { BookOpen, MessageSquare, Upload, FileText, Trash2, Send, Video, SquareCheck as CheckSquare, FileCheck, ClipboardList, ChartBar as BarChart3 } from 'lucide-react';
 
 interface Course {
   id: string;
