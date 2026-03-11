@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import StudentLayout from '@/components/StudentLayout';
 import LectureCard from '@/components/LectureCard';
+import StudentQuizCard from '@/components/StudentQuizCard';
+import StudentAssignmentCard from '@/components/StudentAssignmentCard';
+import StudentPerformanceSummary from '@/components/StudentPerformanceSummary';
 import { supabase, Profile } from '@/lib/supabase';
 import {
   BookOpen,
@@ -13,7 +16,10 @@ import {
   Trash2,
   Send,
   Video,
-  CheckSquare
+  CheckSquare,
+  FileCheck,
+  ClipboardList,
+  BarChart3
 } from 'lucide-react';
 
 interface Course {
@@ -55,7 +61,7 @@ export default function StudentCourse() {
 
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [activeTab, setActiveTab] = useState<'lectures' | 'chat' | 'uploads'>('lectures');
+  const [activeTab, setActiveTab] = useState<'lectures' | 'quiz' | 'assignments' | 'summary' | 'chat' | 'uploads'>('lectures');
   const [course, setCourse] = useState<Course | null>(null);
   const [courseLectures, setCourseLectures] = useState<Lecture[]>([]);
   const [myLectures, setMyLectures] = useState<StudentLecture[]>([]);
@@ -69,6 +75,91 @@ export default function StudentCourse() {
   const [prompt, setPrompt] = useState('');
   const [videoLength, setVideoLength] = useState(5);
   const [generating, setGenerating] = useState(false);
+
+  const dummyQuizzes = [
+    {
+      id: '1',
+      title: 'Linear Regression Quiz',
+      courseName: 'CS 229 Machine Learning',
+      instructorName: 'Prof. Andrew Ng',
+      questionCount: 10,
+      totalMarks: 20,
+      duration: 15,
+      dueDate: '2026-03-25',
+      status: 'available' as const
+    },
+    {
+      id: '2',
+      title: 'Neural Networks Quiz',
+      courseName: 'CS 229 Machine Learning',
+      instructorName: 'Prof. Andrew Ng',
+      questionCount: 8,
+      totalMarks: 16,
+      duration: 12,
+      dueDate: '2026-03-15',
+      status: 'attempted' as const
+    }
+  ];
+
+  const dummyAssignments = [
+    {
+      id: '1',
+      title: 'ML Data Preprocessing',
+      courseName: 'CS 229 Machine Learning',
+      instructorName: 'Prof. Andrew Ng',
+      dueDate: '2026-03-20',
+      totalMarks: 25,
+      status: 'pending' as const
+    },
+    {
+      id: '2',
+      title: 'Regression Model Implementation',
+      courseName: 'CS 229 Machine Learning',
+      instructorName: 'Prof. Andrew Ng',
+      dueDate: '2026-03-10',
+      totalMarks: 30,
+      status: 'submitted' as const
+    }
+  ];
+
+  const dummySummaryData = {
+    averageQuizScore: 82,
+    averageAssignmentScore: 88,
+    completedLectures: 5,
+    totalLectures: 8,
+    submittedAssignments: 3,
+    totalAssignments: 4,
+    performanceItems: [
+      {
+        name: 'Linear Regression Quiz',
+        type: 'quiz' as const,
+        marksScored: 18,
+        totalMarks: 20,
+        status: 'completed' as const
+      },
+      {
+        name: 'Neural Networks Quiz',
+        type: 'quiz' as const,
+        marksScored: 12,
+        totalMarks: 16,
+        status: 'completed' as const
+      },
+      {
+        name: 'ML Data Preprocessing',
+        type: 'assignment' as const,
+        marksScored: null,
+        totalMarks: 25,
+        status: 'pending' as const
+      },
+      {
+        name: 'Regression Model Implementation',
+        type: 'assignment' as const,
+        marksScored: 27,
+        totalMarks: 30,
+        status: 'submitted' as const
+      }
+    ]
+  };
 
   useEffect(() => {
     checkAuthAndLoadData();
@@ -293,10 +384,10 @@ export default function StudentCourse() {
         </div>
 
         <div className="border-b border-border">
-          <div className="flex gap-6">
+          <div className="flex gap-6 overflow-x-auto">
             <button
               onClick={() => setActiveTab('lectures')}
-              className={`pb-3 px-2 font-medium transition-colors relative ${
+              className={`pb-3 px-2 font-medium transition-colors relative whitespace-nowrap ${
                 activeTab === 'lectures'
                   ? 'text-brand-maroon after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand-maroon'
                   : 'text-muted-foreground hover:text-foreground'
@@ -306,8 +397,41 @@ export default function StudentCourse() {
               Lectures
             </button>
             <button
+              onClick={() => setActiveTab('quiz')}
+              className={`pb-3 px-2 font-medium transition-colors relative whitespace-nowrap ${
+                activeTab === 'quiz'
+                  ? 'text-brand-maroon after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand-maroon'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <FileCheck className="w-5 h-5 inline mr-2" />
+              Quiz
+            </button>
+            <button
+              onClick={() => setActiveTab('assignments')}
+              className={`pb-3 px-2 font-medium transition-colors relative whitespace-nowrap ${
+                activeTab === 'assignments'
+                  ? 'text-brand-maroon after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand-maroon'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <ClipboardList className="w-5 h-5 inline mr-2" />
+              Assignments
+            </button>
+            <button
+              onClick={() => setActiveTab('summary')}
+              className={`pb-3 px-2 font-medium transition-colors relative whitespace-nowrap ${
+                activeTab === 'summary'
+                  ? 'text-brand-maroon after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand-maroon'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <BarChart3 className="w-5 h-5 inline mr-2" />
+              Summary
+            </button>
+            <button
               onClick={() => setActiveTab('chat')}
-              className={`pb-3 px-2 font-medium transition-colors relative ${
+              className={`pb-3 px-2 font-medium transition-colors relative whitespace-nowrap ${
                 activeTab === 'chat'
                   ? 'text-brand-maroon after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand-maroon'
                   : 'text-muted-foreground hover:text-foreground'
@@ -318,7 +442,7 @@ export default function StudentCourse() {
             </button>
             <button
               onClick={() => setActiveTab('uploads')}
-              className={`pb-3 px-2 font-medium transition-colors relative ${
+              className={`pb-3 px-2 font-medium transition-colors relative whitespace-nowrap ${
                 activeTab === 'uploads'
                   ? 'text-brand-maroon after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand-maroon'
                   : 'text-muted-foreground hover:text-foreground'
@@ -387,6 +511,93 @@ export default function StudentCourse() {
                 </div>
               )}
             </section>
+          </div>
+        )}
+
+        {activeTab === 'quiz' && (
+          <div>
+            <h2 className="text-xl font-bold text-foreground mb-6">Available Quizzes</h2>
+            {dummyQuizzes.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {dummyQuizzes.map((quiz) => (
+                  <StudentQuizCard
+                    key={quiz.id}
+                    title={quiz.title}
+                    courseName={quiz.courseName}
+                    instructorName={quiz.instructorName}
+                    questionCount={quiz.questionCount}
+                    totalMarks={quiz.totalMarks}
+                    duration={quiz.duration}
+                    dueDate={quiz.dueDate}
+                    status={quiz.status}
+                    onViewQuestions={() => {
+                      alert('Opening quiz questions PDF...');
+                    }}
+                    onStartQuiz={quiz.status === 'available' ? () => {
+                      alert('Starting quiz: ' + quiz.title);
+                    } : undefined}
+                    onViewAttempt={quiz.status === 'attempted' ? () => {
+                      alert('Viewing quiz attempt for: ' + quiz.title);
+                    } : undefined}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="bg-card border border-border rounded-xl p-12 text-center">
+                <FileCheck className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No quizzes available yet</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'assignments' && (
+          <div>
+            <h2 className="text-xl font-bold text-foreground mb-6">Course Assignments</h2>
+            {dummyAssignments.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {dummyAssignments.map((assignment) => (
+                  <StudentAssignmentCard
+                    key={assignment.id}
+                    title={assignment.title}
+                    courseName={assignment.courseName}
+                    instructorName={assignment.instructorName}
+                    dueDate={assignment.dueDate}
+                    totalMarks={assignment.totalMarks}
+                    status={assignment.status}
+                    onViewAssignment={() => {
+                      alert('Viewing assignment: ' + assignment.title);
+                    }}
+                    onSubmitWork={assignment.status === 'pending' ? () => {
+                      alert('Submit work for: ' + assignment.title);
+                    } : undefined}
+                    onViewSubmission={assignment.status === 'submitted' ? () => {
+                      alert('Viewing submission for: ' + assignment.title);
+                    } : undefined}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="bg-card border border-border rounded-xl p-12 text-center">
+                <ClipboardList className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No assignments available yet</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'summary' && (
+          <div>
+            <h2 className="text-xl font-bold text-foreground mb-6">Performance Summary</h2>
+            <StudentPerformanceSummary
+              averageQuizScore={dummySummaryData.averageQuizScore}
+              averageAssignmentScore={dummySummaryData.averageAssignmentScore}
+              completedLectures={dummySummaryData.completedLectures}
+              totalLectures={dummySummaryData.totalLectures}
+              submittedAssignments={dummySummaryData.submittedAssignments}
+              totalAssignments={dummySummaryData.totalAssignments}
+              performanceItems={dummySummaryData.performanceItems}
+            />
           </div>
         )}
 
