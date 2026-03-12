@@ -334,6 +334,26 @@ export default function StudentDashboard() {
           </div>
         </section>
 
+        {courses.length > 0 && (
+          <section>
+            <h2 className="text-2xl font-bold text-foreground mb-4">My Courses</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {courses.map((course) => (
+                <CourseCard
+                  key={course.id}
+                  code={course.course_number}
+                  title={course.title}
+                  instructorName={course.instructor_name}
+                  semester={course.semester}
+                  studentCount={course.student_count}
+                  newLecturesCount={course.newLecturesCount}
+                  onClick={() => router.push(`/student/course/${course.id}`)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
         {myLectures.length > 0 && (
           <section>
             <h2 className="text-2xl font-bold text-foreground mb-4">My Lectures</h2>
@@ -368,26 +388,6 @@ export default function StudentDashboard() {
                   createdAt={lecture.created_at}
                   isNew={lecture.isNew}
                   onClick={() => router.push(`/student/course/${lecture.course_id}/lecture/${lecture.id}`)}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {courses.length > 0 && (
-          <section>
-            <h2 className="text-2xl font-bold text-foreground mb-4">My Courses</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {courses.map((course) => (
-                <CourseCard
-                  key={course.id}
-                  code={course.course_number}
-                  title={course.title}
-                  instructorName={course.instructor_name}
-                  semester={course.semester}
-                  studentCount={course.student_count}
-                  newLecturesCount={course.newLecturesCount}
-                  onClick={() => router.push(`/student/course/${course.id}`)}
                 />
               ))}
             </div>
