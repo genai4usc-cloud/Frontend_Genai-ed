@@ -2,16 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import {
-  Home,
-  MessageSquare,
-  Lightbulb,
-  Video,
-  ClipboardCheck,
-  BookOpen,
-  Library,
-  Bot
-} from 'lucide-react';
+import { Chrome as Home, MessageSquare, Lightbulb, Video, ClipboardCheck, BookOpen, Library, Bot } from 'lucide-react';
 import { supabase, Profile } from '@/lib/supabase';
 import CollapsibleSidebar, { NavItem, NavSection } from './CollapsibleSidebar';
 
