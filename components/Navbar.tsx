@@ -37,7 +37,7 @@ export default function Navbar() {
               </svg>
             </div>
             <div className="hidden sm:flex flex-col">
-              <span className="text-base sm:text-lg font-bold leading-tight whitespace-nowrap">USC GenAI Learning Platform</span>
+              <span className="text-base sm:text-lg font-bold leading-tight whitespace-nowrap">Epistemic AI</span>
               <span className="text-xs sm:text-sm text-brand-yellow leading-tight whitespace-nowrap">Empowering Education with AI</span>
             </div>
           </Link>
