@@ -122,7 +122,7 @@ export default function StudentDashboard() {
         .from('courses')
         .select('*')
         .in('id', courseIds)
-        .order('code');
+        .order('course_number');
 
       if (coursesData) {
         setCourses(coursesData);
