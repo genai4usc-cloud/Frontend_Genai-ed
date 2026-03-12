@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Home, ClipboardCheck, FileText, GraduationCap, Library, BookOpen, LogOut, User, Bot } from 'lucide-react';
+import { Chrome as Home, ClipboardCheck, FileText, GraduationCap, Library, BookOpen, LogOut, User, Bot } from 'lucide-react';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import CollapsibleSidebar, { NavItem, NavSection, AddButtonItem } from './CollapsibleSidebar';
 
@@ -39,10 +39,10 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
 
   const mainNavItems: NavItem[] = [
     { icon: Home, label: 'Dashboard', path: '/educator/dashboard' },
-    { icon: Bot, label: 'LLM Playground', path: '/educator/llm-playground' },
-    { icon: FileText, label: 'Create Lecture', path: '/educator/lecture/new' },
-    { icon: GraduationCap, label: 'Create Quiz', path: '/educator/quiz/new' },
-    { icon: ClipboardCheck, label: 'Policy Suggestor', path: '/educator/policy-suggestor' },
+    { icon: Bot, label: 'Multi-Model Playground', path: '/educator/llm-playground' },
+    { icon: FileText, label: 'Avatar Lecture Studio', path: '/educator/lecture/new' },
+    { icon: GraduationCap, label: 'Personalized Quiz Generator', path: '/educator/quiz/new' },
+    { icon: ClipboardCheck, label: 'AI Policy Builder', path: '/educator/policy-suggestor' },
   ];
 
   const courseNavItems: NavItem[] = courses.map(course => ({
@@ -89,15 +89,15 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
               <span className="text-brand-maroon font-bold text-sm">USC</span>
             </div>
             <div>
-              <h1 className="text-xl font-bold">USC GenAI Learning Platform</h1>
-              <p className="text-sm text-white/80">Empowering Education with AI</p>
+              <h1 className="text-xl font-bold">Epistemic AI</h1>
+              <p className="text-sm text-white/80">USC GenAI Learning Platform</p>
             </div>
           </div>
  
           <div className="flex items-center gap-4">
             <button className="bg-brand-yellow text-black px-6 py-2 rounded-lg font-semibold hover:bg-brand-yellow-hover transition-colors flex items-center gap-2">
               <LogOut className="w-4 h-4" />
-              Educator Portal
+              Educator Workspace
             </button>
             <div className="flex items-center gap-3">
               <div className="text-right">

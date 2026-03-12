@@ -127,8 +127,8 @@ export default function EducatorDashboard() {
                 </div>
                 <div className="text-gray-400 group-hover:text-gray-600 transition-colors">→</div>
               </div>
-              <h3 className="font-semibold text-lg text-gray-900 mb-2">LLM Playground</h3>
-              <p className="text-gray-600 text-sm">Experiment with AI models and prompts</p>
+              <h3 className="font-semibold text-lg text-gray-900 mb-2">Multi-Model Playground</h3>
+              <p className="text-gray-600 text-sm">Compare, evaluate, and orchestrate responses across multiple AI models.</p>
             </button>
             
             <button
@@ -141,8 +141,8 @@ export default function EducatorDashboard() {
                 </div>
                 <div className="text-gray-400 group-hover:text-gray-600 transition-colors">→</div>
               </div>
-              <h3 className="font-semibold text-lg text-gray-900 mb-2">Create Lecture</h3>
-              <p className="text-gray-600 text-sm">Generate AI-powered video lectures</p>
+              <h3 className="font-semibold text-lg text-gray-900 mb-2">Avatar Lecture Studio</h3>
+              <p className="text-gray-600 text-sm">Generate voice or avatar-based mini-lectures and slides from course materials</p>
             </button>
 
             <button
@@ -155,8 +155,8 @@ export default function EducatorDashboard() {
                 </div>
                 <div className="flex items-center gap-2 text-sm text-gray-400 group-hover:text-gray-600 transition-colors">→</div>
               </div>
-              <h3 className="font-semibold text-lg text-gray-900 mb-2">Create Quiz</h3>
-              <p className="text-gray-600 text-sm">Design assessments for your students</p>
+              <h3 className="font-semibold text-lg text-gray-900 mb-2">Personalized Quiz Generator</h3>
+              <p className="text-gray-600 text-sm">Create adaptive quizzes and validation tools based on course materials or student writing</p>
             </button>
             
             <button
@@ -172,8 +172,8 @@ export default function EducatorDashboard() {
                   <span>→</span>
                 </div>
               </div>
-              <h3 className="font-semibold text-lg text-gray-900 mb-2">Policy Suggestor</h3>
-              <p className="text-gray-600 text-sm">Get AI-powered policy recommendations</p>
+              <h3 className="font-semibold text-lg text-gray-900 mb-2">AI Policy Builder</h3>
+              <p className="text-gray-600 text-sm">Design course-specific AI usage policies aligned with course learning objectives.</p>
             </button>
 
           </div>
