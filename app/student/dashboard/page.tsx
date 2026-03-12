@@ -249,8 +249,17 @@ export default function StudentDashboard() {
 
   const quickActions = [
     {
-      title: 'Create Mini-Lecture',
-      description: 'Make your own content',
+      title: 'Multi-Model Playground',
+      description: 'Compare, evaluate, and orchestrate responses across multiple AI models.',
+      icon: MessageSquare,
+      color: 'bg-yellow-50 dark:bg-yellow-950',
+      iconColor: 'text-brand-yellow',
+      href: '/student/llm-playground',
+      comingSoon: false
+    },
+    {
+      title: 'Avatar Lecture Studio',
+      description: 'Generate voice or avatar-based mini-lectures and slides from course materials.',
       icon: Video,
       color: 'bg-red-50 dark:bg-red-950',
       iconColor: 'text-brand-maroon',
@@ -258,17 +267,8 @@ export default function StudentDashboard() {
       comingSoon: false
     },
     {
-      title: 'LLM Playground',
-      description: 'Chat with AI models',
-      icon: MessageSquare,
-      color: 'bg-yellow-50 dark:bg-yellow-950',
-      iconColor: 'text-brand-yellow',
-      href: '/student/llm-playground',
-      comingSoon: true
-    },
-    {
-      title: 'Brainstorming',
-      description: 'Ideate with AI - Coming soon',
+      title: 'Socratic Writing Studio',
+      description: 'Clarify ideas, explore research, and build arguments with guided AI support.',
       icon: Lightbulb,
       color: 'bg-purple-50 dark:bg-purple-950',
       iconColor: 'text-purple-600 dark:text-purple-400',
@@ -276,8 +276,8 @@ export default function StudentDashboard() {
       comingSoon: true
     },
     {
-      title: 'Test Knowledge',
-      description: 'Practice quizzes - Coming soon',
+      title: 'Knowledge Check',
+      description: 'Test your understanding with quizzes generated from lectures, readings, or chosen topics.',
       icon: ClipboardCheck,
       color: 'bg-blue-50 dark:bg-blue-950',
       iconColor: 'text-blue-600 dark:text-blue-400',
@@ -301,12 +301,12 @@ export default function StudentDashboard() {
     <StudentLayout profile={profile}>
       <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
         <div className="bg-gradient-to-r from-brand-maroon to-brand-maroon-hover rounded-2xl p-8 text-white shadow-lg">
-          <h1 className="text-3xl font-bold mb-2">Hi, {userName}!</h1>
-          <p className="text-xl text-white/90">Welcome back to your USC Student Portal</p>
+          <h1 className="text-3xl font-bold mb-2">Hi {userName}!</h1>
+          <p className="text-xl text-white/90">Welcome to your Student Workspace</p>
         </div>
 
         <section>
-          <h2 className="text-2xl font-bold text-foreground mb-4">Quick Actions</h2>
+          <h2 className="text-2xl font-bold text-foreground mb-4">What would you like to do today?</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {quickActions.map((action) => {
               const Icon = action.icon;
@@ -314,8 +314,15 @@ export default function StudentDashboard() {
                 <button
                   key={action.title}
                   onClick={() => router.push(action.href)}
-                  className="bg-card border border-border rounded-xl p-6 text-left hover:shadow-lg transition-all hover:scale-105 group"
+                  className="bg-card border border-border rounded-xl p-6 text-left hover:shadow-lg transition-all hover:scale-105 group relative"
                 >
+                  {action.comingSoon && (
+                    <div className="absolute top-3 right-3">
+                      <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 text-xs font-medium px-2 py-1 rounded-full">
+                        Coming soon
+                      </span>
+                    </div>
+                  )}
                   <div className={`${action.color} w-12 h-12 rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
                     <Icon className={`w-6 h-6 ${action.iconColor}`} />
                   </div>

@@ -68,10 +68,10 @@ export default function StudentLayout({ children, profile }: StudentLayoutProps)
 
   const mainNavItems: NavItem[] = [
     { icon: Home, label: 'Dashboard', path: '/student/dashboard' },
-    { icon: Bot, label: 'LLM Playground', path: '/student/llm-playground' },
-    { icon: Lightbulb, label: 'Brainstorming', path: '/student/brainstorming' },
-    { icon: Video, label: 'Create Mini-Lecture', path: '/student/create-lecture' },
-    { icon: ClipboardCheck, label: 'Test Knowledge', path: '/student/test-knowledge' },
+    { icon: Bot, label: 'Multi-Model Playground', path: '/student/llm-playground' },
+    { icon: Lightbulb, label: 'Avatar Lecture Studio', path: '/student/create-lecture' },
+    { icon: Video, label: 'Socratic Writing Studio', path: '/student/brainstorming' },
+    { icon: ClipboardCheck, label: 'Knowledge Check', path: '/student/test-knowledge' },
   ];
 
   const courseNavItems: NavItem[] = courses.map(course => ({
@@ -114,8 +114,8 @@ export default function StudentLayout({ children, profile }: StudentLayoutProps)
               <span className="text-brand-maroon font-bold text-sm">USC</span>
             </div>
             <div>
-              <h1 className="text-xl font-bold">USC GenAI Learning Platform</h1>
-              <p className="text-sm text-white/80">Empowering Education with AI</p>
+              <h1 className="text-xl font-bold">Epistemic AI</h1>
+              <p className="text-sm text-white/80">USC GenAI Learning Platform</p>
             </div>
           </div>
 
