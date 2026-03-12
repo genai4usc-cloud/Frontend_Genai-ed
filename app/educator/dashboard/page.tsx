@@ -96,7 +96,7 @@ export default function EducatorDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold mb-2">Hi, {profile.first_name}!</h1>
-              <p className="text-white/90 text-lg">Welcome back to your USC Educator Portal</p>
+              <p className="text-white/90 text-lg">Welcome back to your USC Educator Workspace</p>
             </div>
             <button
               onClick={handleRefreshData}
