@@ -21,7 +21,7 @@ export default function Navbar() {
 
   const navLinks = [
     { name: 'Home', href: '/', onClick: () => setMobileMenuOpen(false) },
-    { name: 'About', href: '/about', onClick: () => setMobileMenuOpen(false) },
+    { name: 'Platform', href: '/about', onClick: () => setMobileMenuOpen(false) },
     { name: 'Demos', href: '#demos', onClick: scrollToDemos },
   ];
 
