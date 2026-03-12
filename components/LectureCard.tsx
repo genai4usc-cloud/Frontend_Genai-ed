@@ -1,13 +1,11 @@
 'use client';
 
-import { PlayCircle, Clock, Loader2 } from 'lucide-react';
+import { Loader as Loader2 } from 'lucide-react';
 
 interface LectureCardProps {
   title: string;
   courseCode?: string;
   instructorName?: string;
-  duration?: number;
-  createdAt?: string;
   isNew?: boolean;
   status?: string;
   isEducatorLecture?: boolean;
@@ -18,8 +16,6 @@ export default function LectureCard({
   title,
   courseCode,
   instructorName,
-  duration,
-  createdAt,
   isNew = false,
   status,
   isEducatorLecture = false,
@@ -68,21 +64,12 @@ export default function LectureCard({
           {getStatusBadge()}
         </div>
         {(courseCode || instructorName) && (
-          <p className="text-sm text-muted-foreground mb-2">
+          <p className="text-sm text-muted-foreground">
             {courseCode && <span>{courseCode}</span>}
             {courseCode && instructorName && <span> • </span>}
             {instructorName && <span>{instructorName}</span>}
           </p>
         )}
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          {duration !== undefined && (
-            <div className="flex items-center gap-1">
-              <Clock className="w-4 h-4" />
-              <span>{duration} min</span>
-            </div>
-          )}
-          {createdAt && <span>{createdAt}</span>}
-        </div>
       </div>
     </div>
   );

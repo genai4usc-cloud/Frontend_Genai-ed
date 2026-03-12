@@ -1,13 +1,12 @@
 'use client';
 
-import { Users, GraduationCap } from 'lucide-react';
+import { GraduationCap } from 'lucide-react';
 
 interface CourseCardProps {
   code: string;
   title: string;
   instructorName?: string;
   semester?: string;
-  studentCount?: number;
   newLecturesCount?: number;
   onClick: () => void;
 }
@@ -17,7 +16,6 @@ export default function CourseCard({
   title,
   instructorName,
   semester,
-  studentCount,
   newLecturesCount,
   onClick
 }: CourseCardProps) {
@@ -52,12 +50,6 @@ export default function CourseCard({
         )}
         {semester && (
           <p>{semester}</p>
-        )}
-        {studentCount !== undefined && (
-          <div className="flex items-center gap-1">
-            <Users className="w-4 h-4" />
-            <span>{studentCount} students</span>
-          </div>
         )}
       </div>
     </div>

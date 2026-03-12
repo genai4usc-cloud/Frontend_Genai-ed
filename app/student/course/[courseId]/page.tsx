@@ -454,8 +454,6 @@ export default function StudentCourse() {
                       title={lecture.title}
                       courseCode={course.course_number}
                       instructorName={course.instructor_name}
-                      duration={lecture.duration}
-                      createdAt={formatTimeAgo(lecture.created_at)}
                       isEducatorLecture={true}
                       onClick={() => router.push(`/student/course/${courseId}/lecture/${lecture.id}`)}
                     />
@@ -479,8 +477,6 @@ export default function StudentCourse() {
                       title={lecture.title}
                       courseCode={course.course_number}
                       instructorName="You"
-                      duration={lecture.duration}
-                      createdAt={formatTimeAgo(lecture.created_at)}
                       status={lecture.status}
                       onClick={() => router.push(`/student/course/${courseId}/my/lecture/${lecture.id}`)}
                     />

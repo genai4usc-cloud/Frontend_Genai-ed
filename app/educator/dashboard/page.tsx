@@ -216,7 +216,6 @@ export default function EducatorDashboard() {
                   title={course.title}
                   instructorName={course.instructor_name}
                   semester={course.semester}
-                  studentCount={course.student_count}
                   onClick={() => router.push(`/educator/course/${course.id}`)}
                 />
               ))}
@@ -258,7 +257,6 @@ export default function EducatorDashboard() {
                 <LectureCard
                   key={lecture.id}
                   title={lecture.title}
-                  duration={lecture.duration || 0}
                   onClick={() => {
                     if (lecture.course_id) {
                       router.push(`/educator/course/${lecture.course_id}/lecture/${lecture.id}`);

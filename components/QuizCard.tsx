@@ -1,12 +1,10 @@
 'use client';
 
-import { FileCheck, Calendar, Clock, Award, CreditCard as Edit, Trash2, Eye } from 'lucide-react';
+import { CreditCard as Edit, Trash2, Eye } from 'lucide-react';
 
 interface QuizCardProps {
   title: string;
-  createdAt: string;
   status: 'draft' | 'generated' | 'saved' | 'published';
-  duration?: number;
   totalMarks: number;
   mcqCount?: number;
   shortAnswerCount?: number;
@@ -19,9 +17,7 @@ interface QuizCardProps {
 
 export default function QuizCard({
   title,
-  createdAt,
   status,
-  duration,
   totalMarks,
   mcqCount = 0,
   shortAnswerCount = 0,
@@ -59,24 +55,12 @@ export default function QuizCard({
               {status.charAt(0).toUpperCase() + status.slice(1)}
             </span>
           </div>
-          <div className="flex items-center gap-3 text-xs text-gray-500 mb-2">
+          <div className="flex items-center gap-3 text-xs text-gray-500">
             {mcqCount > 0 && <span>{mcqCount} MCQ</span>}
             {mcqCount > 0 && shortAnswerCount > 0 && <span>•</span>}
             {shortAnswerCount > 0 && <span>{shortAnswerCount} Short Answer</span>}
             {(mcqCount > 0 || shortAnswerCount > 0) && <span>•</span>}
             <span>{totalMarks} pts</span>
-          </div>
-          <div className="flex items-center gap-4 text-xs text-gray-500">
-            <div className="flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5" />
-              <span>{new Date(createdAt).toLocaleDateString()}</span>
-            </div>
-            {duration && (
-              <div className="flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5" />
-                <span>{duration} min</span>
-              </div>
-            )}
           </div>
         </div>
         <div className="flex items-center gap-1">

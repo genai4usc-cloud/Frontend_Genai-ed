@@ -702,7 +702,6 @@ export default function CourseLectures() {
                     <QuizCard
                       key={quiz.id}
                       title={quiz.quiz_name || 'Untitled Quiz'}
-                      createdAt={quiz.created_at}
                       status={quiz.status}
                       totalMarks={totalMarks}
                       mcqCount={quiz.mcq_count}

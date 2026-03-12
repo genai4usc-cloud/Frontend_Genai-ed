@@ -345,7 +345,6 @@ export default function StudentDashboard() {
                   title={course.title}
                   instructorName={course.instructor_name}
                   semester={course.semester}
-                  studentCount={course.student_count}
                   newLecturesCount={course.newLecturesCount}
                   onClick={() => router.push(`/student/course/${course.id}`)}
                 />
@@ -364,8 +363,6 @@ export default function StudentDashboard() {
                   title={lecture.title}
                   courseCode={lecture.course_code}
                   instructorName={lecture.instructor_name}
-                  duration={lecture.duration}
-                  createdAt={lecture.created_at}
                   isNew={lecture.isNew}
                   onClick={() => router.push(`/student/course/${lecture.course_id}/my/lecture/${lecture.id}`)}
                 />
@@ -384,8 +381,6 @@ export default function StudentDashboard() {
                   title={lecture.title}
                   courseCode={lecture.course_code}
                   instructorName={lecture.instructor_name}
-                  duration={lecture.duration}
-                  createdAt={lecture.created_at}
                   isNew={lecture.isNew}
                   onClick={() => router.push(`/student/course/${lecture.course_id}/lecture/${lecture.id}`)}
                 />
