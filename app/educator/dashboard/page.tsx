@@ -8,6 +8,12 @@ import CourseCard from '@/components/CourseCard';
 import LectureCard from '@/components/LectureCard';
 import { ClipboardCheck, FileText, GraduationCap, Plus, Bot } from 'lucide-react';
 
+type DashboardLecture = Lecture & {
+  lecture_courses: Array<{
+    course_id: string;
+  }>;
+};
+
 export default function EducatorDashboard() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -58,15 +64,26 @@ export default function EducatorDashboard() {
 
       const { data: lecturesData, error: lecturesError } = await supabase
         .from('lectures')
-        .select('*')
+        .select(`
+          *,
+          lecture_courses!inner(
+            course_id
+          )
+        `)
         .eq('educator_id', user.id)
+        .eq('creator_role', 'educator')
         .order('created_at', { ascending: false });
 
       if (lecturesError) {
         console.error('Error loading lectures:', lecturesError);
       } else if (lecturesData) {
-        console.log('Loaded lectures:', lecturesData);
-        setLectures(lecturesData);
+        const linkedLectures = (lecturesData as DashboardLecture[]).map((lecture) => ({
+          ...lecture,
+          course_id: lecture.lecture_courses[0]?.course_id || lecture.course_id,
+        }));
+
+        console.log('Loaded lectures:', linkedLectures);
+        setLectures(linkedLectures);
       }
 
     } catch (error) {

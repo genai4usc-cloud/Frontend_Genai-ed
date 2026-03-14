@@ -35,9 +35,13 @@ type AvatarStyles = {
   harry: 'business' | 'casual' | 'youthful';
 };
 
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, '') ||
-  'https://backend-genai-ed.onrender.com';
+const BACKEND_URL = (
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_BASE ||
+  (process.env.NODE_ENV === 'development'
+    ? 'http://127.0.0.1:8000'
+    : 'https://backend-genai-ed.onrender.com')
+).replace(/\/$/, '');
 
 const STYLE_TO_JOB: Record<string, string> = {
   audio: 'audio',
@@ -797,6 +801,8 @@ export default function CreateLecture() {
           .from('lectures')
           .insert({
             educator_id: profile.id,
+            creator_role: 'educator',
+            creator_user_id: profile.id,
             title: lectureTitle,
             description: '',
             selected_course_ids: selectedCourseIds,
@@ -1323,6 +1329,8 @@ SLIDE 1: Untitled Lecture
         .from('lectures')
         .insert({
           educator_id: lectureData.educator_id,
+          creator_role: 'educator',
+          creator_user_id: lectureData.educator_id,
           title: `${lectureData.title} (Copy)`,
           selected_course_ids: lectureData.selected_course_ids,
           library_personal: lectureData.library_personal,

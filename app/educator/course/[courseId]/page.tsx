@@ -17,6 +17,14 @@ import CourseSummaryStats from '@/components/CourseSummaryStats';
 import { ArrowLeft, Settings, Video, Mic, FileText, Play, Download, Clock, Calendar, Trash2, X, CreditCard as Edit, Plus, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 
+const BACKEND_URL = (
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_BASE ||
+  (process.env.NODE_ENV === 'development'
+    ? 'http://127.0.0.1:8000'
+    : 'https://backend-genai-ed.onrender.com')
+).replace(/\/$/, '');
+
 type Lecture = {
   id: string;
   title: string;
@@ -282,40 +290,18 @@ export default function CourseLectures() {
 
     setDeleting(true);
     try {
-      const { error: artifactsError } = await supabase
-        .from('lecture_artifacts')
-        .delete()
-        .eq('lecture_id', showDeleteLectureModal);
+      const { data: { session } } = await supabase.auth.getSession();
+      const resp = await fetch(`${BACKEND_URL}/api/lectures/${showDeleteLectureModal}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session?.access_token ?? ''}`
+        }
+      });
 
-      if (artifactsError) throw artifactsError;
-
-      const { error: coursesError } = await supabase
-        .from('lecture_courses')
-        .delete()
-        .eq('lecture_id', showDeleteLectureModal);
-
-      if (coursesError) throw coursesError;
-
-      const { error: materialsError } = await supabase
-        .from('lecture_materials')
-        .delete()
-        .eq('lecture_id', showDeleteLectureModal);
-
-      if (materialsError) throw materialsError;
-
-      const { error: jobsError } = await supabase
-        .from('lecture_jobs')
-        .delete()
-        .eq('lecture_id', showDeleteLectureModal);
-
-      if (jobsError) throw jobsError;
-
-      const { error: lectureError } = await supabase
-        .from('lectures')
-        .delete()
-        .eq('id', showDeleteLectureModal);
-
-      if (lectureError) throw lectureError;
+      const payload = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        throw new Error(payload?.detail || 'Failed to delete lecture');
+      }
 
       toast.success('Lecture deleted successfully');
       setShowDeleteLectureModal(null);

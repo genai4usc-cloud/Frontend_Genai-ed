@@ -19,9 +19,13 @@ type MaterialWithType = {
 
 type AvatarType = 'professional_male' | 'professional_female' | 'casual_male' | 'casual_female';
 
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, '') ||
-  'https://backend-genai-ed.onrender.com';
+const BACKEND_URL = (
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_BASE ||
+  (process.env.NODE_ENV === 'development'
+    ? 'http://127.0.0.1:8000'
+    : 'https://backend-genai-ed.onrender.com')
+).replace(/\/$/, '');
 
 export default function CreateLecture() {
   const router = useRouter();
