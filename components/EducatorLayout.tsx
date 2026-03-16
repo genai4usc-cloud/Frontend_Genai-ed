@@ -8,7 +8,7 @@ import CollapsibleSidebar, { NavItem, NavSection, AddButtonItem } from './Collap
 
 interface EducatorLayoutProps {
   children: ReactNode;
-  profile: Profile;
+  profile?: Profile;
 }
 
 export default function EducatorLayout({ children, profile }: EducatorLayoutProps) {
@@ -17,10 +17,14 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
   const [courses, setCourses] = useState<Course[]>([]);
 
   useEffect(() => {
-    loadCourses();
-  }, [profile.id]);
+    if (profile?.id) {
+      loadCourses();
+    }
+  }, [profile?.id]);
 
   const loadCourses = async () => {
+    if (!profile?.id) return;
+
     const { data } = await supabase
       .from('courses')
       .select('*')
@@ -77,6 +81,7 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
   ];
 
   const getInitials = () => {
+    if (!profile?.first_name || !profile?.last_name) return 'ED';
     return `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase();
   };
 
@@ -103,7 +108,7 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
               <div className="text-right">
                 <div className="text-sm font-medium">Signed in as</div>
                 <div className="text-sm text-white/90">
-                  {profile.first_name} {profile.last_name}
+                  {profile?.first_name || 'Educator'} {profile?.last_name || ''}
                 </div>
               </div>
               <div className="w-10 h-10 bg-brand-yellow rounded-full flex items-center justify-center">

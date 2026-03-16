@@ -5,25 +5,13 @@ import { useRouter, useParams } from 'next/navigation';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import AssignmentCard from '@/components/AssignmentCard';
-import QuizCard from '@/components/QuizCard';
+import EducatorCourseOverview from '@/components/EducatorCourseOverview';
+import EducatorLectureCard from '@/components/EducatorLectureCard';
+import EducatorAssignmentCard from '@/components/EducatorAssignmentCard';
+import EducatorQuizCard from '@/components/EducatorQuizCard';
 import CourseSummaryStats from '@/components/CourseSummaryStats';
-import { ArrowLeft, Settings, Video, Mic, FileText, Play, Download, Clock, Calendar, Trash2, X, CreditCard as Edit, Plus, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Video, Plus, Users, BookOpen, FileText, ListChecks, X } from 'lucide-react';
 import { toast } from 'sonner';
-
-const BACKEND_URL = (
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  process.env.NEXT_PUBLIC_BACKEND_BASE ||
-  (process.env.NODE_ENV === 'development'
-    ? 'http://127.0.0.1:8000'
-    : 'https://backend-genai-ed.onrender.com')
-).replace(/\/$/, '');
 
 type Lecture = {
   id: string;
@@ -51,9 +39,6 @@ type Assignment = {
   description: string;
   dueDate: string;
   status: 'active' | 'closed' | 'draft';
-  totalMarks: number;
-  submissionCount: number;
-  totalStudents: number;
 };
 
 type Quiz = {
@@ -78,59 +63,96 @@ export default function CourseLectures() {
   const [showDeleteArtifactModal, setShowDeleteArtifactModal] = useState<{ lectureId: string; artifactId: string; type: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [playingMedia, setPlayingMedia] = useState<{ lectureId: string; type: 'video' | 'audio'; url: string } | null>(null);
-  const [activeTab, setActiveTab] = useState('lectures');
+  const [activeTab, setActiveTab] = useState('overview');
 
+  // Mock data for assignments
   const dummyAssignments: Assignment[] = [
     {
       id: '1',
-      title: 'Research Paper: Modern AI Applications',
-      description: 'Write a 10-page research paper on modern AI applications in education',
-      dueDate: '2026-03-20T23:59:00',
-      status: 'active',
-      totalMarks: 100,
-      submissionCount: 24,
-      totalStudents: 35
+      title: 'Linear Regression Implementation',
+      description: 'Implement linear regression from scratch using Python',
+      dueDate: '2026-03-14T23:59:00',
+      status: 'active'
     },
     {
       id: '2',
-      title: 'Case Study Analysis',
-      description: 'Analyze the case study provided in class and submit a detailed report',
-      dueDate: '2026-03-15T23:59:00',
-      status: 'active',
-      totalMarks: 50,
-      submissionCount: 30,
-      totalStudents: 35
+      title: 'Data Preprocessing Project',
+      description: 'Clean and preprocess the provided dataset',
+      dueDate: '2026-03-19T23:59:00',
+      status: 'active'
     },
     {
       id: '3',
-      title: 'Group Project Proposal',
-      description: 'Submit a proposal for your final group project',
-      dueDate: '2026-03-10T23:59:00',
-      status: 'closed',
-      totalMarks: 25,
-      submissionCount: 35,
-      totalStudents: 35
+      title: 'Neural Network Analysis',
+      description: 'Analyze different neural network architectures',
+      dueDate: '2026-03-25T23:59:00',
+      status: 'active'
+    },
+    {
+      id: '4',
+      title: 'Final Project Proposal',
+      description: 'Submit your final project proposal',
+      dueDate: '2026-02-28T23:59:00',
+      status: 'closed'
     }
   ];
 
-  const dummySummaryStats = {
-    totalStudents: 35,
-    lectureCompletionRate: 78,
-    assignmentSubmissionRate: 82,
-    quizCompletionRate: 71,
-    averageOverallMarks: 76,
-    averageAssignmentScore: 81,
-    averageQuizScore: 73,
-    pendingAssignments: 2,
-    pendingQuizzes: 1,
-    topStudents: [
-      { name: 'Emily Chen', email: 'echen@usc.edu', score: 95 },
-      { name: 'Marcus Johnson', email: 'mjohnson@usc.edu', score: 92 },
-      { name: 'Sarah Williams', email: 'swilliams@usc.edu', score: 89 },
-      { name: 'David Park', email: 'dpark@usc.edu', score: 87 },
-      { name: 'Jessica Martinez', email: 'jmartinez@usc.edu', score: 85 }
-    ]
-  };
+  // Mock analytics for lectures
+  const generateLectureMockAnalytics = (index: number) => ({
+    views: [124, 118, 132, 95, 87][index % 5] || 100,
+    completionRate: [94, 87, 91, 78, 82][index % 5] || 85,
+    avgWatchTime: ['11:45', '13:20', '9:15', '14:50', '8:30'][index % 5] || '10:00',
+    publishDate: new Date(Date.now() - (index + 1) * 7 * 24 * 60 * 60 * 1000).toLocaleDateString()
+  });
+
+  // Mock analytics for assignments
+  const assignmentAnalytics = [
+    {
+      totalStudents: 127,
+      submitted: 112,
+      graded: 95,
+      pending: 15,
+      avgScore: 87
+    },
+    {
+      totalStudents: 127,
+      submitted: 98,
+      graded: 85,
+      pending: 29,
+      avgScore: 82
+    },
+    {
+      totalStudents: 127,
+      submitted: 105,
+      graded: 105,
+      pending: 22,
+      avgScore: 91
+    },
+    {
+      totalStudents: 127,
+      submitted: 127,
+      graded: 127,
+      pending: 0,
+      avgScore: 85
+    }
+  ];
+
+  // Mock analytics for quizzes
+  const generateQuizMockAnalytics = (index: number) => ({
+    dueDate: new Date(Date.now() + (index + 1) * 7 * 24 * 60 * 60 * 1000).toISOString(),
+    totalStudents: 127,
+    completed: [118, 109, 95, 88][index % 4] || 100,
+    pending: [9, 18, 32, 39][index % 4] || 27,
+    avgScore: [84, 78, 91, 73][index % 4] || 80,
+    highestScore: [98, 95, 100, 92][index % 4] || 95,
+    lowestScore: [62, 55, 71, 48][index % 4] || 60,
+    scoreDistribution: {
+      excellent: [42, 38, 55, 28][index % 4] || 40,
+      good: [38, 35, 25, 32][index % 4] || 35,
+      fair: [25, 22, 10, 18][index % 4] || 20,
+      needsImprovement: [13, 14, 5, 10][index % 4] || 12
+    }
+  });
 
   useEffect(() => {
     checkAuth();
@@ -233,28 +255,13 @@ export default function CourseLectures() {
 
   const loadCourseQuizzes = async () => {
     try {
-      const { data: quizBatchCourses, error: qbcError } = await supabase
-        .from('quiz_batch_courses')
-        .select('quiz_batch_id')
-        .eq('course_id', courseId);
-
-      if (qbcError) throw qbcError;
-
-      if (!quizBatchCourses || quizBatchCourses.length === 0) {
-        setQuizzes([]);
-        return;
-      }
-
-      const quizBatchIds = quizBatchCourses.map(qbc => qbc.quiz_batch_id);
-
-      const { data: quizData, error: quizError } = await supabase
-        .from('quiz_batches')
+      const { data: quizData, error } = await supabase
+        .from('quizzes')
         .select('*')
-        .in('id', quizBatchIds)
+        .eq('course_id', courseId)
         .order('created_at', { ascending: false });
 
-      if (quizError) throw quizError;
-
+      if (error) throw error;
       setQuizzes(quizData || []);
     } catch (error) {
       console.error('Error loading quizzes:', error);
@@ -262,50 +269,26 @@ export default function CourseLectures() {
     }
   };
 
-  const handleDeleteArtifact = async () => {
-    if (!showDeleteArtifactModal) return;
-
+  const handleDeleteLecture = async (lectureId: string) => {
     setDeleting(true);
     try {
-      const { error } = await supabase
+      const { error: artifactsError } = await supabase
         .from('lecture_artifacts')
         .delete()
-        .eq('id', showDeleteArtifactModal.artifactId);
+        .eq('lecture_id', lectureId);
 
-      if (error) throw error;
+      if (artifactsError) throw artifactsError;
 
-      toast.success('Content deleted successfully');
-      setShowDeleteArtifactModal(null);
-      await loadCourseLectures();
-    } catch (error) {
-      console.error('Error deleting artifact:', error);
-      toast.error('Failed to delete content');
-    } finally {
-      setDeleting(false);
-    }
-  };
+      const { error: lectureError } = await supabase
+        .from('lectures')
+        .delete()
+        .eq('id', lectureId);
 
-  const handleDeleteLecture = async () => {
-    if (!showDeleteLectureModal) return;
-
-    setDeleting(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const resp = await fetch(`${BACKEND_URL}/api/lectures/${showDeleteLectureModal}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${session?.access_token ?? ''}`
-        }
-      });
-
-      const payload = await resp.json().catch(() => null);
-      if (!resp.ok) {
-        throw new Error(payload?.detail || 'Failed to delete lecture');
-      }
+      if (lectureError) throw lectureError;
 
       toast.success('Lecture deleted successfully');
-      setShowDeleteLectureModal(null);
       await loadCourseLectures();
+      setShowDeleteLectureModal(null);
     } catch (error) {
       console.error('Error deleting lecture:', error);
       toast.error('Failed to delete lecture');
@@ -314,477 +297,314 @@ export default function CourseLectures() {
     }
   };
 
-  const getArtifactByType = (artifacts: LectureArtifact[], type: string) => {
-    if (type === 'video_avatar') {
-      return artifacts.find(a => a.artifact_type === 'video_avatar_mp4' || a.artifact_type === 'video_static_mp4' || a.artifact_type === 'video_avatar');
-    } else if (type === 'audio') {
-      return artifacts.find(a => a.artifact_type === 'audio_mp3' || a.artifact_type === 'audio');
-    } else if (type === 'pptx') {
-      return artifacts.find(a => a.artifact_type === 'pptx' || a.artifact_type === 'ppt');
+  const handleDeleteArtifact = async (artifactId: string) => {
+    setDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('lecture_artifacts')
+        .delete()
+        .eq('id', artifactId);
+
+      if (error) throw error;
+
+      toast.success('Artifact deleted successfully');
+      await loadCourseLectures();
+      setShowDeleteArtifactModal(null);
+    } catch (error) {
+      console.error('Error deleting artifact:', error);
+      toast.error('Failed to delete artifact');
+    } finally {
+      setDeleting(false);
     }
-    return artifacts.find(a => a.artifact_type === type);
   };
 
-  if (loading || !profile) {
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Loading...</div>
-      </div>
+      <EducatorLayout profile={profile ?? undefined}>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-maroon mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading course...</p>
+          </div>
+        </div>
+      </EducatorLayout>
     );
   }
 
   if (!course) {
     return (
-      <EducatorLayout profile={profile}>
-        <div className="text-center py-12">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Course Not Found</h1>
-          <button
-            onClick={() => router.push('/educator/dashboard')}
-            className="text-brand-maroon hover:text-brand-maroon-hover font-medium"
-          >
-            Return to Dashboard
-          </button>
+      <EducatorLayout profile={profile ?? undefined}>
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Course Not Found</h3>
+            <p className="text-gray-600 mb-6">The course you're looking for doesn't exist or you don't have access to it.</p>
+            <button
+              onClick={() => router.push('/educator/dashboard')}
+              className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+            >
+              Back to Dashboard
+            </button>
+          </div>
         </div>
       </EducatorLayout>
     );
   }
 
   return (
-    <EducatorLayout profile={profile}>
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+    <EducatorLayout profile={profile ?? undefined}>
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <div className="mb-6">
             <button
               onClick={() => router.push('/educator/dashboard')}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
+              Back to Dashboard
             </button>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">{course.title}</h1>
-              <p className="text-gray-600 mt-1">{course.course_number} {course.section ? `- Section ${course.section}` : ''} • {course.semester}</p>
+              <h1 className="text-3xl font-bold text-gray-900 mb-1">{course.title}</h1>
+              <p className="text-gray-600">{course.course_number} • {course.semester}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="bg-[#8B1A1A] hover:bg-[#6B1414] text-white font-semibold py-2.5 px-5 rounded-md transition-colors flex items-center gap-2">
-                  <Plus className="w-4 h-4" />
-                  Create
-                  <ChevronDown className="w-4 h-4" />
+
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <div className="bg-white border-b border-gray-200 -mx-4 px-4 mb-6">
+              <TabsList className="bg-transparent h-auto p-0 space-x-0">
+                <TabsTrigger
+                  value="overview"
+                  className="bg-transparent shadow-none border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon data-[state=active]:bg-transparent rounded-none px-4 py-3 font-semibold text-gray-600 hover:text-gray-900 hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 flex items-center gap-2"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  Overview
+                </TabsTrigger>
+                <TabsTrigger
+                  value="lectures"
+                  className="bg-transparent shadow-none border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon data-[state=active]:bg-transparent rounded-none px-4 py-3 font-semibold text-gray-600 hover:text-gray-900 hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 flex items-center gap-2"
+                >
+                  <Video className="w-4 h-4" />
+                  Lectures
+                </TabsTrigger>
+                <TabsTrigger
+                  value="assignments"
+                  className="bg-transparent shadow-none border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon data-[state=active]:bg-transparent rounded-none px-4 py-3 font-semibold text-gray-600 hover:text-gray-900 hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4" />
+                  Assignments
+                </TabsTrigger>
+                <TabsTrigger
+                  value="quizzes"
+                  className="bg-transparent shadow-none border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon data-[state=active]:bg-transparent rounded-none px-4 py-3 font-semibold text-gray-600 hover:text-gray-900 hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 flex items-center gap-2"
+                >
+                  <ListChecks className="w-4 h-4" />
+                  Quizzes
+                </TabsTrigger>
+                <TabsTrigger
+                  value="students"
+                  className="bg-transparent shadow-none border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon data-[state=active]:bg-transparent rounded-none px-4 py-3 font-semibold text-gray-600 hover:text-gray-900 hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 flex items-center gap-2"
+                >
+                  <Users className="w-4 h-4" />
+                  Student Management
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            <TabsContent value="overview" className="mt-0">
+              <EducatorCourseOverview courseId={courseId} />
+            </TabsContent>
+
+            <TabsContent value="lectures" className="mt-0">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Course Lectures</h2>
+                  <p className="text-gray-600 text-sm mt-1">{lectures.length} lectures published</p>
+                </div>
+                <button
+                  onClick={() => router.push('/educator/lecture/new')}
+                  className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-5 rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  View Analytics
                 </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => router.push('/educator/lecture/new')} className="cursor-pointer">
-                  <Video className="w-4 h-4 mr-2" />
-                  Lecture
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push('/educator/assignment/new')} className="cursor-pointer">
-                  <FileText className="w-4 h-4 mr-2" />
-                  Assignment
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push('/educator/quiz/new')} className="cursor-pointer">
-                  <FileText className="w-4 h-4 mr-2" />
-                  Quiz
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <button
-              onClick={() => router.push(`/educator/course/${courseId}/edit`)}
-              className="border border-gray-300 hover:bg-gray-100 hover:border-gray-400 text-gray-700 hover:text-gray-900 font-semibold py-2.5 px-5 rounded-md transition-all duration-200 flex items-center gap-2 shadow-sm hover:shadow"
-            >
-              <Settings className="w-4 h-4" />
-              Edit Course
-            </button>
-          </div>
-        </div>
-
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <div className="border-b border-gray-200">
-            <TabsList className="bg-transparent h-auto p-0 space-x-8">
-              <TabsTrigger
-                value="lectures"
-                className="bg-transparent shadow-none border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon data-[state=active]:bg-transparent rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900 hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-              >
-                Lectures ({lectures.length})
-              </TabsTrigger>
-              <TabsTrigger
-                value="assignments"
-                className="bg-transparent shadow-none border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon data-[state=active]:bg-transparent rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900 hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-              >
-                Assignments ({dummyAssignments.length})
-              </TabsTrigger>
-              <TabsTrigger
-                value="quiz"
-                className="bg-transparent shadow-none border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon data-[state=active]:bg-transparent rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900 hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-              >
-                Quiz ({quizzes.length})
-              </TabsTrigger>
-              <TabsTrigger
-                value="summary"
-                className="bg-transparent shadow-none border-b-2 border-transparent data-[state=active]:border-brand-maroon data-[state=active]:text-brand-maroon data-[state=active]:bg-transparent rounded-none px-0 pb-3 font-semibold text-gray-600 hover:text-gray-900 hover:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
-              >
-                Summary
-              </TabsTrigger>
-            </TabsList>
-          </div>
-
-          <TabsContent value="lectures" className="mt-6">
-            {lectures.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                <div className="max-w-md mx-auto">
-                  <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Video className="w-8 h-8 text-gray-400" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Lectures Yet</h3>
-                  <p className="text-gray-600 text-sm mb-6">
-                    This course doesn't have any lectures yet. Create a new lecture by selecting this course in the lecture creation flow.
-                  </p>
-                  <button
-                    onClick={() => router.push('/educator/lecture/new')}
-                    className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-6 rounded-lg transition-colors"
-                  >
-                    Create Lecture
-                  </button>
-                </div>
               </div>
-            ) : (
-              <div className="space-y-3">
-                {lectures.map((lecture) => {
-                  const videoArtifact = getArtifactByType(lecture.artifacts, 'video_avatar');
-                  const audioArtifact = getArtifactByType(lecture.artifacts, 'audio');
-                  const pptxArtifact = getArtifactByType(lecture.artifacts, 'pptx');
 
-                  return (
-                    <div key={lecture.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:border-gray-300 transition-all">
-                      <div className="p-5">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3 className="text-lg font-semibold text-gray-900">{lecture.title}</h3>
-                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                lecture.status === 'published' ? 'bg-green-50 text-green-700 border border-green-200' :
-                                lecture.status === 'generated' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                                'bg-gray-50 text-gray-700 border border-gray-200'
-                              }`}>
-                                {lecture.status.charAt(0).toUpperCase() + lecture.status.slice(1)}
-                              </span>
-                            </div>
-                            {lecture.description && (
-                              <p className="text-gray-600 text-sm mb-2">{lecture.description}</p>
-                            )}
-                            <div className="flex items-center gap-4 text-xs text-gray-500">
-                              <div className="flex items-center gap-1">
-                                <Clock className="w-3.5 h-3.5" />
-                                <span>{lecture.video_length} min</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Calendar className="w-3.5 h-3.5" />
-                                <span>{new Date(lecture.created_at).toLocaleDateString()}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => router.push(`/educator/lecture/new?id=${lecture.id}&mode=edit`)}
-                              className="text-gray-400 hover:text-gray-700 transition-colors p-1.5 rounded hover:bg-gray-100"
-                              title="Edit lecture"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setShowDeleteLectureModal(lecture.id)}
-                              className="text-gray-400 hover:text-red-600 transition-colors p-1.5 rounded hover:bg-red-50"
-                              title="Delete lecture"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="border-t border-gray-100 pt-3">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            {videoArtifact && (
-                              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center gap-2">
-                                    <div className="bg-brand-maroon p-1.5 rounded">
-                                      <Video className="w-4 h-4 text-white" />
-                                    </div>
-                                    <span className="font-medium text-sm text-gray-900">Video</span>
-                                  </div>
-                                  <button
-                                    onClick={() => setShowDeleteArtifactModal({ lectureId: lecture.id, artifactId: videoArtifact.id, type: 'video' })}
-                                    className="text-gray-400 hover:text-red-600 transition-colors"
-                                    title="Delete video"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => setPlayingMedia({ lectureId: lecture.id, type: 'video', url: videoArtifact.file_url })}
-                                    className="flex-1 flex items-center justify-center gap-1.5 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-medium py-1.5 px-2 rounded transition-colors text-xs"
-                                  >
-                                    <Play className="w-3.5 h-3.5" />
-                                    Play
-                                  </button>
-                                  <a
-                                    href={videoArtifact.file_url}
-                                    download
-                                    className="flex items-center justify-center bg-white hover:bg-gray-50 border border-gray-300 p-1.5 rounded transition-colors"
-                                  >
-                                    <Download className="w-3.5 h-3.5 text-gray-700" />
-                                  </a>
-                                </div>
-                              </div>
-                            )}
-
-                            {audioArtifact && (
-                              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center gap-2">
-                                    <div className="bg-blue-600 p-1.5 rounded">
-                                      <Mic className="w-4 h-4 text-white" />
-                                    </div>
-                                    <span className="font-medium text-sm text-gray-900">Audio</span>
-                                  </div>
-                                  <button
-                                    onClick={() => setShowDeleteArtifactModal({ lectureId: lecture.id, artifactId: audioArtifact.id, type: 'audio' })}
-                                    className="text-gray-400 hover:text-red-600 transition-colors"
-                                    title="Delete audio"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => setPlayingMedia({ lectureId: lecture.id, type: 'audio', url: audioArtifact.file_url })}
-                                    className="flex-1 flex items-center justify-center gap-1.5 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-medium py-1.5 px-2 rounded transition-colors text-xs"
-                                  >
-                                    <Play className="w-3.5 h-3.5" />
-                                    Play
-                                  </button>
-                                  <a
-                                    href={audioArtifact.file_url}
-                                    download
-                                    className="flex items-center justify-center bg-white hover:bg-gray-50 border border-gray-300 p-1.5 rounded transition-colors"
-                                  >
-                                    <Download className="w-3.5 h-3.5 text-gray-700" />
-                                  </a>
-                                </div>
-                              </div>
-                            )}
-
-                            {pptxArtifact && (
-                              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center gap-2">
-                                    <div className="bg-green-600 p-1.5 rounded">
-                                      <FileText className="w-4 h-4 text-white" />
-                                    </div>
-                                    <span className="font-medium text-sm text-gray-900">Slides</span>
-                                  </div>
-                                  <button
-                                    onClick={() => setShowDeleteArtifactModal({ lectureId: lecture.id, artifactId: pptxArtifact.id, type: 'pptx' })}
-                                    className="text-gray-400 hover:text-red-600 transition-colors"
-                                    title="Delete slides"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                                <a
-                                  href={pptxArtifact.file_url}
-                                  download
-                                  className="w-full flex items-center justify-center gap-1.5 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-medium py-1.5 px-2 rounded transition-colors text-xs"
-                                >
-                                  <Download className="w-3.5 h-3.5" />
-                                  Download
-                                </a>
-                              </div>
-                            )}
-
-                            {!videoArtifact && !audioArtifact && !pptxArtifact && (
-                              <div className="col-span-3 text-center py-4 text-gray-500">
-                                <p className="text-xs">No content available</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+              {lectures.length === 0 ? (
+                <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                  <div className="max-w-md mx-auto">
+                    <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Video className="w-8 h-8 text-gray-400" />
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="assignments" className="mt-6">
-            {dummyAssignments.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                <div className="max-w-md mx-auto">
-                  <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <FileText className="w-8 h-8 text-gray-400" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Lectures Yet</h3>
+                    <p className="text-gray-600 text-sm mb-6">
+                      This course doesn't have any lectures yet. Create a new lecture by selecting this course in the lecture creation flow.
+                    </p>
+                    <button
+                      onClick={() => router.push('/educator/lecture/new')}
+                      className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-6 rounded-lg transition-colors"
+                    >
+                      Create Lecture
+                    </button>
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Assignments Yet</h3>
-                  <p className="text-gray-600 text-sm mb-6">
-                    This course doesn't have any assignments yet. Create your first assignment to get started.
-                  </p>
-                  <button
-                    onClick={() => router.push('/educator/assignment/new')}
-                    className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-6 rounded-lg transition-colors"
-                  >
-                    Create Assignment
-                  </button>
                 </div>
+              ) : (
+                <div className="space-y-4">
+                  {lectures.map((lecture, index) => (
+                    <EducatorLectureCard
+                      key={lecture.id}
+                      lecture={lecture}
+                      mockAnalytics={generateLectureMockAnalytics(index)}
+                      onEdit={() => router.push(`/educator/lecture/new?id=${lecture.id}&mode=edit`)}
+                      onDelete={() => setShowDeleteLectureModal(lecture.id)}
+                      onPlayVideo={(url) => setPlayingMedia({ lectureId: lecture.id, type: 'video', url })}
+                      onPlayAudio={(url) => setPlayingMedia({ lectureId: lecture.id, type: 'audio', url })}
+                      onDeleteArtifact={(artifactId, type) => setShowDeleteArtifactModal({ lectureId: lecture.id, artifactId, type })}
+                    />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="assignments" className="mt-0">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Course Assignments</h2>
+                  <p className="text-gray-600 text-sm mt-1">{dummyAssignments.length} assignments created</p>
+                </div>
+                <button
+                  onClick={() => router.push('/educator/assignment/new')}
+                  className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-5 rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  Create New Assignment
+                </button>
               </div>
-            ) : (
-              <div className="space-y-3">
-                {dummyAssignments.map((assignment) => (
-                  <AssignmentCard
+
+              <div className="space-y-4">
+                {dummyAssignments.map((assignment, index) => (
+                  <EducatorAssignmentCard
                     key={assignment.id}
-                    title={assignment.title}
-                    description={assignment.description}
-                    dueDate={assignment.dueDate}
-                    status={assignment.status}
-                    totalMarks={assignment.totalMarks}
-                    submissionCount={assignment.submissionCount}
-                    totalStudents={assignment.totalStudents}
-                    onEdit={() => toast.info('Edit assignment feature coming soon')}
-                    onDelete={() => toast.info('Delete assignment feature coming soon')}
-                    onClick={() => toast.info('View assignment details coming soon')}
+                    assignment={assignment}
+                    mockAnalytics={assignmentAnalytics[index]}
+                    onViewDetails={() => toast.info('Assignment details coming soon')}
                   />
                 ))}
               </div>
-            )}
-          </TabsContent>
+            </TabsContent>
 
-          <TabsContent value="quiz" className="mt-6">
-            {quizzes.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                <div className="max-w-md mx-auto">
-                  <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <FileText className="w-8 h-8 text-gray-400" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Quizzes Yet</h3>
-                  <p className="text-gray-600 text-sm mb-6">
-                    This course doesn't have any quizzes yet. Create your first quiz to get started.
-                  </p>
-                  <button
-                    onClick={() => router.push('/educator/quiz/new')}
-                    className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-6 rounded-lg transition-colors"
-                  >
-                    Create Quiz
-                  </button>
+            <TabsContent value="quizzes" className="mt-0">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Course Quizzes</h2>
+                  <p className="text-gray-600 text-sm mt-1">{quizzes.length} quizzes created</p>
                 </div>
+                <button
+                  onClick={() => router.push('/educator/quiz/new')}
+                  className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-5 rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  Create New Quiz
+                </button>
               </div>
-            ) : (
-              <div className="space-y-3">
-                {quizzes.map((quiz) => {
-                  const totalQuestions = quiz.mcq_count + quiz.short_answer_count;
-                  const totalMarks = (quiz.mcq_count * 2) + (quiz.short_answer_count * 5);
 
-                  return (
-                    <QuizCard
-                      key={quiz.id}
-                      title={quiz.quiz_name || 'Untitled Quiz'}
-                      status={quiz.status}
-                      totalMarks={totalMarks}
-                      mcqCount={quiz.mcq_count}
-                      shortAnswerCount={quiz.short_answer_count}
-                      onEdit={() => router.push(`/educator/quiz/new?id=${quiz.id}`)}
-                      onDelete={() => toast.info('Delete quiz feature coming soon')}
-                      onView={() => toast.info('View quiz details coming soon')}
-                      onClick={() => toast.info('Quiz details coming soon')}
-                    />
-                  );
-                })}
+              {quizzes.length === 0 ? (
+                <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                  <div className="max-w-md mx-auto">
+                    <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <ListChecks className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Quizzes Yet</h3>
+                    <p className="text-gray-600 text-sm mb-6">
+                      Create your first quiz to assess student understanding.
+                    </p>
+                    <button
+                      onClick={() => router.push('/educator/quiz/new')}
+                      className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-6 rounded-lg transition-colors"
+                    >
+                      Create Quiz
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {quizzes.map((quiz, index) => {
+                    const totalQuestions = quiz.mcq_count + quiz.short_answer_count;
+                    const totalMarks = (quiz.mcq_count * 2) + (quiz.short_answer_count * 5);
+
+                    return (
+                      <EducatorQuizCard
+                        key={quiz.id}
+                        quiz={quiz}
+                        totalMarks={totalMarks}
+                        mockAnalytics={generateQuizMockAnalytics(index)}
+                        onEdit={() => router.push(`/educator/quiz/new?id=${quiz.id}`)}
+                        onDelete={() => toast.info('Delete quiz feature coming soon')}
+                        onView={() => toast.info('View quiz details coming soon')}
+                        onClick={() => toast.info('Quiz details coming soon')}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="students" className="mt-0">
+              <div className="bg-white rounded-xl border border-gray-200 p-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Student Management</h2>
+                <p className="text-gray-600">Student roster management features will be available here.</p>
               </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="summary" className="mt-6">
-            <CourseSummaryStats {...dummySummaryStats} />
-          </TabsContent>
-        </Tabs>
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
 
-      {showDeleteArtifactModal && (
+      {showDeleteLectureModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-red-100 p-3 rounded-full">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900">Delete Content</h3>
-            </div>
-
-            <p className="text-gray-700">
-              Are you sure you want to delete this {showDeleteArtifactModal.type} content? This action cannot be undone.
+          <div className="bg-white rounded-xl p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Lecture</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete this lecture? This action cannot be undone.
             </p>
-
-            <div className="flex gap-3 pt-4">
+            <div className="flex gap-3 justify-end">
               <button
-                onClick={() => setShowDeleteArtifactModal(null)}
+                onClick={() => setShowDeleteLectureModal(null)}
                 disabled={deleting}
-                className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={handleDeleteArtifact}
+                onClick={() => handleDeleteLecture(showDeleteLectureModal)}
                 disabled={deleting}
-                className="flex-1 px-4 py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors disabled:opacity-50"
               >
-                {deleting ? (
-                  <>Deleting...</>
-                ) : (
-                  <>
-                    <Trash2 className="w-5 h-5" />
-                    Delete
-                  </>
-                )}
+                {deleting ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {showDeleteLectureModal && (
+      {showDeleteArtifactModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-red-100 p-3 rounded-full">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900">Delete Lecture</h3>
-            </div>
-
-            <p className="text-gray-700">
-              Are you sure you want to delete this entire lecture? This will remove all associated content including video, audio, and PowerPoint files. This action cannot be undone.
+          <div className="bg-white rounded-xl p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete {showDeleteArtifactModal.type}</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete this {showDeleteArtifactModal.type}? This action cannot be undone.
             </p>
-
-            <div className="flex gap-3 pt-4">
+            <div className="flex gap-3 justify-end">
               <button
-                onClick={() => setShowDeleteLectureModal(null)}
+                onClick={() => setShowDeleteArtifactModal(null)}
                 disabled={deleting}
-                className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={handleDeleteLecture}
+                onClick={() => handleDeleteArtifact(showDeleteArtifactModal.artifactId)}
                 disabled={deleting}
-                className="flex-1 px-4 py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors disabled:opacity-50"
               >
-                {deleting ? (
-                  <>Deleting...</>
-                ) : (
-                  <>
-                    <Trash2 className="w-5 h-5" />
-                    Delete
-                  </>
-                )}
+                {deleting ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>
@@ -792,37 +612,34 @@ export default function CourseLectures() {
       )}
 
       {playingMedia && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
-          <div className="relative w-full max-w-5xl">
-            <button
-              onClick={() => setPlayingMedia(null)}
-              className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
-            >
-              <X className="w-8 h-8" />
-            </button>
-            <div className="bg-black rounded-2xl overflow-hidden">
-              {playingMedia.type === 'video' ? (
-                <video
-                  src={playingMedia.url}
-                  controls
-                  autoPlay
-                  className="w-full max-h-[80vh]"
-                >
-                  Your browser does not support the video tag.
-                </video>
-              ) : (
-                <div className="p-8 flex items-center justify-center">
-                  <audio
-                    src={playingMedia.url}
-                    controls
-                    autoPlay
-                    className="w-full"
-                  >
-                    Your browser does not support the audio tag.
-                  </audio>
-                </div>
-              )}
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {playingMedia.type === 'video' ? 'Video Player' : 'Audio Player'}
+              </h3>
+              <button
+                onClick={() => setPlayingMedia(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
             </div>
+            {playingMedia.type === 'video' ? (
+              <video
+                src={playingMedia.url}
+                controls
+                autoPlay
+                className="w-full rounded-lg"
+              />
+            ) : (
+              <audio
+                src={playingMedia.url}
+                controls
+                autoPlay
+                className="w-full"
+              />
+            )}
           </div>
         </div>
       )}
