@@ -1,6 +1,6 @@
 'use client';
 
-import { Users, BookOpen, FileText, ListChecks, TrendingUp, Award, AlertCircle, Sparkles } from 'lucide-react';
+import { Users, BookOpen, FileText, ListChecks, TrendingUp, Award, CircleAlert as AlertCircle, Sparkles } from 'lucide-react';
 
 interface OverviewProps {
   courseId: string;

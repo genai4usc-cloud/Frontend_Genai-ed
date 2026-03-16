@@ -1,6 +1,6 @@
 'use client';
 
-import { Calendar, Users, CheckCircle, Clock, TrendingUp, TrendingDown, ListChecks, Edit, Trash2, Eye } from 'lucide-react';
+import { Calendar, Users, CircleCheck as CheckCircle, Clock, TrendingUp, TrendingDown, ListChecks, CreditCard as Edit, Trash2, Eye } from 'lucide-react';
 
 interface EducatorQuizCardProps {
   quiz: {

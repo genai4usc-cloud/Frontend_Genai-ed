@@ -1,6 +1,6 @@
 'use client';
 
-import { Calendar, Users, CheckCircle, Clock, TrendingUp, FileText } from 'lucide-react';
+import { Calendar, Users, CircleCheck as CheckCircle, Clock, TrendingUp, FileText } from 'lucide-react';
 
 interface EducatorAssignmentCardProps {
   assignment: {

@@ -1,6 +1,6 @@
 'use client';
 
-import { Clock, Calendar, Eye, TrendingUp, Edit, Trash2, Video, Mic, FileText, Play, Download } from 'lucide-react';
+import { Clock, Calendar, Eye, TrendingUp, CreditCard as Edit, Trash2, Video, Mic, FileText, Play, Download } from 'lucide-react';
 
 interface LectureArtifact {
   id: string;
