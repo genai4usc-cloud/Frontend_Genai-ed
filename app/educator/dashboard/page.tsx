@@ -226,7 +226,7 @@ export default function EducatorDashboard() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {courses.slice(0, 4).map((course) => (
+              {courses.map((course) => (
                 <CourseCard
                   key={course.id}
                   code={course.course_number}
