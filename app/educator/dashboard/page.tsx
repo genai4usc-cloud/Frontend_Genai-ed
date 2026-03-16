@@ -200,7 +200,7 @@ export default function EducatorDashboard() {
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-gray-800">My Courses</h2>
             <button
-              onClick={() => router.push('/educator/course/new')}
+              onClick={() => router.push('/educator/courses')}
               className="text-brand-maroon hover:text-brand-maroon-hover font-medium text-sm flex items-center gap-2"
             >
               View All →
