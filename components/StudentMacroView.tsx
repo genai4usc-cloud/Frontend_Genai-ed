@@ -1,6 +1,6 @@
 'use client';
 
-import { Users, FileText, ListChecks, BookOpen, AlertCircle } from 'lucide-react';
+import { Users, FileText, ListChecks, BookOpen, CircleAlert as AlertCircle } from 'lucide-react';
 
 type MacroStats = {
   totalStudents: number;
