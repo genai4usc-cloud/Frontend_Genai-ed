@@ -10,6 +10,9 @@ import EducatorLectureCard from '@/components/EducatorLectureCard';
 import EducatorAssignmentCard from '@/components/EducatorAssignmentCard';
 import EducatorQuizCard from '@/components/EducatorQuizCard';
 import CourseSummaryStats from '@/components/CourseSummaryStats';
+import StudentManagementTable from '@/components/StudentManagementTable';
+import AIClassInsights from '@/components/AIClassInsights';
+import PerformanceDistribution from '@/components/PerformanceDistribution';
 import { ArrowLeft, Video, Plus, Users, BookOpen, FileText, ListChecks, X } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -603,9 +606,16 @@ export default function CourseLectures() {
             </TabsContent>
 
             <TabsContent value="students" className="mt-0">
-              <div className="bg-white rounded-xl border border-gray-200 p-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Student Management</h2>
-                <p className="text-gray-600">Student roster management features will be available here.</p>
+              <div className="space-y-6">
+                <AIClassInsights />
+
+                <PerformanceDistribution />
+
+                <StudentManagementTable
+                  courseId={courseId}
+                  onAddStudent={() => toast.info('Add student feature coming soon')}
+                  onBulkImport={() => toast.info('Bulk import feature coming soon')}
+                />
               </div>
             </TabsContent>
           </Tabs>
