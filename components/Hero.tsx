@@ -4,10 +4,10 @@ export default function Hero() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-brand-maroon mb-6 leading-tight">
-            Welcome to the USC GenAI Learning Platform
+            Welcome to Epistemic AI! 
           </h1>
           <p className="text-lg sm:text-xl md:text-2xl text-gray-700 leading-relaxed">
-            Empowering educators and students with responsible AI integration
+            A Generative AI Learning Platform for Educators and Students 
           </p>
         </div>
       </div>
