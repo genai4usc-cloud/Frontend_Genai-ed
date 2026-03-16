@@ -356,8 +356,8 @@ export default function CourseLectures() {
 
   return (
     <EducatorLayout profile={profile ?? undefined}>
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="min-h-screen bg-white">
+        <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="mb-6">
             <button
               onClick={() => router.push('/educator/dashboard')}
@@ -605,18 +605,16 @@ export default function CourseLectures() {
               )}
             </TabsContent>
 
-            <TabsContent value="students" className="mt-0">
-              <div className="space-y-6">
-                <AIClassInsights />
+            <TabsContent value="students" className="mt-0 space-y-6">
+              <AIClassInsights />
 
-                <PerformanceDistribution />
+              <PerformanceDistribution />
 
-                <StudentManagementTable
-                  courseId={courseId}
-                  onAddStudent={() => toast.info('Add student feature coming soon')}
-                  onBulkImport={() => toast.info('Bulk import feature coming soon')}
-                />
-              </div>
+              <StudentManagementTable
+                courseId={courseId}
+                onAddStudent={() => toast.info('Add student feature coming soon')}
+                onBulkImport={() => toast.info('Bulk import feature coming soon')}
+              />
             </TabsContent>
           </Tabs>
         </div>
