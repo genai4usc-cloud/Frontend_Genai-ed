@@ -1,11 +1,14 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, Download, UserPlus, MoveVertical as MoreVertical, TrendingUp, TrendingDown, Minus, Upload } from 'lucide-react';
+import { Search, Download, UserPlus, MoveVertical as MoreVertical, TrendingUp, TrendingDown, Minus, Upload, BarChart3, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import StudentMacroView from './StudentMacroView';
+import AIClassInsights from './AIClassInsights';
+import PerformanceDistribution from './PerformanceDistribution';
 
 type StudentData = {
   id: string;
@@ -164,6 +167,28 @@ export default function StudentManagementTable({ courseId, onAddStudent, onBulkI
     }
   };
 
+  const macroStats = useMemo(() => {
+    const totalStudents = mockStudents.length;
+    const avgAssignment = Math.round(
+      mockStudents.reduce((sum, s) => sum + s.assignmentsAvg, 0) / totalStudents
+    );
+    const avgQuizScore = Math.round(
+      mockStudents.reduce((sum, s) => sum + s.quizAvg, 0) / totalStudents
+    );
+    const avgLecture = Math.round(
+      mockStudents.reduce((sum, s) => sum + (s.lecturesAttended / s.lecturesTotal * 100), 0) / totalStudents
+    );
+    const atRisk = mockStudents.filter(s => s.trend === 'declining').length;
+
+    return {
+      totalStudents,
+      avgAssignment,
+      avgQuizScore,
+      avgLecture,
+      atRisk
+    };
+  }, [mockStudents]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -173,11 +198,20 @@ export default function StudentManagementTable({ courseId, onAddStudent, onBulkI
         </div>
         <div className="flex items-center gap-3">
           <Button
-            onClick={() => setView(view === 'table' ? 'macro' : 'table')}
-            variant="outline"
-            className="border-gray-300 hover:bg-gray-50"
+            onClick={() => setView('macro')}
+            variant={view === 'macro' ? 'default' : 'outline'}
+            className={view === 'macro' ? 'bg-brand-maroon hover:bg-brand-maroon-hover text-white' : 'border-gray-300 hover:bg-gray-50'}
           >
-            {view === 'table' ? 'Macro View' : 'Table View'}
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Macro View
+          </Button>
+          <Button
+            onClick={() => setView('table')}
+            variant={view === 'table' ? 'default' : 'outline'}
+            className={view === 'table' ? 'bg-brand-maroon hover:bg-brand-maroon-hover text-white' : 'border-gray-300 hover:bg-gray-50'}
+          >
+            <Users className="w-4 h-4 mr-2" />
+            Table View
           </Button>
           <Button
             onClick={onBulkImport}
@@ -186,13 +220,6 @@ export default function StudentManagementTable({ courseId, onAddStudent, onBulkI
           >
             <Upload className="w-4 h-4" />
             Bulk Import
-          </Button>
-          <Button
-            onClick={onAddStudent}
-            className="bg-brand-maroon hover:bg-brand-maroon-hover text-white flex items-center gap-2"
-          >
-            <UserPlus className="w-5 h-5" />
-            Add Student
           </Button>
         </div>
       </div>
@@ -207,6 +234,14 @@ export default function StudentManagementTable({ courseId, onAddStudent, onBulkI
           className="pl-10 h-12 text-base border-gray-300"
         />
       </div>
+
+      {view === 'macro' ? (
+        <>
+          <StudentMacroView stats={macroStats} />
+          <AIClassInsights />
+          <PerformanceDistribution />
+        </>
+      ) : (
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
@@ -322,6 +357,7 @@ export default function StudentManagementTable({ courseId, onAddStudent, onBulkI
           </table>
         </div>
       </div>
+      )}
     </div>
   );
 }

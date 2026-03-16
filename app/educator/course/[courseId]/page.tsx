@@ -11,8 +11,6 @@ import EducatorAssignmentCard from '@/components/EducatorAssignmentCard';
 import EducatorQuizCard from '@/components/EducatorQuizCard';
 import CourseSummaryStats from '@/components/CourseSummaryStats';
 import StudentManagementTable from '@/components/StudentManagementTable';
-import AIClassInsights from '@/components/AIClassInsights';
-import PerformanceDistribution from '@/components/PerformanceDistribution';
 import { ArrowLeft, Video, Plus, Users, BookOpen, FileText, ListChecks, X } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -605,11 +603,7 @@ export default function CourseLectures() {
               )}
             </TabsContent>
 
-            <TabsContent value="students" className="mt-0 space-y-6">
-              <AIClassInsights />
-
-              <PerformanceDistribution />
-
+            <TabsContent value="students" className="mt-0">
               <StudentManagementTable
                 courseId={courseId}
                 onAddStudent={() => toast.info('Add student feature coming soon')}
