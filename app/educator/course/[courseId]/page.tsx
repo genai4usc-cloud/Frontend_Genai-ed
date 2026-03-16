@@ -64,6 +64,7 @@ export default function CourseLectures() {
   const [deleting, setDeleting] = useState(false);
   const [playingMedia, setPlayingMedia] = useState<{ lectureId: string; type: 'video' | 'audio'; url: string } | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [showCreateMenu, setShowCreateMenu] = useState(false);
 
   // Mock data for assignments
   const dummyAssignments: Assignment[] = [
@@ -362,9 +363,63 @@ export default function CourseLectures() {
               <ArrowLeft className="w-5 h-5" />
               Back to Dashboard
             </button>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-1">{course.title}</h1>
-              <p className="text-gray-600">{course.course_number} • {course.semester}</p>
+            <div className="flex items-start justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 mb-1">{course.title}</h1>
+                <p className="text-gray-600">{course.course_number} • {course.semester}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <button
+                    onClick={() => setShowCreateMenu(!showCreateMenu)}
+                    onBlur={() => setTimeout(() => setShowCreateMenu(false), 200)}
+                    className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-5 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <Plus className="w-5 h-5" />
+                    Create
+                  </button>
+                  {showCreateMenu && (
+                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-10">
+                      <button
+                        onClick={() => {
+                          router.push('/educator/lecture/new');
+                          setShowCreateMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
+                      >
+                        <Video className="w-4 h-4" />
+                        New Lecture
+                      </button>
+                      <button
+                        onClick={() => {
+                          router.push('/educator/assignment/new');
+                          setShowCreateMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
+                      >
+                        <FileText className="w-4 h-4" />
+                        New Assignment
+                      </button>
+                      <button
+                        onClick={() => {
+                          router.push('/educator/quiz/new');
+                          setShowCreateMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
+                      >
+                        <ListChecks className="w-4 h-4" />
+                        New Quiz
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => router.push(`/educator/course/${courseId}/edit`)}
+                  className="border-2 border-gray-300 hover:border-gray-400 text-gray-700 font-semibold py-2.5 px-5 rounded-lg transition-colors flex items-center gap-2"
+                >
+                  Edit Course
+                </button>
+              </div>
             </div>
           </div>
 
