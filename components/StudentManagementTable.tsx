@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, Download, UserPlus, MoreVertical, TrendingUp, TrendingDown, Minus, Upload } from 'lucide-react';
+import { Search, Download, UserPlus, MoveVertical as MoreVertical, TrendingUp, TrendingDown, Minus, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
