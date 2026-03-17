@@ -113,7 +113,7 @@ export default function StudentLayout({ children, profile }: StudentLayoutProps)
           <div className="flex items-center gap-4">
             <button className="bg-brand-yellow text-black px-6 py-2 rounded-lg font-semibold hover:bg-brand-yellow-hover transition-colors flex items-center gap-2">
               <BookOpen className="w-4 h-4" />
-              Student Workspace
+              Student Workspadfvsdce
             </button>
             <div className="flex items-center gap-3">
               <div className="text-right">
