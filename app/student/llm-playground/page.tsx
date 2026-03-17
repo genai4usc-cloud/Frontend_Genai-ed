@@ -24,7 +24,9 @@ import {
   Settings2,
   ChevronLeft,
   ChevronRight,
-  Menu
+  Menu,
+  Check,
+  AlertTriangle
 } from 'lucide-react';
 
 type AIModel = {
@@ -97,6 +99,43 @@ type SingleJudgeRun = {
   primaryOutputs: EnvelopeItem[];
   report: string;
   latencyMs: number;
+  structured?: SingleJudgeStructured | null;
+};
+
+type CrossModelAnalysisItem = {
+  topicOrClaim: string;
+  agreementLevel: string;
+  riskFlag: string;
+};
+
+type VerificationClaim = {
+  claim: string;
+  why: string;
+  suggestedVerification: string;
+};
+
+type CostOfErrorAssessment = {
+  domain: string;
+  potentialImpactIfWrong: string;
+  recommendedVerificationLevel: string;
+};
+
+type ModelByModelAssessment = {
+  modelId: string;
+  riskLevel: string;
+  concerns: string[];
+  confidenceIndicators: string[];
+};
+
+type SingleJudgeStructured = {
+  overallHallucinationRisk: string;
+  riskSummary: string;
+  crossModelAnalysis: CrossModelAnalysisItem[];
+  claimsRequiringVerification: VerificationClaim[];
+  costOfError: CostOfErrorAssessment;
+  modelByModel: ModelByModelAssessment[];
+  safeToTrustElements: string[];
+  recommendationsForUser: string[];
 };
 
 const AI_MODELS: AIModel[] = [
@@ -174,6 +213,67 @@ function badgeClassForRisk(label: string) {
 function safeNumber(x: any, fallback = 0) {
   const n = Number(x);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function formatJudgeLabel(value: string | undefined | null) {
+  return String(value || 'UNKNOWN').replace(/_/g, ' ').toUpperCase();
+}
+
+function formatAgreementLevel(value: string | undefined | null) {
+  const raw = String(value || 'Unknown').trim();
+  const normalized = raw.toLowerCase().replace(/_/g, ' ');
+  if (normalized === 'full') return 'Full agreement';
+  if (normalized === 'partial') return 'Partial agreement';
+  if (normalized === 'conflict') return 'CONTRADICTION';
+  if (normalized === 'unique') return 'Only one model mentions this';
+  return raw;
+}
+
+function singleJudgeRiskClass(label: string) {
+  const v = formatJudgeLabel(label);
+  if (v === 'LOW') return 'bg-green-50 text-green-800 border-green-200';
+  if (v === 'MEDIUM') return 'bg-yellow-50 text-yellow-800 border-yellow-200';
+  if (v === 'HIGH') return 'bg-orange-50 text-orange-800 border-orange-200';
+  if (v === 'VERY HIGH') return 'bg-red-50 text-red-800 border-red-200';
+  return 'bg-gray-50 text-gray-800 border-gray-200';
+}
+
+function agreementLevelClass(level: string) {
+  const v = formatAgreementLevel(level).toLowerCase();
+  if (v.includes('full')) return 'text-green-700';
+  if (v.includes('partial')) return 'text-yellow-700';
+  if (v.includes('contrad')) return 'text-red-700';
+  if (v.includes('only')) return 'text-orange-700';
+  return 'text-gray-600';
+}
+
+function agreementLevelCellClass(level: string) {
+  const v = formatAgreementLevel(level).toLowerCase();
+  if (v.includes('full')) return 'bg-green-50';
+  if (v.includes('partial')) return 'bg-yellow-50';
+  if (v.includes('contrad')) return 'bg-red-50';
+  if (v.includes('only')) return 'bg-orange-50';
+  return 'bg-white';
+}
+
+function riskFlagClass(flag: string) {
+  const v = String(flag || '').toUpperCase();
+  if (v.includes('LOW')) return 'text-green-700';
+  if (v.includes('MEDIUM')) return 'text-yellow-700';
+  if (v.includes('HIGH') || v.includes('CRITICAL')) return 'text-red-700';
+  return 'text-gray-700';
+}
+
+function riskFlagCellClass(flag: string) {
+  const v = String(flag || '').toUpperCase();
+  if (v.includes('LOW')) return 'bg-green-50';
+  if (v.includes('MEDIUM')) return 'bg-yellow-50';
+  if (v.includes('HIGH') || v.includes('CRITICAL')) return 'bg-red-50';
+  return 'bg-white';
+}
+
+function formatRiskFlag(flag: string | undefined | null) {
+  return String(flag || 'Unknown').trim().toUpperCase();
 }
 
 export default function LLMPlayground() {
@@ -547,7 +647,8 @@ export default function LLMPlayground() {
           error: null,
         })),
         report: 'Loading...',
-        latencyMs: 0
+        latencyMs: 0,
+        structured: null,
       };
       setSingleJudgeRuns((prev) => [...prev, newRun]);
 
@@ -593,6 +694,7 @@ export default function LLMPlayground() {
         const judgeEnv = judgeResp as EnvelopeResponse;
         const item = judgeEnv.items?.[0];
         const report = getEnvelopeText(item);
+        const structured = (item?.structured as SingleJudgeStructured | undefined) ?? null;
 
         setSingleJudgeRuns((prev) =>
           prev.map((r) => {
@@ -601,6 +703,7 @@ export default function LLMPlayground() {
               ...r,
               report,
               latencyMs: item?.latencyMs || 0,
+              structured,
             };
           })
         );
@@ -612,6 +715,7 @@ export default function LLMPlayground() {
               ...r,
               report: `Error: ${error.message}`,
               latencyMs: 0,
+              structured: null,
             };
           })
         );
@@ -1606,6 +1710,171 @@ export default function LLMPlayground() {
         const evaluator = AI_MODELS.find((m) => m.id === run.evaluatorModelId);
         const isStillLoadingPrimary = run.primaryOutputs.some((o) => o.content?.value === 'Loading...');
         const isLoading = !run.report || run.report === '';
+        const structured = run.structured;
+
+        const renderSingleJudgeReport = () => {
+          if (!structured) {
+            return <Markdown value={run.report} />;
+          }
+
+          return (
+            <div className="space-y-8">
+              <section className="bg-stone-50 border border-stone-200 rounded-xl p-5">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h4 className="text-xs font-semibold tracking-[0.2em] text-gray-500 uppercase">Overall Hallucination Risk</h4>
+                    <h5 className="mt-5 text-2xl font-black tracking-tight text-gray-900 uppercase">Risk Summary</h5>
+                    <p className="mt-3 text-base text-gray-700 leading-7">{structured.riskSummary}</p>
+                  </div>
+                  <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${singleJudgeRiskClass(structured.overallHallucinationRisk)}`}>
+                    {formatJudgeLabel(structured.overallHallucinationRisk)}
+                  </span>
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-2xl font-black tracking-tight text-gray-900 uppercase">Cross-Model Analysis</h4>
+                <div className="mt-4 overflow-x-auto border border-gray-200 bg-white">
+                  <table className="min-w-full text-[13px]">
+                    <thead className="bg-stone-50">
+                      <tr>
+                        <th className="border-b border-r border-gray-200 px-3 py-2 text-left font-semibold text-gray-700">Topic/Claim</th>
+                        <th className="border-b border-r border-gray-200 px-3 py-2 text-left font-semibold text-gray-700">Agreement Level</th>
+                        <th className="border-b border-gray-200 px-3 py-2 text-left font-semibold text-gray-700">Risk Flag</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white">
+                      {structured.crossModelAnalysis.map((item, idx) => (
+                        <tr key={`${run.id}-cross-${idx}`} className="border-t border-gray-100">
+                          <td className="border-r border-gray-200 px-3 py-2 text-gray-900">{item.topicOrClaim}</td>
+                          <td className={`border-r border-gray-200 px-3 py-2 font-semibold ${agreementLevelClass(item.agreementLevel)} ${agreementLevelCellClass(item.agreementLevel)}`}>
+                            <span className="inline-flex items-center gap-2">
+                              {formatAgreementLevel(item.agreementLevel).toLowerCase().includes('full') ? (
+                                <Check className="h-3.5 w-3.5 text-green-600" strokeWidth={3} />
+                              ) : (
+                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 fill-amber-100" strokeWidth={2.5} />
+                              )}
+                              <span>{formatAgreementLevel(item.agreementLevel)}</span>
+                            </span>
+                          </td>
+                          <td className={`px-3 py-2 font-semibold ${riskFlagClass(item.riskFlag)} ${riskFlagCellClass(item.riskFlag)}`}>{formatRiskFlag(item.riskFlag)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-2xl font-black tracking-tight text-gray-900 uppercase">Claims Requiring User Verification</h4>
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-5">
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-900">Critical - Do Not Trust Without Verification</p>
+                  <ol className="mt-4 space-y-5">
+                    {structured.claimsRequiringVerification.map((claim, idx) => (
+                      <li key={`${run.id}-claim-${idx}`} className="text-sm text-gray-800">
+                        <p className="font-semibold">{idx + 1}. {claim.claim}</p>
+                        <p className="mt-2 leading-6"><span className="font-medium">Why critical:</span> {claim.why}</p>
+                        <p className="mt-1 leading-6"><span className="font-medium">Verification method:</span> {claim.suggestedVerification}</p>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-2xl font-black tracking-tight text-gray-900 uppercase">Cost-of-Error Assessment</h4>
+                <div className="mt-4 rounded-xl border border-gray-200 bg-white p-5">
+                  <div className="space-y-3 text-sm text-gray-800">
+                    <p><span className="font-semibold">Domain:</span> {structured.costOfError.domain}</p>
+                    <p><span className="font-semibold">Potential Impact if Wrong:</span> {structured.costOfError.potentialImpactIfWrong}</p>
+                    <p><span className="font-semibold">Recommended Verification Level:</span> {structured.costOfError.recommendedVerificationLevel}</p>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-2xl font-black tracking-tight text-gray-900 uppercase">Model-by-Model Assessment</h4>
+                <div className="mt-4 space-y-6">
+                  {structured.modelByModel.map((assessment) => {
+                    const model = AI_MODELS.find((item) => item.id === assessment.modelId);
+                    return (
+                      <div key={`${run.id}-${assessment.modelId}-assessment`} className="rounded-xl border border-gray-200 bg-white p-5">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">{model?.icon ?? '•'}</span>
+                          <div>
+                            <h5 className="text-xl font-bold text-gray-900">{model?.name ?? assessment.modelId}</h5>
+                            <p className="text-sm text-gray-500">{assessment.modelId}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 space-y-4 text-sm text-gray-800">
+                          <p>
+                            <span className="font-semibold">Hallucination Risk Level:</span>{' '}
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${singleJudgeRiskClass(assessment.riskLevel)}`}>
+                              {formatJudgeLabel(assessment.riskLevel)}
+                            </span>
+                          </p>
+
+                          <div>
+                            <p className="font-semibold">Confidence Indicators:</p>
+                            <ul className="mt-2 space-y-2">
+                              {assessment.confidenceIndicators.map((item, idx) => (
+                                <li key={`${assessment.modelId}-indicator-${idx}`} className="flex gap-2">
+                                  <span className="text-green-600">+</span>
+                                  <span>{item}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          <div>
+                            <p className="font-semibold">Specific Concerns:</p>
+                            <ul className="mt-2 space-y-2">
+                              {assessment.concerns.map((item, idx) => (
+                                <li key={`${assessment.modelId}-concern-${idx}`} className="flex gap-2">
+                                  <span className="text-red-600">-</span>
+                                  <span>{item}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-2xl font-black tracking-tight text-gray-900 uppercase">Safe-to-Trust Elements</h4>
+                <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-5">
+                  <ol className="space-y-2 text-sm text-gray-800">
+                    {structured.safeToTrustElements.map((item, idx) => (
+                      <li key={`${run.id}-safe-${idx}`} className="flex gap-3">
+                        <span className="font-semibold text-green-700">{idx + 1}.</span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </section>
+
+              <section>
+                <h4 className="text-2xl font-black tracking-tight text-gray-900 uppercase">Recommendations for User</h4>
+                <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-5">
+                  <ol className="space-y-4 text-sm text-gray-800">
+                    {structured.recommendationsForUser.map((item, idx) => (
+                      <li key={`${run.id}-recommendation-${idx}`} className="flex gap-3">
+                        <span className="font-semibold text-blue-700">{idx + 1}.</span>
+                        <span className="leading-6">{item}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </section>
+            </div>
+          );
+        };
 
         return (
           <div key={run.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -1653,7 +1922,7 @@ export default function LLMPlayground() {
                   ) : isLoading ? (
                     <p className="text-sm text-gray-500 italic">Waiting for evaluation...</p>
                   ) : (
-                    <Markdown value={run.report} />
+                    renderSingleJudgeReport()
                   )}
                 </div>
               )}
@@ -1721,7 +1990,7 @@ export default function LLMPlayground() {
                     ) : isLoading ? (
                       <p className="text-sm text-gray-500 italic">Waiting for evaluation...</p>
                     ) : (
-                      <Markdown value={run.report} />
+                      renderSingleJudgeReport()
                     )}
                   </div>
                 </>
