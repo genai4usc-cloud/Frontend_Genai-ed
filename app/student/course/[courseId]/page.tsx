@@ -49,7 +49,7 @@ export default function StudentCourse() {
 
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [activeTab, setActiveTab] = useState<'lectures' | 'quiz' | 'assignments' | 'summary' | 'chat' | 'uploads'>('lectures');
+  const [activeTab, setActiveTab] = useState<'overview' | 'lectures' | 'assignments' | 'quiz' | 'chat' | 'uploads'>('overview');
   const [course, setCourse] = useState<Course | null>(null);
   const [courseLectures, setCourseLectures] = useState<Lecture[]>([]);
   const [myLectures, setMyLectures] = useState<StudentLecture[]>([]);
@@ -374,6 +374,17 @@ export default function StudentCourse() {
         <div className="border-b border-border">
           <div className="flex gap-6 overflow-x-auto">
             <button
+              onClick={() => setActiveTab('overview')}
+              className={`pb-3 px-2 font-medium transition-colors relative whitespace-nowrap ${
+                activeTab === 'overview'
+                  ? 'text-brand-maroon after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand-maroon'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <BarChart3 className="w-5 h-5 inline mr-2" />
+              Overview
+            </button>
+            <button
               onClick={() => setActiveTab('lectures')}
               className={`pb-3 px-2 font-medium transition-colors relative whitespace-nowrap ${
                 activeTab === 'lectures'
@@ -383,17 +394,6 @@ export default function StudentCourse() {
             >
               <BookOpen className="w-5 h-5 inline mr-2" />
               Lectures
-            </button>
-            <button
-              onClick={() => setActiveTab('quiz')}
-              className={`pb-3 px-2 font-medium transition-colors relative whitespace-nowrap ${
-                activeTab === 'quiz'
-                  ? 'text-brand-maroon after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand-maroon'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <FileCheck className="w-5 h-5 inline mr-2" />
-              Quiz
             </button>
             <button
               onClick={() => setActiveTab('assignments')}
@@ -407,15 +407,15 @@ export default function StudentCourse() {
               Assignments
             </button>
             <button
-              onClick={() => setActiveTab('summary')}
+              onClick={() => setActiveTab('quiz')}
               className={`pb-3 px-2 font-medium transition-colors relative whitespace-nowrap ${
-                activeTab === 'summary'
+                activeTab === 'quiz'
                   ? 'text-brand-maroon after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand-maroon'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <BarChart3 className="w-5 h-5 inline mr-2" />
-              Summary
+              <FileCheck className="w-5 h-5 inline mr-2" />
+              Quizzes
             </button>
             <button
               onClick={() => setActiveTab('chat')}
@@ -570,9 +570,9 @@ export default function StudentCourse() {
           </div>
         )}
 
-        {activeTab === 'summary' && (
+        {activeTab === 'overview' && (
           <div>
-            <h2 className="text-xl font-bold text-foreground mb-6">Performance Summary</h2>
+            <h2 className="text-xl font-bold text-foreground mb-6">Course Overview</h2>
             <StudentPerformanceSummary
               averageQuizScore={dummySummaryData.averageQuizScore}
               averageAssignmentScore={dummySummaryData.averageAssignmentScore}
