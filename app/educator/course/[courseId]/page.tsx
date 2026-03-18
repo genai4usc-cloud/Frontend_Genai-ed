@@ -257,14 +257,36 @@ export default function CourseLectures() {
 
   const loadCourseQuizzes = async () => {
     try {
-      const { data: quizData, error } = await supabase
-        .from('quizzes')
-        .select('*')
+      const { data: quizRelations, error } = await supabase
+        .from('quiz_batch_courses')
+        .select(`
+          quiz_batches!inner(
+            id,
+            quiz_name,
+            created_at,
+            status,
+            mcq_count,
+            short_answer_count
+          )
+        `)
         .eq('course_id', courseId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false, foreignTable: 'quiz_batches' });
 
       if (error) throw error;
-      setQuizzes(quizData || []);
+
+      const normalizedQuizzes: Quiz[] = (quizRelations || [])
+        .map((relation: any) => relation.quiz_batches)
+        .filter(Boolean)
+        .map((quiz: any) => ({
+          id: quiz.id,
+          quiz_name: quiz.quiz_name,
+          created_at: quiz.created_at,
+          status: quiz.status,
+          mcq_count: quiz.mcq_count,
+          short_answer_count: quiz.short_answer_count,
+        }));
+
+      setQuizzes(normalizedQuizzes);
     } catch (error) {
       console.error('Error loading quizzes:', error);
       toast.error('Failed to load quizzes');
