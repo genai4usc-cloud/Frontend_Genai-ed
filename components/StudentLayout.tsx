@@ -105,7 +105,7 @@ export default function StudentLayout({ children, profile }: StudentLayoutProps)
               <span className="text-brand-maroon font-bold text-sm">USC</span>
             </div>
             <div>
-              <h1 className="text-xl font-bold">Epistemic AI</h1>
+              <h1 className="text-xl font-bold">Cogitatis AI</h1>
               <p className="text-sm text-white/80">USC GenAI Learning Platform</p>
             </div>
           </div>
