@@ -53,6 +53,35 @@ export default function StudentDashboard() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [recentLectures, setRecentLectures] = useState<Lecture[]>([]);
   const [myLectures, setMyLectures] = useState<Lecture[]>([]);
+  const [trainingCourses] = useState([
+    {
+      id: '1',
+      title: 'Prompt Engineering 101',
+      description: 'Learn the fundamentals of crafting effective AI prompts',
+      icon: '🤖',
+      lessonsCount: 8,
+      duration: 45,
+      bgColor: 'bg-gradient-to-br from-red-900 to-red-800'
+    },
+    {
+      id: '2',
+      title: 'AI Ethics for Students',
+      description: 'Understanding ethical considerations in AI usage',
+      icon: '⚖️',
+      lessonsCount: 6,
+      duration: 38,
+      bgColor: 'bg-gradient-to-br from-red-900 to-red-800'
+    },
+    {
+      id: '3',
+      title: 'Effective AI-Assisted Learning',
+      description: 'Maximize your learning with AI tools',
+      icon: '🎓',
+      lessonsCount: 10,
+      duration: 52,
+      bgColor: 'bg-gradient-to-br from-red-900 to-red-800'
+    }
+  ]);
   const [libraryResources] = useState<LibraryResource[]>([
     {
       id: '1',
@@ -388,6 +417,35 @@ export default function StudentDashboard() {
             </div>
           </section>
         )}
+
+        <section>
+          <h2 className="text-2xl font-bold text-foreground mb-4">Training</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {trainingCourses.map((course) => (
+              <div
+                key={course.id}
+                className="bg-card border border-border rounded-xl overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+              >
+                <div className="p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className={`${course.bgColor} w-16 h-16 rounded-xl flex items-center justify-center text-3xl shadow-md`}>
+                      {course.icon}
+                    </div>
+                    <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs font-medium px-3 py-1 rounded-full">
+                      {course.lessonsCount} lessons
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-foreground mb-2 text-lg">{course.title}</h3>
+                  <p className="text-sm text-muted-foreground mb-4">{course.description}</p>
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <Clock className="w-4 h-4 mr-1" />
+                    {course.duration} min
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
 
         <section>
           <h2 className="text-2xl font-bold text-foreground mb-4">USC Library Resources</h2>
