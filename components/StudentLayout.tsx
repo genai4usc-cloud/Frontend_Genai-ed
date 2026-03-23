@@ -67,7 +67,7 @@ export default function StudentLayout({ children, profile }: StudentLayoutProps)
 
   const courseNavItems: NavItem[] = courses.map(course => ({
     icon: BookOpen,
-    label: `${course.course_number}`,
+    label: course.title || course.course_number,
     path: `/student/course/${course.id}`,
     badge: course.newLecturesCount,
   }));

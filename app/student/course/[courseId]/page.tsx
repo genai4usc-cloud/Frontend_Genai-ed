@@ -8,7 +8,7 @@ import StudentQuizCard from '@/components/StudentQuizCard';
 import StudentAssignmentCard from '@/components/StudentAssignmentCard';
 import StudentPerformanceSummary from '@/components/StudentPerformanceSummary';
 import { supabase, Profile } from '@/lib/supabase';
-import { BookOpen, MessageSquare, Upload, FileText, Trash2, Send, Video, SquareCheck as CheckSquare, FileCheck, ClipboardList, ChartBar as BarChart3 } from 'lucide-react';
+import { BookOpen, MessageSquare, Upload, FileText, Trash2, Send, Video, SquareCheck as CheckSquare, FileCheck, ClipboardList, ChartBar as BarChart3, Clock, Calendar, Eye } from 'lucide-react';
 
 interface Course {
   id: string;
@@ -42,6 +42,45 @@ interface Upload {
   created_at: string;
 }
 
+interface InClassQuizQuestion {
+  question: string;
+  options?: string[] | Record<string, string>;
+  correct?: string;
+  correct_answer?: string;
+  explanation?: string;
+}
+
+interface InClassQuizAnswer {
+  question?: string;
+  options?: string[] | Record<string, string>;
+  correct?: string;
+  correct_answer: string;
+  explanation?: string;
+}
+
+interface InClassQuiz {
+  id: string;
+  quiz_batch_id: string;
+  title: string;
+  status: string;
+  student_file_name: string | null;
+  mcq_count: number;
+  short_answer_count: number;
+  created_at: string;
+  quiz_content_json: {
+    questions?: InClassQuizQuestion[];
+    mcq?: InClassQuizQuestion[];
+    short_answer?: InClassQuizQuestion[];
+  } | null;
+  answers_content_json: {
+    answers?: InClassQuizAnswer[];
+    mcq?: InClassQuizAnswer[];
+    short_answer?: InClassQuizAnswer[];
+  } | null;
+  quiz_pdf_url: string | null;
+  answers_pdf_url: string | null;
+}
+
 export default function StudentCourse() {
   const router = useRouter();
   const params = useParams();
@@ -54,6 +93,8 @@ export default function StudentCourse() {
   const [courseLectures, setCourseLectures] = useState<Lecture[]>([]);
   const [myLectures, setMyLectures] = useState<StudentLecture[]>([]);
   const [uploads, setUploads] = useState<Upload[]>([]);
+  const [inClassQuizzes, setInClassQuizzes] = useState<InClassQuiz[]>([]);
+  const [quizView, setQuizView] = useState<'in-class' | 'online'>('in-class');
 
   const [contextSources, setContextSources] = useState({
     syllabus: true,
@@ -248,7 +289,251 @@ export default function StudentCourse() {
       setUploads(uploadsData);
     }
 
+    await loadInClassQuizzes(userId);
+
     setLoading(false);
+  };
+
+  const loadInClassQuizzes = async (userId: string) => {
+    const normalizeRpcRows = (rows: Array<{
+      id: string;
+      quiz_batch_id: string;
+      quiz_name: string | null;
+      status: string | null;
+      student_file_name: string | null;
+      mcq_count: number;
+      short_answer_count: number;
+      created_at: string;
+      quiz_content_json: InClassQuiz['quiz_content_json'];
+      answers_content_json: InClassQuiz['answers_content_json'];
+      quiz_pdf_url: string | null;
+      answers_pdf_url: string | null;
+    }>) => rows.map((quiz) => ({
+      ...quiz,
+      title: quiz.quiz_name || 'Untitled In-Class Quiz',
+      status: quiz.status || 'generated',
+    }));
+
+    const { data, error } = await supabase
+      .rpc('get_student_course_generated_quizzes', { p_course_id: courseId });
+
+    if (!error) {
+      setInClassQuizzes(normalizeRpcRows((data || []) as Array<{
+        id: string;
+        quiz_batch_id: string;
+        quiz_name: string | null;
+        status: string | null;
+        student_file_name: string | null;
+        mcq_count: number;
+        short_answer_count: number;
+        created_at: string;
+        quiz_content_json: InClassQuiz['quiz_content_json'];
+        answers_content_json: InClassQuiz['answers_content_json'];
+        quiz_pdf_url: string | null;
+        answers_pdf_url: string | null;
+      }>));
+      return;
+    }
+
+    if (error.code !== 'PGRST202') {
+      console.error('Error loading generated quizzes:', error);
+      setInClassQuizzes([]);
+      return;
+    }
+
+    const { data: courseQuizLinks, error: linksError } = await supabase
+      .from('quiz_batch_courses')
+      .select('quiz_batch_id')
+      .eq('course_id', courseId);
+
+    if (linksError) {
+      console.error('Error loading course quiz links:', linksError);
+      setInClassQuizzes([]);
+      return;
+    }
+
+    const quizBatchIds = Array.from(
+      new Set((courseQuizLinks || []).map((row) => row.quiz_batch_id).filter(Boolean))
+    );
+
+    if (quizBatchIds.length === 0) {
+      setInClassQuizzes([]);
+      return;
+    }
+
+    const [
+      { data: generatedQuizzes, error: generatedError },
+      { data: batchRows, error: batchError }
+    ] = await Promise.all([
+      supabase
+        .from('quiz_generated')
+        .select(`
+          id,
+          quiz_batch_id,
+          student_file_name,
+          mcq_count,
+          short_answer_count,
+          created_at,
+          quiz_content_json,
+          answers_content_json,
+          quiz_pdf_url,
+          answers_pdf_url
+        `)
+        .eq('student_id', userId)
+        .in('quiz_batch_id', quizBatchIds)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('quiz_batches')
+        .select('id, quiz_name, status')
+        .in('id', quizBatchIds)
+        .eq('status', 'generated')
+    ]);
+
+    if (generatedError) {
+      console.error('Error loading generated quizzes:', generatedError);
+      setInClassQuizzes([]);
+      return;
+    }
+
+    if (batchError) {
+      console.error('Error loading quiz batch names:', batchError);
+      setInClassQuizzes([]);
+      return;
+    }
+
+    const batchMap = new Map(
+      (batchRows || []).map((batch) => [batch.id, batch])
+    );
+
+    const normalizedQuizzes: InClassQuiz[] = ((generatedQuizzes || []) as Array<{
+      id: string;
+      quiz_batch_id: string;
+      student_file_name: string | null;
+      mcq_count: number;
+      short_answer_count: number;
+      created_at: string;
+      quiz_content_json: InClassQuiz['quiz_content_json'];
+      answers_content_json: InClassQuiz['answers_content_json'];
+      quiz_pdf_url: string | null;
+      answers_pdf_url: string | null;
+    }>).map((quiz) => ({
+      id: quiz.id,
+      quiz_batch_id: quiz.quiz_batch_id,
+      title: batchMap.get(quiz.quiz_batch_id)?.quiz_name || 'Untitled In-Class Quiz',
+      status: batchMap.get(quiz.quiz_batch_id)?.status || 'generated',
+      student_file_name: quiz.student_file_name,
+      mcq_count: quiz.mcq_count,
+      short_answer_count: quiz.short_answer_count,
+      created_at: quiz.created_at,
+      quiz_content_json: quiz.quiz_content_json,
+      answers_content_json: quiz.answers_content_json,
+      quiz_pdf_url: quiz.quiz_pdf_url,
+      answers_pdf_url: quiz.answers_pdf_url,
+    })).filter((quiz) => quiz.status === 'generated');
+
+    setInClassQuizzes(normalizedQuizzes);
+  };
+
+  const createDocumentWindow = (html: string) => {
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
+  const getQuizQuestions = (quiz: InClassQuiz) => {
+    return quiz.quiz_content_json?.questions
+      || quiz.quiz_content_json?.mcq
+      || [];
+  };
+
+  const getQuizAnswers = (quiz: InClassQuiz) => {
+    return quiz.answers_content_json?.answers
+      || quiz.answers_content_json?.mcq
+      || [];
+  };
+
+  const normalizeOptions = (options?: string[] | Record<string, string>) => {
+    if (!options) return [];
+    if (Array.isArray(options)) return options;
+    return Object.entries(options).map(([key, value]) => `${key}. ${value}`);
+  };
+
+  const openInClassQuestions = (quiz: InClassQuiz) => {
+    if (quiz.quiz_pdf_url) {
+      window.open(quiz.quiz_pdf_url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    const questions = getQuizQuestions(quiz);
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>${quiz.title} - Questions</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 24px; color: #111827; }
+    h1 { color: #7c0000; margin-bottom: 8px; }
+    .meta { color: #6b7280; margin-bottom: 28px; }
+    .question { border-top: 1px solid #e5e7eb; padding: 20px 0; }
+    .question:first-of-type { border-top: 0; }
+    .prompt { font-weight: 600; margin-bottom: 10px; }
+    ul { margin: 0; padding-left: 20px; }
+    li { margin-bottom: 6px; }
+  </style>
+</head>
+<body>
+  <h1>${quiz.title}</h1>
+  <div class="meta">Material: ${quiz.student_file_name || 'Student material'} | Questions: ${questions.length}</div>
+  ${questions.map((item, index) => `
+    <section class="question">
+      <div class="prompt">${index + 1}. ${item.question}</div>
+      ${(normalizeOptions(item.options).length > 0)
+        ? `<ul>${normalizeOptions(item.options).map((option) => `<li>${option}</li>`).join('')}</ul>`
+        : '<p>No options provided.</p>'}
+    </section>
+  `).join('')}
+</body>
+</html>`;
+
+    createDocumentWindow(html);
+  };
+
+  const openInClassAnswers = (quiz: InClassQuiz) => {
+    if (quiz.answers_pdf_url) {
+      window.open(quiz.answers_pdf_url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    const answers = getQuizAnswers(quiz);
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>${quiz.title} - Answers</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 24px; color: #111827; }
+    h1 { color: #7c0000; margin-bottom: 8px; }
+    .meta { color: #6b7280; margin-bottom: 28px; }
+    .answer { border-top: 1px solid #e5e7eb; padding: 20px 0; }
+    .answer:first-of-type { border-top: 0; }
+    .value { font-weight: 600; margin-bottom: 8px; }
+    .explanation { color: #4b5563; }
+  </style>
+</head>
+<body>
+  <h1>${quiz.title}</h1>
+  <div class="meta">Answer Key | Material: ${quiz.student_file_name || 'Student material'}</div>
+  ${answers.map((item, index) => `
+    <section class="answer">
+      <div class="value">${index + 1}. Correct Answer: ${item.correct_answer || item.correct || 'N/A'}</div>
+      <div class="explanation">${item.explanation || 'No explanation provided.'}</div>
+    </section>
+  `).join('')}
+</body>
+</html>`;
+
+    createDocumentWindow(html);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -485,7 +770,7 @@ export default function StudentCourse() {
               ) : (
                 <div className="bg-card border border-border rounded-xl p-12 text-center">
                   <Video className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground mb-4">You haven't generated any lectures yet</p>
+                  <p className="text-muted-foreground mb-4">You haven&apos;t generated any lectures yet</p>
                   <button
                     onClick={() => setActiveTab('chat')}
                     className="bg-brand-maroon hover:bg-brand-maroon-hover text-white px-6 py-2 rounded-lg transition-colors"
@@ -500,37 +785,139 @@ export default function StudentCourse() {
 
         {activeTab === 'quiz' && (
           <div>
-            <h2 className="text-xl font-bold text-foreground mb-6">Available Quizzes</h2>
-            {dummyQuizzes.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {dummyQuizzes.map((quiz) => (
-                  <StudentQuizCard
-                    key={quiz.id}
-                    title={quiz.title}
-                    courseName={quiz.courseName}
-                    instructorName={quiz.instructorName}
-                    questionCount={quiz.questionCount}
-                    totalMarks={quiz.totalMarks}
-                    duration={quiz.duration}
-                    dueDate={quiz.dueDate}
-                    status={quiz.status}
-                    onViewQuestions={() => {
-                      alert('Opening quiz questions PDF...');
-                    }}
-                    onStartQuiz={quiz.status === 'available' ? () => {
-                      alert('Starting quiz: ' + quiz.title);
-                    } : undefined}
-                    onViewAttempt={quiz.status === 'attempted' ? () => {
-                      alert('Viewing quiz attempt for: ' + quiz.title);
-                    } : undefined}
-                  />
-                ))}
+            <div className="flex items-center justify-between gap-4 mb-6">
+              <h2 className="text-xl font-bold text-foreground">Available Quizzes</h2>
+              <div className="inline-flex rounded-lg border border-border p-1 bg-card">
+                <button
+                  onClick={() => setQuizView('in-class')}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    quizView === 'in-class'
+                      ? 'bg-brand-maroon text-white'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  In Class
+                </button>
+                <button
+                  onClick={() => setQuizView('online')}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    quizView === 'online'
+                      ? 'bg-brand-maroon text-white'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Online
+                </button>
               </div>
-            ) : (
-              <div className="bg-card border border-border rounded-xl p-12 text-center">
-                <FileCheck className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">No quizzes available yet</p>
-              </div>
+            </div>
+
+            {quizView === 'in-class' && (
+              <>
+                {inClassQuizzes.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {inClassQuizzes.map((quiz) => {
+                      const questionCount = getQuizQuestions(quiz).length;
+
+                      return (
+                        <div key={quiz.id} className="bg-card border border-border rounded-xl p-6">
+                          <div className="flex items-start justify-between gap-4 mb-4">
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <FileCheck className="w-5 h-5 text-brand-maroon" />
+                                <h3 className="text-lg font-semibold text-foreground">{quiz.title}</h3>
+                              </div>
+                              <p className="text-sm text-muted-foreground">{course.title}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Material: {quiz.student_file_name || 'Student material'}
+                              </p>
+                            </div>
+                            <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                              In Class
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <FileCheck className="w-4 h-4" />
+                              <span>{questionCount} Questions</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Clock className="w-4 h-4" />
+                              <span>{quiz.mcq_count} MCQ, {quiz.short_answer_count} Short</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Calendar className="w-4 h-4" />
+                              <span>{formatTimeAgo(quiz.created_at)}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Eye className="w-4 h-4" />
+                              <span>{quiz.status}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2 pt-4 border-t border-border">
+                            <button
+                              onClick={() => openInClassQuestions(quiz)}
+                              className="flex-1 border border-gray-300 hover:bg-gray-50 text-foreground font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                            >
+                              <FileText className="w-4 h-4" />
+                              Questions Doc
+                            </button>
+                            <button
+                              onClick={() => openInClassAnswers(quiz)}
+                              className="flex-1 bg-brand-maroon hover:bg-brand-maroon-hover text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                            >
+                              <FileCheck className="w-4 h-4" />
+                              Answers Doc
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="bg-card border border-border rounded-xl p-12 text-center">
+                    <FileCheck className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No in-class quizzes available yet</p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {quizView === 'online' && (
+              <>
+                {dummyQuizzes.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {dummyQuizzes.map((quiz) => (
+                      <StudentQuizCard
+                        key={quiz.id}
+                        title={quiz.title}
+                        courseName={quiz.courseName}
+                        instructorName={quiz.instructorName}
+                        questionCount={quiz.questionCount}
+                        totalMarks={quiz.totalMarks}
+                        duration={quiz.duration}
+                        dueDate={quiz.dueDate}
+                        status={quiz.status}
+                        onViewQuestions={() => {
+                          alert('Opening quiz questions PDF...');
+                        }}
+                        onStartQuiz={quiz.status === 'available' ? () => {
+                          alert('Starting quiz: ' + quiz.title);
+                        } : undefined}
+                        onViewAttempt={quiz.status === 'attempted' ? () => {
+                          alert('Viewing quiz attempt for: ' + quiz.title);
+                        } : undefined}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-card border border-border rounded-xl p-12 text-center">
+                    <FileCheck className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No quizzes available yet</p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
