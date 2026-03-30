@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import StudentLayout from '@/components/StudentLayout';
 import LectureCard from '@/components/LectureCard';
@@ -8,6 +8,14 @@ import StudentQuizCard from '@/components/StudentQuizCard';
 import StudentAssignmentCard from '@/components/StudentAssignmentCard';
 import StudentPerformanceSummary from '@/components/StudentPerformanceSummary';
 import { supabase, Profile } from '@/lib/supabase';
+import {
+  getAssignmentSystemMissingMessage,
+  isAssignmentSystemMissingError,
+} from '@/lib/assignmentSystemErrors';
+import {
+  getStudentAssignmentCardStatus,
+  StudentCourseAssignment,
+} from '@/lib/assignments';
 import { BookOpen, MessageSquare, Upload, FileText, Trash2, Send, Video, SquareCheck as CheckSquare, FileCheck, ClipboardList, ChartBar as BarChart3, Clock, Calendar, Eye } from 'lucide-react';
 
 interface Course {
@@ -94,6 +102,8 @@ export default function StudentCourse() {
   const [myLectures, setMyLectures] = useState<StudentLecture[]>([]);
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [inClassQuizzes, setInClassQuizzes] = useState<InClassQuiz[]>([]);
+  const [studentAssignments, setStudentAssignments] = useState<StudentCourseAssignment[]>([]);
+  const [assignmentSystemMissing, setAssignmentSystemMissing] = useState(false);
   const [quizView, setQuizView] = useState<'in-class' | 'online'>('in-class');
 
   const [contextSources, setContextSources] = useState({
@@ -130,65 +140,42 @@ export default function StudentCourse() {
     }
   ];
 
-  const dummyAssignments = [
-    {
-      id: '1',
-      title: 'ML Data Preprocessing',
-      courseName: 'CS 229 Machine Learning',
-      instructorName: 'Prof. Andrew Ng',
-      dueDate: '2026-03-20',
-      totalMarks: 25,
-      status: 'pending' as const
-    },
-    {
-      id: '2',
-      title: 'Regression Model Implementation',
-      courseName: 'CS 229 Machine Learning',
-      instructorName: 'Prof. Andrew Ng',
-      dueDate: '2026-03-10',
-      totalMarks: 30,
-      status: 'submitted' as const
-    }
-  ];
+  const assignmentSummaryData = useMemo(() => {
+    const gradedAssignments = studentAssignments.filter((assignment) => assignment.grade_score !== null);
+    const submittedAssignments = studentAssignments.filter((assignment) => Boolean(assignment.submitted_at));
 
-  const dummySummaryData = {
-    averageQuizScore: 82,
-    averageAssignmentScore: 88,
-    completedLectures: 5,
-    totalLectures: 8,
-    submittedAssignments: 3,
-    totalAssignments: 4,
-    performanceItems: [
-      {
-        name: 'Linear Regression Quiz',
-        type: 'quiz' as const,
-        marksScored: 18,
-        totalMarks: 20,
-        status: 'completed' as const
-      },
-      {
-        name: 'Neural Networks Quiz',
-        type: 'quiz' as const,
-        marksScored: 12,
-        totalMarks: 16,
-        status: 'completed' as const
-      },
-      {
-        name: 'ML Data Preprocessing',
+    const averageAssignmentScore = gradedAssignments.length > 0
+      ? Math.round(
+          gradedAssignments.reduce((sum, assignment) => {
+            const score = Number(assignment.grade_score || 0);
+            const percentage = assignment.points_possible > 0
+              ? (score / assignment.points_possible) * 100
+              : 0;
+            return sum + percentage;
+          }, 0) / gradedAssignments.length,
+        )
+      : 0;
+
+    return {
+      averageQuizScore: 0,
+      averageAssignmentScore,
+      completedLectures: courseLectures.length,
+      totalLectures: courseLectures.length,
+      submittedAssignments: submittedAssignments.length,
+      totalAssignments: studentAssignments.length,
+      performanceItems: studentAssignments.map((assignment) => ({
+        name: assignment.assignment_label,
         type: 'assignment' as const,
-        marksScored: null,
-        totalMarks: 25,
-        status: 'pending' as const
-      },
-      {
-        name: 'Regression Model Implementation',
-        type: 'assignment' as const,
-        marksScored: 27,
-        totalMarks: 30,
-        status: 'submitted' as const
-      }
-    ]
-  };
+        marksScored: assignment.grade_score,
+        totalMarks: assignment.points_possible,
+        status: assignment.grade_score !== null
+          ? 'completed' as const
+          : assignment.submitted_at
+          ? 'submitted' as const
+          : 'pending' as const,
+      })),
+    };
+  }, [courseLectures.length, studentAssignments]);
 
   useEffect(() => {
     checkAuthAndLoadData();
@@ -289,9 +276,38 @@ export default function StudentCourse() {
       setUploads(uploadsData);
     }
 
-    await loadInClassQuizzes(userId);
+    await Promise.all([
+      loadInClassQuizzes(userId),
+      loadStudentAssignments(),
+    ]);
 
     setLoading(false);
+  };
+
+  const loadStudentAssignments = async () => {
+    const { data, error } = await supabase.rpc('get_student_course_assignments', {
+      p_course_id: courseId,
+    });
+
+    if (error) {
+      console.error('Error loading assignments:', error);
+      if (isAssignmentSystemMissingError(error)) {
+        setAssignmentSystemMissing(true);
+        setStudentAssignments([]);
+        return;
+      }
+      setStudentAssignments([]);
+      return;
+    }
+
+    const normalizedAssignments = ((data || []) as any[]).map((assignment) => ({
+      ...assignment,
+      allowed_mime_types: Array.isArray(assignment.allowed_mime_types)
+        ? assignment.allowed_mime_types
+        : [],
+    })) as StudentCourseAssignment[];
+
+    setStudentAssignments(normalizedAssignments);
   };
 
   const loadInClassQuizzes = async (userId: string) => {
@@ -386,7 +402,7 @@ export default function StudentCourse() {
         .from('quiz_batches')
         .select('id, quiz_name, status')
         .in('id', quizBatchIds)
-        .eq('status', 'generated')
+        .in('status', ['generated', 'saved'])
     ]);
 
     if (generatedError) {
@@ -429,7 +445,7 @@ export default function StudentCourse() {
       answers_content_json: quiz.answers_content_json,
       quiz_pdf_url: quiz.quiz_pdf_url,
       answers_pdf_url: quiz.answers_pdf_url,
-    })).filter((quiz) => quiz.status === 'generated');
+    })).filter((quiz) => quiz.status === 'generated' || quiz.status === 'saved');
 
     setInClassQuizzes(normalizedQuizzes);
   };
@@ -925,28 +941,40 @@ export default function StudentCourse() {
         {activeTab === 'assignments' && (
           <div>
             <h2 className="text-xl font-bold text-foreground mb-6">Course Assignments</h2>
-            {dummyAssignments.length > 0 ? (
+            {assignmentSystemMissing && (
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                {getAssignmentSystemMissingMessage()}
+              </div>
+            )}
+            {studentAssignments.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {dummyAssignments.map((assignment) => (
+                {studentAssignments.map((assignment) => {
+                  const cardStatus = getStudentAssignmentCardStatus(assignment);
+
+                  return (
                   <StudentAssignmentCard
                     key={assignment.id}
-                    title={assignment.title}
-                    courseName={assignment.courseName}
-                    instructorName={assignment.instructorName}
-                    dueDate={assignment.dueDate}
-                    totalMarks={assignment.totalMarks}
-                    status={assignment.status}
+                    label={assignment.assignment_label}
+                    title={assignment.assignment_title}
+                    courseName={course.title}
+                    instructorName={course.instructor_name}
+                    dueDate={assignment.due_at}
+                    totalMarks={assignment.points_possible}
+                    status={cardStatus}
+                    submittedAt={assignment.submitted_at}
+                    gradeScore={assignment.grade_score}
                     onViewAssignment={() => {
-                      alert('Viewing assignment: ' + assignment.title);
+                      router.push(`/student/course/${courseId}/assignment/${assignment.id}`);
                     }}
-                    onSubmitWork={assignment.status === 'pending' ? () => {
-                      alert('Submit work for: ' + assignment.title);
+                    onSubmitWork={cardStatus === 'pending' ? () => {
+                      router.push(`/student/course/${courseId}/assignment/${assignment.id}`);
                     } : undefined}
-                    onViewSubmission={assignment.status === 'submitted' ? () => {
-                      alert('Viewing submission for: ' + assignment.title);
+                    onViewSubmission={cardStatus !== 'pending' ? () => {
+                      router.push(`/student/course/${courseId}/assignment/${assignment.id}`);
                     } : undefined}
                   />
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="bg-card border border-border rounded-xl p-12 text-center">
@@ -961,13 +989,13 @@ export default function StudentCourse() {
           <div>
             <h2 className="text-xl font-bold text-foreground mb-6">Course Overview</h2>
             <StudentPerformanceSummary
-              averageQuizScore={dummySummaryData.averageQuizScore}
-              averageAssignmentScore={dummySummaryData.averageAssignmentScore}
-              completedLectures={dummySummaryData.completedLectures}
-              totalLectures={dummySummaryData.totalLectures}
-              submittedAssignments={dummySummaryData.submittedAssignments}
-              totalAssignments={dummySummaryData.totalAssignments}
-              performanceItems={dummySummaryData.performanceItems}
+              averageQuizScore={assignmentSummaryData.averageQuizScore}
+              averageAssignmentScore={assignmentSummaryData.averageAssignmentScore}
+              completedLectures={assignmentSummaryData.completedLectures}
+              totalLectures={assignmentSummaryData.totalLectures}
+              submittedAssignments={assignmentSummaryData.submittedAssignments}
+              totalAssignments={assignmentSummaryData.totalAssignments}
+              performanceItems={assignmentSummaryData.performanceItems}
             />
           </div>
         )}

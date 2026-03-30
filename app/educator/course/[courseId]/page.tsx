@@ -3,13 +3,17 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase, Profile, Course } from '@/lib/supabase';
+import { AssignmentRecord } from '@/lib/assignments';
+import {
+  getAssignmentSystemMissingMessage,
+  isAssignmentSystemMissingError,
+} from '@/lib/assignmentSystemErrors';
 import EducatorLayout from '@/components/EducatorLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import EducatorCourseOverview from '@/components/EducatorCourseOverview';
 import EducatorLectureCard from '@/components/EducatorLectureCard';
 import EducatorAssignmentCard from '@/components/EducatorAssignmentCard';
 import EducatorQuizCard from '@/components/EducatorQuizCard';
-import CourseSummaryStats from '@/components/CourseSummaryStats';
 import StudentManagementTable from '@/components/StudentManagementTable';
 import { ArrowLeft, Video, Plus, Users, BookOpen, FileText, ListChecks, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -34,12 +38,14 @@ type LectureWithArtifacts = Lecture & {
   artifacts: LectureArtifact[];
 };
 
-type Assignment = {
-  id: string;
-  title: string;
-  description: string;
-  dueDate: string;
-  status: 'active' | 'closed' | 'draft';
+type AssignmentSummary = AssignmentRecord & {
+  analytics: {
+    totalStudents: number;
+    submitted: number;
+    graded: number;
+    pending: number;
+    avgScore: number | null;
+  };
 };
 
 type Quiz = {
@@ -58,6 +64,8 @@ export default function CourseLectures() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [course, setCourse] = useState<Course | null>(null);
   const [lectures, setLectures] = useState<LectureWithArtifacts[]>([]);
+  const [assignments, setAssignments] = useState<AssignmentSummary[]>([]);
+  const [assignmentSystemMissing, setAssignmentSystemMissing] = useState(false);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDeleteLectureModal, setShowDeleteLectureModal] = useState<string | null>(null);
@@ -67,38 +75,6 @@ export default function CourseLectures() {
   const [activeTab, setActiveTab] = useState('overview');
   const [showCreateMenu, setShowCreateMenu] = useState(false);
 
-  // Mock data for assignments
-  const dummyAssignments: Assignment[] = [
-    {
-      id: '1',
-      title: 'Linear Regression Implementation',
-      description: 'Implement linear regression from scratch using Python',
-      dueDate: '2026-03-14T23:59:00',
-      status: 'active'
-    },
-    {
-      id: '2',
-      title: 'Data Preprocessing Project',
-      description: 'Clean and preprocess the provided dataset',
-      dueDate: '2026-03-19T23:59:00',
-      status: 'active'
-    },
-    {
-      id: '3',
-      title: 'Neural Network Analysis',
-      description: 'Analyze different neural network architectures',
-      dueDate: '2026-03-25T23:59:00',
-      status: 'active'
-    },
-    {
-      id: '4',
-      title: 'Final Project Proposal',
-      description: 'Submit your final project proposal',
-      dueDate: '2026-02-28T23:59:00',
-      status: 'closed'
-    }
-  ];
-
   // Mock analytics for lectures
   const generateLectureMockAnalytics = (index: number) => ({
     views: [124, 118, 132, 95, 87][index % 5] || 100,
@@ -106,38 +82,6 @@ export default function CourseLectures() {
     avgWatchTime: ['11:45', '13:20', '9:15', '14:50', '8:30'][index % 5] || '10:00',
     publishDate: new Date(Date.now() - (index + 1) * 7 * 24 * 60 * 60 * 1000).toLocaleDateString()
   });
-
-  // Mock analytics for assignments
-  const assignmentAnalytics = [
-    {
-      totalStudents: 127,
-      submitted: 112,
-      graded: 95,
-      pending: 15,
-      avgScore: 87
-    },
-    {
-      totalStudents: 127,
-      submitted: 98,
-      graded: 85,
-      pending: 29,
-      avgScore: 82
-    },
-    {
-      totalStudents: 127,
-      submitted: 105,
-      graded: 105,
-      pending: 22,
-      avgScore: 91
-    },
-    {
-      totalStudents: 127,
-      submitted: 127,
-      graded: 127,
-      pending: 0,
-      avgScore: 85
-    }
-  ];
 
   // Mock analytics for quizzes
   const generateQuizMockAnalytics = (index: number) => ({
@@ -194,6 +138,7 @@ export default function CourseLectures() {
         setCourse(courseData);
         await Promise.all([
           loadCourseLectures(),
+          loadCourseAssignments(),
           loadCourseQuizzes()
         ]);
       }
@@ -293,6 +238,96 @@ export default function CourseLectures() {
     }
   };
 
+  const loadCourseAssignments = async () => {
+    try {
+      const { data: assignmentRows, error: assignmentError } = await supabase
+        .from('assignments')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('created_at', { ascending: false });
+
+      if (assignmentError) {
+        if (isAssignmentSystemMissingError(assignmentError)) {
+          setAssignmentSystemMissing(true);
+          setAssignments([]);
+          return;
+        }
+        throw assignmentError;
+      }
+
+      const normalizedAssignments = ((assignmentRows || []) as any[]).map((assignment) => ({
+        ...assignment,
+        allowed_mime_types: Array.isArray(assignment.allowed_mime_types)
+          ? assignment.allowed_mime_types
+          : [],
+      })) as AssignmentRecord[];
+
+      if (normalizedAssignments.length === 0) {
+        setAssignments([]);
+        return;
+      }
+
+      const assignmentIds = normalizedAssignments.map((assignment) => assignment.id);
+
+      const [{ data: targetRows, error: targetError }, { data: submissionRows, error: submissionError }] = await Promise.all([
+        supabase
+          .from('assignment_students')
+          .select('assignment_id')
+          .in('assignment_id', assignmentIds),
+        supabase
+          .from('assignment_submissions')
+          .select('assignment_id, submitted_at, grade_score')
+          .in('assignment_id', assignmentIds),
+      ]);
+
+      if (targetError) throw targetError;
+      if (submissionError) throw submissionError;
+
+      const targetCounts = new Map<string, number>();
+      (targetRows || []).forEach((row: { assignment_id: string }) => {
+        targetCounts.set(row.assignment_id, (targetCounts.get(row.assignment_id) || 0) + 1);
+      });
+
+      const submittedCounts = new Map<string, number>();
+      const gradedCounts = new Map<string, number>();
+      const gradeTotals = new Map<string, number>();
+
+      (submissionRows || []).forEach((row: { assignment_id: string; submitted_at: string | null; grade_score: number | null }) => {
+        if (row.submitted_at) {
+          submittedCounts.set(row.assignment_id, (submittedCounts.get(row.assignment_id) || 0) + 1);
+        }
+
+        if (row.grade_score !== null) {
+          gradedCounts.set(row.assignment_id, (gradedCounts.get(row.assignment_id) || 0) + 1);
+          gradeTotals.set(row.assignment_id, (gradeTotals.get(row.assignment_id) || 0) + Number(row.grade_score));
+        }
+      });
+
+      const enrichedAssignments: AssignmentSummary[] = normalizedAssignments.map((assignment) => {
+        const totalStudents = targetCounts.get(assignment.id) || 0;
+        const submitted = submittedCounts.get(assignment.id) || 0;
+        const graded = gradedCounts.get(assignment.id) || 0;
+        const totalGrades = gradeTotals.get(assignment.id) || 0;
+
+        return {
+          ...assignment,
+          analytics: {
+            totalStudents,
+            submitted,
+            graded,
+            pending: Math.max(totalStudents - submitted, 0),
+            avgScore: graded > 0 ? Number((totalGrades / graded).toFixed(1)) : null,
+          },
+        };
+      });
+
+      setAssignments(enrichedAssignments);
+    } catch (error) {
+      console.error('Error loading assignments:', error);
+      toast.error('Failed to load assignments');
+    }
+  };
+
   const handleDeleteLecture = async (lectureId: string) => {
     setDeleting(true);
     try {
@@ -361,7 +396,7 @@ export default function CourseLectures() {
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
             <h3 className="text-xl font-semibold text-gray-900 mb-2">Course Not Found</h3>
-            <p className="text-gray-600 mb-6">The course you're looking for doesn't exist or you don't have access to it.</p>
+            <p className="text-gray-600 mb-6">The course you&apos;re looking for doesn&apos;t exist or you don&apos;t have access to it.</p>
             <button
               onClick={() => router.push('/educator/dashboard')}
               className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2 px-6 rounded-lg transition-colors"
@@ -415,7 +450,7 @@ export default function CourseLectures() {
                       </button>
                       <button
                         onClick={() => {
-                          router.push('/educator/assignment/new');
+                          router.push(`/educator/assignment/new?courseId=${courseId}`);
                           setShowCreateMenu(false);
                         }}
                         className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
@@ -514,7 +549,7 @@ export default function CourseLectures() {
                     </div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">No Lectures Yet</h3>
                     <p className="text-gray-600 text-sm mb-6">
-                      This course doesn't have any lectures yet. Create a new lecture by selecting this course in the lecture creation flow.
+                      This course doesn&apos;t have any lectures yet. Create a new lecture by selecting this course in the lecture creation flow.
                     </p>
                     <button
                       onClick={() => router.push('/educator/lecture/new')}
@@ -543,13 +578,19 @@ export default function CourseLectures() {
             </TabsContent>
 
             <TabsContent value="assignments" className="mt-0">
+              {assignmentSystemMissing && (
+                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                  {getAssignmentSystemMissingMessage()}
+                </div>
+              )}
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">Course Assignments</h2>
-                  <p className="text-gray-600 text-sm mt-1">{dummyAssignments.length} assignments created</p>
+                  <p className="text-gray-600 text-sm mt-1">{assignments.length} assignments created</p>
                 </div>
                 <button
-                  onClick={() => router.push('/educator/assignment/new')}
+                  onClick={() => router.push(`/educator/assignment/new?courseId=${courseId}`)}
+                  disabled={assignmentSystemMissing}
                   className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-5 rounded-lg transition-colors flex items-center gap-2"
                 >
                   <Plus className="w-5 h-5" />
@@ -557,16 +598,36 @@ export default function CourseLectures() {
                 </button>
               </div>
 
-              <div className="space-y-4">
-                {dummyAssignments.map((assignment, index) => (
-                  <EducatorAssignmentCard
-                    key={assignment.id}
-                    assignment={assignment}
-                    mockAnalytics={assignmentAnalytics[index]}
-                    onViewDetails={() => toast.info('Assignment details coming soon')}
-                  />
-                ))}
-              </div>
+              {assignments.length === 0 ? (
+                <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                  <div className="max-w-md mx-auto">
+                    <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <FileText className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Assignments Yet</h3>
+                    <p className="text-gray-600 text-sm mb-6">
+                      Create your first assignment for this course, upload the question PDF, and publish it to the enrolled students.
+                    </p>
+                    <button
+                      onClick={() => router.push(`/educator/assignment/new?courseId=${courseId}`)}
+                      className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-6 rounded-lg transition-colors"
+                    >
+                      Create Assignment
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {assignments.map((assignment) => (
+                    <EducatorAssignmentCard
+                      key={assignment.id}
+                      assignment={assignment}
+                      analytics={assignment.analytics}
+                      onViewDetails={() => router.push(`/educator/assignment/${assignment.id}`)}
+                    />
+                  ))}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="quizzes" className="mt-0">

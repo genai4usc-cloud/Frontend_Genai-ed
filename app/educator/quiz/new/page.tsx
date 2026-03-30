@@ -9,6 +9,7 @@ import {
   Users, Info, AlertCircle, X, Wand2, Eye, FileCheck, Download
 } from 'lucide-react';
 import { uploadFile } from '@/lib/fileUpload';
+import { sanitizeFileName } from '@/lib/assignments';
 
 const base = process.env.NEXT_PUBLIC_BACKEND_BASE;
 
@@ -17,6 +18,13 @@ interface QuizBatch {
   educator_id: string;
   status: string;
   mode: string | null;
+  material_source_mode: 'general' | 'students' | null;
+  autofill_assignment_id: string | null;
+  general_file_name: string | null;
+  general_file_url: string | null;
+  general_storage_path: string | null;
+  general_file_mime: string | null;
+  general_file_size_bytes: number | null;
   mcq_count: number;
   short_answer_count: number;
   fixed_mcq_answer_key_enabled: boolean;
@@ -49,9 +57,19 @@ interface LectureMaterial {
 
 interface StudentFile {
   course_student_id: string | null;
+  student_id?: string | null;
   file_name: string;
   file_url: string;
   storage_path: string;
+  source_type?: 'manual' | 'autofill' | 'general' | null;
+  source_label?: string | null;
+}
+
+interface AssignmentOption {
+  id: string;
+  course_id: string;
+  assignment_label: string;
+  assignment_title: string;
 }
 
 interface GeneratedQuiz {
@@ -82,12 +100,18 @@ export default function CreateQuiz() {
   const [selectedCourseIds, setSelectedCourseIds] = useState<Set<string>>(new Set());
 
   const [courseMode, setCourseMode] = useState<string | null>(null);
+  const [materialSourceMode, setMaterialSourceMode] = useState<'general' | 'students' | null>(null);
 
   const [students, setStudents] = useState<Student[]>([]);
   const [studentFiles, setStudentFiles] = useState<Map<string, StudentFile>>(new Map());
+  const [generalFile, setGeneralFile] = useState<StudentFile | null>(null);
+  const [assignmentOptions, setAssignmentOptions] = useState<AssignmentOption[]>([]);
+  const [selectedAutofillAssignmentId, setSelectedAutofillAssignmentId] = useState<string | null>(null);
   const [lectureMaterials, setLectureMaterials] = useState<LectureMaterial[]>([]);
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<Set<string>>(new Set());
   const [uploadingStudent, setUploadingStudent] = useState<string | null>(null);
+  const [uploadingGeneralFile, setUploadingGeneralFile] = useState(false);
+  const [autofillingAssignment, setAutofillingAssignment] = useState(false);
 
   const [mcqCount, setMcqCount] = useState(5);
   const [shortAnswerCount] = useState(0);
@@ -121,7 +145,10 @@ export default function CreateQuiz() {
   useEffect(() => {
     if (selectedCourseIds.size > 0 && quizBatchId) {
       loadStudentsForCourses();
-      loadMaterialsForCourses();
+      loadAssignmentOptions();
+    } else {
+      setStudents([]);
+      setAssignmentOptions([]);
     }
   }, [selectedCourseIds, quizBatchId]);
 
@@ -212,9 +239,13 @@ export default function CreateQuiz() {
       setQuizBatchId(data.id);
       setQuizBatch(data);
       setCourseMode(null);
+      setMaterialSourceMode(null);
       setSelectedCourseIds(new Set());
       setSelectedMaterialIds(new Set());
       setStudentFiles(new Map());
+      setGeneralFile(null);
+      setAssignmentOptions([]);
+      setSelectedAutofillAssignmentId(null);
       setStudents([]);
       setMcqCount(5);
       setUseFixedAnswerKey(false);
@@ -229,11 +260,25 @@ export default function CreateQuiz() {
 
   const loadBatchData = async (batchId: string, batch: QuizBatch) => {
     setCourseMode(batch.mode);
+    setMaterialSourceMode(batch.material_source_mode || null);
+    setSelectedAutofillAssignmentId(batch.autofill_assignment_id || null);
     setMcqCount(batch.mcq_count || 5);
     setUseFixedAnswerKey(batch.fixed_mcq_answer_key_enabled || false);
     setAnswerKey(batch.fixed_mcq_answer_key || []);
     setAdditionalInstructions(batch.additional_instructions || '');
     setQuizName(batch.quiz_name || '');
+    setGeneralFile(
+      batch.general_file_name && batch.general_file_url && batch.general_storage_path
+        ? {
+            course_student_id: null,
+            student_id: null,
+            file_name: batch.general_file_name,
+            file_url: batch.general_file_url,
+            storage_path: batch.general_storage_path,
+            source_type: 'general',
+          }
+        : null,
+    );
 
     const { data: batchCourses } = await supabase
       .from('quiz_batch_courses')
@@ -259,7 +304,7 @@ export default function CreateQuiz() {
   const loadStudentFilesForBatch = async (batchId: string) => {
     const { data: files, error } = await supabase
       .from('quiz_batch_student_files')
-      .select('course_student_id, student_id, file_name, file_url, storage_path')
+      .select('course_student_id, student_id, file_name, file_url, storage_path, source_type, source_label')
       .eq('quiz_batch_id', batchId);
 
     if (error) {
@@ -275,9 +320,12 @@ export default function CreateQuiz() {
     
       filesMap.set(key, {
         course_student_id: f.course_student_id,
+        student_id: f.student_id,
         file_name: f.file_name,
         file_url: f.file_url,
         storage_path: f.storage_path,
+        source_type: f.source_type,
+        source_label: f.source_label,
       });
     });
     setStudentFiles(filesMap);
@@ -373,6 +421,16 @@ export default function CreateQuiz() {
     await supabase
       .from('quiz_batches')
       .update({ mode })
+      .eq('id', quizBatchId);
+  };
+
+  const handleSelectMaterialSourceMode = async (mode: 'general' | 'students') => {
+    if (!quizBatchId) return;
+
+    setMaterialSourceMode(mode);
+    await supabase
+      .from('quiz_batches')
+      .update({ material_source_mode: mode })
       .eq('id', quizBatchId);
   };
 
@@ -485,6 +543,37 @@ export default function CreateQuiz() {
     }
   };
 
+  const loadAssignmentOptions = async () => {
+    const courseIds = Array.from(selectedCourseIds);
+
+    if (courseIds.length === 0) {
+      setAssignmentOptions([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('assignments')
+      .select('id, course_id, assignment_label, assignment_title')
+      .in('course_id', courseIds)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error loading assignment options:', error);
+      setAssignmentOptions([]);
+      return;
+    }
+
+    const options = (data || []) as AssignmentOption[];
+    setAssignmentOptions(options);
+
+    if (
+      selectedAutofillAssignmentId &&
+      !options.some((assignment) => assignment.id === selectedAutofillAssignmentId)
+    ) {
+      setSelectedAutofillAssignmentId(null);
+    }
+  };
+
   const handleMaterialToggle = async (materialId: string) => {
     if (!quizBatchId) return;
 
@@ -510,6 +599,14 @@ export default function CreateQuiz() {
     setSelectedMaterialIds(newSelected);
   };
 
+  const upsertStudentFileState = (mapKey: string, nextFile: StudentFile) => {
+    setStudentFiles((previous) => {
+      const next = new Map(previous);
+      next.set(mapKey, nextFile);
+      return next;
+    });
+  };
+
   const handleFileUpload = async (
       courseStudentId: string | null,
       studentId: string,
@@ -521,7 +618,7 @@ export default function CreateQuiz() {
     setUploadingStudent(mapKey);
 
     try {
-      const storagePath = `quiz-student-files/${quizBatchId}/${studentId}/${file.name}`;
+      const storagePath = `quiz-student-files/${quizBatchId}/${studentId}/${Date.now()}-${sanitizeFileName(file.name)}`;
       const { url, error } = await uploadFile(file, storagePath, 'quiz-student-materials');
 
       if (error || !url) {
@@ -535,25 +632,28 @@ export default function CreateQuiz() {
         .upsert(
           {
             quiz_batch_id: quizBatchId,
-            student_id: studentId,              // ✅ REQUIRED for backend matching
-            course_student_id: courseStudentId, // ✅ keep for traceability (nullable)
+            student_id: studentId,
+            course_student_id: courseStudentId,
             file_name: file.name,
             file_url: url,
             storage_path: storagePath,
             file_mime: file.type,
             file_size_bytes: file.size,
+            source_type: 'manual',
+            source_assignment_id: null,
+            source_label: null,
           },
-          { onConflict: 'quiz_batch_id,student_id' } // ✅ if you have this unique constraint
+          { onConflict: 'quiz_batch_id,student_id' }
         );
 
-      const newFiles = new Map(studentFiles);
-      newFiles.set(mapKey, {
+      upsertStudentFileState(mapKey, {
         course_student_id: courseStudentId,
+        student_id: studentId,
         file_name: file.name,
         file_url: url,
         storage_path: storagePath,
+        source_type: 'manual',
       });
-      setStudentFiles(newFiles);
     } catch (err) {
       console.error('Upload error:', err);
       alert('Failed to upload file');
@@ -562,8 +662,212 @@ export default function CreateQuiz() {
     }
   };
 
+  const handleRemoveStudentFile = async (student: Student) => {
+    if (!quizBatchId || !student.student_id) return;
+
+    setStudentFiles((previous) => {
+      const next = new Map(previous);
+      next.delete(student.enrollment_id);
+      return next;
+    });
+
+    await supabase
+      .from('quiz_batch_student_files')
+      .delete()
+      .eq('quiz_batch_id', quizBatchId)
+      .eq('student_id', student.student_id);
+  };
+
+  const handleGeneralFileUpload = async (file: File) => {
+    if (!quizBatchId) return;
+
+    setUploadingGeneralFile(true);
+
+    try {
+      const storagePath = `quiz-student-files/${quizBatchId}/general/${Date.now()}-${sanitizeFileName(file.name)}`;
+      const { url, error } = await uploadFile(file, storagePath, 'quiz-student-materials');
+
+      if (error || !url) {
+        console.error('General upload error:', error);
+        alert('Failed to upload file');
+        return;
+      }
+
+      await supabase
+        .from('quiz_batches')
+        .update({
+          general_file_name: file.name,
+          general_file_url: url,
+          general_storage_path: storagePath,
+          general_file_mime: file.type,
+          general_file_size_bytes: file.size,
+        })
+        .eq('id', quizBatchId);
+
+      setGeneralFile({
+        course_student_id: null,
+        student_id: null,
+        file_name: file.name,
+        file_url: url,
+        storage_path: storagePath,
+        source_type: 'general',
+      });
+    } catch (error) {
+      console.error('Error uploading general file:', error);
+      alert('Failed to upload file');
+    } finally {
+      setUploadingGeneralFile(false);
+    }
+  };
+
+  const handleRemoveGeneralFile = async () => {
+    if (!quizBatchId) return;
+
+    await supabase
+      .from('quiz_batches')
+      .update({
+        general_file_name: null,
+        general_file_url: null,
+        general_storage_path: null,
+        general_file_mime: null,
+        general_file_size_bytes: null,
+      })
+      .eq('id', quizBatchId);
+
+    setGeneralFile(null);
+  };
+
+  const handleAutofillFromAssignment = async () => {
+    if (!quizBatchId || !selectedAutofillAssignmentId) {
+      alert('Select an assignment first.');
+      return;
+    }
+
+    const assignment = assignmentOptions.find((option) => option.id === selectedAutofillAssignmentId);
+    if (!assignment) {
+      alert('Selected assignment is no longer available.');
+      return;
+    }
+
+    setAutofillingAssignment(true);
+
+    try {
+      await supabase
+        .from('quiz_batches')
+        .update({ autofill_assignment_id: selectedAutofillAssignmentId })
+        .eq('id', quizBatchId);
+
+      const { data: submissions, error: submissionsError } = await supabase
+        .from('assignment_submissions')
+        .select('id, course_student_id')
+        .eq('assignment_id', selectedAutofillAssignmentId);
+
+      if (submissionsError) {
+        throw submissionsError;
+      }
+
+      const submissionRows = submissions || [];
+      if (submissionRows.length === 0) {
+        alert('No assignment submissions were found for that assignment yet.');
+        return;
+      }
+
+      const submissionIds = submissionRows.map((submission) => submission.id);
+      const { data: submissionFiles, error: submissionFilesError } = await supabase
+        .from('assignment_submission_files')
+        .select('submission_id, file_name, file_url, storage_path, created_at')
+        .in('submission_id', submissionIds)
+        .order('created_at', { ascending: false });
+
+      if (submissionFilesError) {
+        throw submissionFilesError;
+      }
+
+      const latestBySubmissionId = new Map<string, any>();
+      (submissionFiles || []).forEach((submissionFile) => {
+        if (!latestBySubmissionId.has(submissionFile.submission_id)) {
+          latestBySubmissionId.set(submissionFile.submission_id, submissionFile);
+        }
+      });
+
+      const submissionByCourseStudentId = new Map<string, { id: string; course_student_id: string }>();
+      submissionRows.forEach((submission) => {
+        if (!submissionByCourseStudentId.has(submission.course_student_id)) {
+          submissionByCourseStudentId.set(submission.course_student_id, submission);
+        }
+      });
+
+      const autofillRows = students
+        .filter((student) => Boolean(student.student_id))
+        .map((student) => {
+          const existingFile = studentFiles.get(student.enrollment_id);
+          if (existingFile && existingFile.source_type !== 'autofill') {
+            return null;
+          }
+
+          const submission = submissionByCourseStudentId.get(student.enrollment_id);
+          const latestFile = submission ? latestBySubmissionId.get(submission.id) : null;
+          if (!submission || !latestFile || !student.student_id) {
+            return null;
+          }
+
+          return {
+            quiz_batch_id: quizBatchId,
+            student_id: student.student_id,
+            course_student_id: student.enrollment_id,
+            file_name: latestFile.file_name,
+            file_url: latestFile.file_url,
+            storage_path: latestFile.storage_path,
+            source_type: 'autofill',
+            source_assignment_id: selectedAutofillAssignmentId,
+            source_label: assignment.assignment_label,
+          };
+        })
+        .filter(Boolean) as Array<Record<string, any>>;
+
+      if (autofillRows.length === 0) {
+        alert('No matching assignment files were found for the selected students.');
+        return;
+      }
+
+      const { error: upsertError } = await supabase
+        .from('quiz_batch_student_files')
+        .upsert(autofillRows, { onConflict: 'quiz_batch_id,student_id' });
+
+      if (upsertError) {
+        throw upsertError;
+      }
+
+      setStudentFiles((previous) => {
+        const next = new Map(previous);
+        autofillRows.forEach((row) => {
+          next.set(row.course_student_id, {
+            course_student_id: row.course_student_id,
+            student_id: row.student_id,
+            file_name: row.file_name,
+            file_url: row.file_url,
+            storage_path: row.storage_path,
+            source_type: 'autofill',
+            source_label: assignment.assignment_label,
+          });
+        });
+        return next;
+      });
+
+      alert(`Autofilled files for ${autofillRows.length} student${autofillRows.length === 1 ? '' : 's'}. You can still upload manual replacements for anyone missing.`);
+    } catch (error) {
+      console.error('Error autofilling assignment submissions:', error);
+      alert('Failed to autofill from assignment submissions');
+    } finally {
+      setAutofillingAssignment(false);
+    }
+  };
+
   const handleContinueToStep4 = () => {
-    if (studentFiles.size > 0 || selectedMaterialIds.size > 0) {
+    if (
+      (materialSourceMode === 'general' && generalFile) ||
+      (materialSourceMode === 'students' && studentFiles.size > 0)
+    ) {
       setExpandedStep(4);
     }
   };
@@ -616,27 +920,31 @@ export default function CreateQuiz() {
   };
 
   const handleGenerateQuizzes = async () => {
-    // If no preloaded materials are selected, every registered student in the batch must have an upload
-    if (selectedMaterialIds.size === 0) {
-      const missing = students
-        .filter(s => !!s.student_id)
-        .filter(s => {
-          const enrollmentKey = s.enrollment_id;
-          const studentIdKey = s.student_id ?? '';
-          return !studentFiles.has(enrollmentKey) && !studentFiles.has(studentIdKey);
-        });
-    
-      if (missing.length > 0) {
-        alert(
-          "Missing uploads for:\n" +
-          missing.map(s => s.email).join("\n") +
-          "\n\nUpload a file for them OR select at least one preloaded material."
-        );
+    if (!quizBatchId) return;
+
+    const registeredStudents = students.filter((student) => Boolean(student.student_id));
+
+    if (!materialSourceMode) {
+      alert('Choose whether this quiz uses a general file or student-specific files.');
+      return;
+    }
+
+    if (materialSourceMode === 'general') {
+      if (!generalFile) {
+        alert('Upload the shared source file first.');
+        return;
+      }
+
+      if (registeredStudents.length === 0) {
+        alert('No registered students are available in the selected courses.');
         return;
       }
     }
 
-    if (!quizBatchId) return;
+    if (materialSourceMode === 'students' && studentFiles.size === 0) {
+      alert('Upload or autofill at least one student file before generating quizzes.');
+      return;
+    }
 
     setGenerating(true);
     try {
@@ -723,27 +1031,32 @@ export default function CreateQuiz() {
   };
 
   const calculateTargetCount = () => {
-    let count = 0;
-    studentFiles.forEach((file, courseStudentId) => {
-      if (courseStudentId !== profile?.id) {
-        count++;
-      }
-    });
-    if (studentFiles.has(profile?.id || '') || selectedMaterialIds.size > 0) {
-      count++;
+    const registeredStudents = students.filter((student) => Boolean(student.student_id));
+
+    if (materialSourceMode === 'general') {
+      return generalFile ? registeredStudents.length : 0;
     }
-    return count;
+
+    if (materialSourceMode === 'students') {
+      return registeredStudents.filter((student) => studentFiles.has(student.enrollment_id)).length;
+    }
+
+    return 0;
   };
+
+  const selectedAutofillAssignment = assignmentOptions.find(
+    (assignment) => assignment.id === selectedAutofillAssignmentId,
+  ) || null;
 
   const isStep1Complete = selectedCourseIds.size > 0;
   const isStep2Complete = courseMode !== null;
-  const isStep3Complete = studentFiles.size > 0 || selectedMaterialIds.size > 0;
+  const isStep3Complete =
+    (materialSourceMode === 'general' && Boolean(generalFile)) ||
+    (materialSourceMode === 'students' && studentFiles.size > 0);
   const isStep4Complete = quizSettingsSaved;
   const isStep5Complete = promptSaved;
   const isStep6Complete = quizBatch?.status === 'generated' || quizBatch?.status === 'saved';
   const isStep7Complete = quizBatch?.status === 'saved';
-
-  const educatorHasUpload = profile?.id && studentFiles.has(profile.id);
 
   if (loading || !profile) {
     return (
@@ -915,7 +1228,7 @@ export default function CreateQuiz() {
                 </div>
                 <div className="text-left">
                   <h3 className="font-semibold text-gray-900">Select Materials</h3>
-                  <p className="text-sm text-gray-600">Select students and upload their materials</p>
+                  <p className="text-sm text-gray-600">Choose between one shared file or student-specific source files</p>
                 </div>
               </div>
               {expandedStep === 3 ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
@@ -923,206 +1236,256 @@ export default function CreateQuiz() {
 
             {expandedStep === 3 && isStep2Complete && (
               <div className="px-6 py-4 border-t border-gray-200 space-y-6">
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Users className="w-5 h-5 text-brand-maroon" />
-                    <h4 className="font-semibold text-gray-900">Students from Selected Courses</h4>
-                  </div>
-                  <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
-                    {students.length === 0 ? (
-                      <div className="p-4 text-sm text-gray-600">
-                        No enrolled students found for the selected course(s).
-                        If you invited students by email, they must sign up so their account can be linked.
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    onClick={() => handleSelectMaterialSourceMode('students')}
+                    className={`p-5 border-2 rounded-xl text-left transition-all ${
+                      materialSourceMode === 'students'
+                        ? 'border-brand-maroon bg-red-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-5 h-5 rounded-full border-2 ${
+                          materialSourceMode === 'students' ? 'border-brand-maroon bg-brand-maroon' : 'border-gray-300'
+                        } flex items-center justify-center`}>
+                          {materialSourceMode === 'students' && <div className="w-2 h-2 bg-white rounded-full" />}
+                        </div>
+                        <span className="font-semibold text-gray-900">Students</span>
+                      </div>
+                      <Users className="w-5 h-5 text-gray-400" />
+                    </div>
+                    <p className="text-sm text-gray-600">
+                      Upload separate files per student, or autofill each student from one assignment submission.
+                    </p>
+                  </button>
+
+                  <button
+                    onClick={() => handleSelectMaterialSourceMode('general')}
+                    className={`p-5 border-2 rounded-xl text-left transition-all ${
+                      materialSourceMode === 'general'
+                        ? 'border-brand-maroon bg-red-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-5 h-5 rounded-full border-2 ${
+                          materialSourceMode === 'general' ? 'border-brand-maroon bg-brand-maroon' : 'border-gray-300'
+                        } flex items-center justify-center`}>
+                          {materialSourceMode === 'general' && <div className="w-2 h-2 bg-white rounded-full" />}
+                        </div>
+                        <span className="font-semibold text-gray-900">General</span>
+                      </div>
+                      <FileText className="w-5 h-5 text-gray-400" />
+                    </div>
+                    <p className="text-sm text-gray-600">
+                      Upload one shared file and generate the same quiz for every registered student in the selected course.
+                    </p>
+                  </button>
+                </div>
+
+                {materialSourceMode === 'general' && (
+                  <div className="border border-gray-200 rounded-xl p-5 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-brand-maroon" />
+                      <h4 className="font-semibold text-gray-900">Shared Quiz Source</h4>
+                    </div>
+                    <p className="text-sm text-gray-600">
+                      Upload a single source file. The generated quiz will be attached to every registered student in the selected course(s).
+                    </p>
+
+                    {generalFile ? (
+                      <div className="flex items-center justify-between border border-green-200 bg-green-50 rounded-lg px-4 py-3">
+                        <div>
+                          <div className="font-medium text-gray-900">{generalFile.file_name}</div>
+                          <div className="text-sm text-gray-600">Shared source file ready</div>
+                        </div>
+                        <button
+                          onClick={handleRemoveGeneralFile}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
                     ) : (
-                      students.map((student, index) => (
-                        <div
-                          key={student.enrollment_id}
-                          className={`flex items-center justify-between p-4 ${
-                            index < students.length - 1 ? 'border-b border-gray-200' : ''
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                              <Users className="w-5 h-5 text-brand-maroon" />
-                            </div>
-                            <div>
-                              <div className="font-medium text-gray-900">
-                                {student.first_name && student.last_name
-                                  ? `${student.first_name} ${student.last_name}`
-                                  : 'Student'}
-                              </div>
-                              <div className="text-sm text-gray-600">
-                                {student.email}
-                              </div>
-                            </div>
-                          </div>
-                          <div>
-                            {!student.student_id ? (
-                              <div className="text-sm text-red-600">
-                                Student not registered
-                              </div>
-                            ) : studentFiles.has(student.enrollment_id) ? (
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm text-green-600 font-medium">
-                                  {studentFiles.get(student.enrollment_id)?.file_name}
-                                </span>
-                                <button
-                                  onClick={() => {
-                                    const newFiles = new Map(studentFiles);
-                                    newFiles.delete(student.enrollment_id);
-                                    setStudentFiles(newFiles);
-                                    if (quizBatchId) {
-                                      supabase
-                                        .from('quiz_batch_student_files')
-                                        .delete()
-                                        .eq('quiz_batch_id', quizBatchId)
-                                        .eq('student_id', student.student_id!);
-                                    }
-                                  }}
-                                  className="text-red-600 hover:text-red-800"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              </div>
-                            ) : (
-                              <label className="cursor-pointer">
-                                <input
-                                  type="file"
-                                  className="hidden"
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) {
-                                      handleFileUpload(student.enrollment_id, student.student_id!, file);
-                                    }
-                                  }}
-                                  disabled={uploadingStudent === student.enrollment_id}
-                                />
-                                <div className="flex items-center gap-2 text-brand-maroon border border-brand-maroon px-4 py-2 rounded-lg hover:bg-red-50 transition-colors">
-                                  {uploadingStudent === student.enrollment_id ? (
-                                    <>
-                                      <div className="w-4 h-4 border-2 border-brand-maroon border-t-transparent rounded-full animate-spin" />
-                                      <span className="font-medium text-sm">Uploading...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Upload className="w-4 h-4" />
-                                      <span className="font-medium text-sm">Upload File</span>
-                                    </>
-                                  )}
-                                </div>
-                              </label>
-                            )}
-                          </div>
+                      <label className="cursor-pointer inline-flex">
+                        <input
+                          type="file"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              handleGeneralFileUpload(file);
+                            }
+                          }}
+                          disabled={uploadingGeneralFile}
+                        />
+                        <div className="flex items-center gap-2 text-brand-maroon border border-brand-maroon px-4 py-2 rounded-lg hover:bg-red-50 transition-colors">
+                          {uploadingGeneralFile ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-brand-maroon border-t-transparent rounded-full animate-spin" />
+                              <span className="font-medium text-sm">Uploading...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4" />
+                              <span className="font-medium text-sm">Upload Shared File</span>
+                            </>
+                          )}
                         </div>
-                      ))
+                      </label>
                     )}
-                    <div className="flex items-center justify-between p-4 bg-blue-50 border-t-2 border-blue-200">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-200 rounded-full flex items-center justify-center">
-                          <Users className="w-5 h-5 text-blue-700" />
-                        </div>
+                  </div>
+                )}
+
+                {materialSourceMode === 'students' && (
+                  <>
+                    <div className="border border-gray-200 rounded-xl p-5 space-y-4">
+                      <div className="flex items-center justify-between gap-4">
                         <div>
-                          <div className="font-medium text-gray-900">Educator</div>
-                          <div className="text-sm text-gray-600">
-                            {profile.email}
-                          </div>
+                          <h4 className="font-semibold text-gray-900">Autofill From Assignment</h4>
+                          <p className="text-sm text-gray-600">
+                            Pull the latest uploaded file from each student's submission for one selected assignment.
+                          </p>
                         </div>
+                        <button
+                          onClick={handleAutofillFromAssignment}
+                          disabled={!selectedAutofillAssignmentId || autofillingAssignment}
+                          className="bg-brand-maroon text-white px-4 py-2 rounded-lg font-medium hover:bg-red-800 transition-colors disabled:opacity-50"
+                        >
+                          {autofillingAssignment ? 'Autofilling...' : 'Autofill'}
+                        </button>
                       </div>
-                      <div>
-                        {educatorHasUpload ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-green-600 font-medium">
-                              {studentFiles.get(profile.id)?.file_name}
-                            </span>
-                            <button
-                              onClick={() => {
-                                const newFiles = new Map(studentFiles);
-                                newFiles.delete(profile.id);
-                                setStudentFiles(newFiles);
-                                if (quizBatchId) {
-                                  supabase
-                                    .from('quiz_batch_student_files')
-                                    .delete()
-                                    .eq('quiz_batch_id', quizBatchId)
-                                    .eq('student_id', profile.id);
-                                }
-                              }}
-                              className="text-red-600 hover:text-red-800"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
+
+                      <select
+                        value={selectedAutofillAssignmentId || ''}
+                        onChange={async (e) => {
+                          const nextAssignmentId = e.target.value || null;
+                          setSelectedAutofillAssignmentId(nextAssignmentId);
+                          if (quizBatchId) {
+                            await supabase
+                              .from('quiz_batches')
+                              .update({ autofill_assignment_id: nextAssignmentId })
+                              .eq('id', quizBatchId);
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-brand-maroon"
+                      >
+                        <option value="">Select an assignment</option>
+                        {assignmentOptions.map((assignment) => (
+                          <option key={assignment.id} value={assignment.id}>
+                            {assignment.assignment_label} - {assignment.assignment_title}
+                          </option>
+                        ))}
+                      </select>
+
+                      {selectedAutofillAssignment && (
+                        <div className="text-sm text-gray-600">
+                          Latest uploaded submission file will be used for each student who submitted
+                          {' '}
+                          <span className="font-medium text-gray-900">{selectedAutofillAssignment.assignment_label}</span>.
+                          Students without a submission can still get a manual replacement upload below.
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Users className="w-5 h-5 text-brand-maroon" />
+                        <h4 className="font-semibold text-gray-900">Students from Selected Courses</h4>
+                      </div>
+                      <div className="border border-gray-200 rounded-lg max-h-[28rem] overflow-y-auto">
+                        {students.length === 0 ? (
+                          <div className="p-4 text-sm text-gray-600">
+                            No enrolled students found for the selected course(s).
+                            If you invited students by email, they must sign up so their account can be linked.
                           </div>
                         ) : (
-                          <label className="cursor-pointer">
-                            <input
-                              type="file"
-                              className="hidden"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  handleFileUpload(null, profile.id, file);
-                                }
-                              }}
-                              disabled={uploadingStudent === profile.id}
-                            />
-                            <div className="flex items-center gap-2 text-brand-maroon border border-brand-maroon px-4 py-2 rounded-lg hover:bg-red-50 transition-colors">
-                              {uploadingStudent === profile.id ? (
-                                <>
-                                  <div className="w-4 h-4 border-2 border-brand-maroon border-t-transparent rounded-full animate-spin" />
-                                  <span className="font-medium text-sm">Uploading...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Upload className="w-4 h-4" />
-                                  <span className="font-medium text-sm">Upload File</span>
-                                </>
-                              )}
-                            </div>
-                          </label>
+                          students.map((student, index) => {
+                            const currentFile = studentFiles.get(student.enrollment_id);
+
+                            return (
+                              <div
+                                key={student.enrollment_id}
+                                className={`flex items-center justify-between p-4 ${
+                                  index < students.length - 1 ? 'border-b border-gray-200' : ''
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                                    <Users className="w-5 h-5 text-brand-maroon" />
+                                  </div>
+                                  <div>
+                                    <div className="font-medium text-gray-900">
+                                      {student.first_name && student.last_name
+                                        ? `${student.first_name} ${student.last_name}`
+                                        : 'Student'}
+                                    </div>
+                                    <div className="text-sm text-gray-600">{student.email}</div>
+                                    {!student.student_id && (
+                                      <div className="text-xs text-red-600 mt-1">Student not registered yet</div>
+                                    )}
+                                    {currentFile?.source_type === 'autofill' && (
+                                      <div className="text-xs text-blue-600 mt-1">
+                                        Autofilled from {currentFile.source_label || 'assignment submission'}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <div>
+                                  {!student.student_id ? (
+                                    <div className="text-sm text-gray-400">Unavailable</div>
+                                  ) : currentFile ? (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm text-green-600 font-medium max-w-xs truncate">
+                                        {currentFile.file_name}
+                                      </span>
+                                      <button
+                                        onClick={() => handleRemoveStudentFile(student)}
+                                        className="text-red-600 hover:text-red-800"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <label className="cursor-pointer">
+                                      <input
+                                        type="file"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) {
+                                            handleFileUpload(student.enrollment_id, student.student_id!, file);
+                                          }
+                                        }}
+                                        disabled={uploadingStudent === student.enrollment_id}
+                                      />
+                                      <div className="flex items-center gap-2 text-brand-maroon border border-brand-maroon px-4 py-2 rounded-lg hover:bg-red-50 transition-colors">
+                                        {uploadingStudent === student.enrollment_id ? (
+                                          <>
+                                            <div className="w-4 h-4 border-2 border-brand-maroon border-t-transparent rounded-full animate-spin" />
+                                            <span className="font-medium text-sm">Uploading...</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Upload className="w-4 h-4" />
+                                            <span className="font-medium text-sm">Upload File</span>
+                                          </>
+                                        )}
+                                      </div>
+                                    </label>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
                         )}
                       </div>
                     </div>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <FileText className="w-5 h-5 text-brand-maroon" />
-                    <h4 className="font-semibold text-gray-900">Or Select from Preloaded Course Materials</h4>
-                  </div>
-                  <p className="text-sm text-gray-600 mb-3">
-                    Choose from textbooks, readings, and lecture notes to generate quizzes
-                  </p>
-                  <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
-                    {lectureMaterials.length === 0 ? (
-                      <div className="p-4 text-sm text-gray-600">
-                        No preloaded materials found for the selected course(s).
-                      </div>
-                    ) : (
-                      lectureMaterials.map((material, index) => (
-                        <label
-                          key={material.id}
-                          className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50 ${
-                            index < lectureMaterials.length - 1 ? 'border-b border-gray-200' : ''
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedMaterialIds.has(material.id)}
-                            onChange={() => handleMaterialToggle(material.id)}
-                            className="w-4 h-4 text-brand-maroon focus:ring-brand-maroon"
-                          />
-                          <FileText className="w-5 h-5 text-red-500" />
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-900">{material.material_name}</div>
-                            <div className="text-sm text-gray-500">{material.course_number || 'Course'}</div>
-                          </div>
-                        </label>
-                      ))
-                    )}
-                  </div>
-                </div>
+                  </>
+                )}
 
                 {isStep3Complete && (
                   <div className="flex justify-end">
@@ -1333,7 +1696,9 @@ export default function CreateQuiz() {
                     <Wand2 className="w-16 h-16 text-brand-maroon mx-auto mb-4" />
                     <h4 className="text-xl font-semibold text-gray-900 mb-2">Ready to Generate Quizzes</h4>
                     <p className="text-gray-600 mb-6">
-                      AI will generate {calculateTargetCount()} personalized quiz{calculateTargetCount() !== 1 ? 'zes' : ''} based on the selected materials
+                      {materialSourceMode === 'general'
+                        ? `AI will generate ${calculateTargetCount()} shared quiz${calculateTargetCount() !== 1 ? 'zes' : ''} from the uploaded source file.`
+                        : `AI will generate ${calculateTargetCount()} student quiz${calculateTargetCount() !== 1 ? 'zes' : ''} from the files currently attached to each student.`}
                     </p>
                     <button
                       onClick={handleGenerateQuizzes}
@@ -1355,12 +1720,7 @@ export default function CreateQuiz() {
 
                     <div className="space-y-3">
                       {generatedQuizzes.map((quiz) => {
-                        const isEducator = quiz.student_id === profile?.id;
-                        const firstMaterial = selectedMaterialIds.size > 0
-                          ? lectureMaterials.find(m => selectedMaterialIds.has(m.id))
-                          : null;
-                        const fileUrl = quiz.student_file_url || (isEducator && firstMaterial ? firstMaterial.material_url : null);
-
+                        const fileUrl = quiz.student_file_url;
 
                         return (
                           <div key={quiz.id} className="border border-gray-200 rounded-lg p-4 flex items-center justify-between">

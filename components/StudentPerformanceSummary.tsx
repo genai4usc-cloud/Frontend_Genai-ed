@@ -34,6 +34,8 @@ export default function StudentPerformanceSummary({
 
   const quizItems = performanceItems.filter(item => item.type === 'quiz');
   const assignmentItems = performanceItems.filter(item => item.type === 'assignment');
+  const lectureCompletionRate = totalLectures > 0 ? (completedLectures / totalLectures) * 100 : 0;
+  const assignmentSubmissionRate = totalAssignments > 0 ? (submittedAssignments / totalAssignments) * 100 : 0;
 
   return (
     <div className="space-y-6">
@@ -89,7 +91,7 @@ export default function StudentPerformanceSummary({
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
             <div
               className="bg-purple-600 h-2 rounded-full transition-all"
-              style={{ width: `${(completedLectures / totalLectures) * 100}%` }}
+              style={{ width: `${lectureCompletionRate}%` }}
             />
           </div>
         </div>
@@ -109,7 +111,7 @@ export default function StudentPerformanceSummary({
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
             <div
               className="bg-orange-600 h-2 rounded-full transition-all"
-              style={{ width: `${(submittedAssignments / totalAssignments) * 100}%` }}
+              style={{ width: `${assignmentSubmissionRate}%` }}
             />
           </div>
         </div>

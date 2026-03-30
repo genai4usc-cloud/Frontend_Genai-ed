@@ -226,7 +226,7 @@ export default function StudentDashboard() {
               )
             )
           `)
-          .eq('creator_id', user.id)
+          .eq('creator_user_id', user.id)
           .eq('creator_role', 'student')
           .order('created_at', { ascending: false })
           .limit(6);
