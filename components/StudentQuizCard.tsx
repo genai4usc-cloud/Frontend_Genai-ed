@@ -10,7 +10,7 @@ interface StudentQuizCardProps {
   totalMarks: number;
   duration: number;
   dueDate: string;
-  status: 'available' | 'attempted' | 'closed';
+  status: 'upcoming' | 'available' | 'in_progress' | 'submitted' | 'grades_released' | 'closed';
   onViewQuestions: () => void;
   onStartQuiz?: () => void;
   onViewAttempt?: () => void;
@@ -31,10 +31,16 @@ export default function StudentQuizCard({
 }: StudentQuizCardProps) {
   const getStatusColor = () => {
     switch (status) {
+      case 'upcoming':
+        return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
       case 'available':
         return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
-      case 'attempted':
+      case 'in_progress':
+        return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400';
+      case 'submitted':
         return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
+      case 'grades_released':
+        return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400';
       case 'closed':
         return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400';
       default:
@@ -44,10 +50,16 @@ export default function StudentQuizCard({
 
   const getStatusLabel = () => {
     switch (status) {
+      case 'upcoming':
+        return 'Upcoming';
       case 'available':
         return 'Available';
-      case 'attempted':
-        return 'Attempted';
+      case 'in_progress':
+        return 'In Progress';
+      case 'submitted':
+        return 'Submitted';
+      case 'grades_released':
+        return 'Grades Released';
       case 'closed':
         return 'Closed';
       default:
@@ -96,7 +108,7 @@ export default function StudentQuizCard({
           className="flex-1 border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-foreground font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
         >
           <Eye className="w-4 h-4" />
-          View Questions
+          Open Quiz
         </button>
         {status === 'available' && onStartQuiz && (
           <button
@@ -107,13 +119,22 @@ export default function StudentQuizCard({
             Start Quiz
           </button>
         )}
-        {status === 'attempted' && onViewAttempt && (
+        {status === 'in_progress' && onViewAttempt && (
+          <button
+            onClick={onViewAttempt}
+            className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <PlayCircle className="w-4 h-4" />
+            Resume Quiz
+          </button>
+        )}
+        {(status === 'submitted' || status === 'grades_released') && onViewAttempt && (
           <button
             onClick={onViewAttempt}
             className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
           >
             <CheckCircle className="w-4 h-4" />
-            View Attempt
+            {status === 'grades_released' ? 'View Results' : 'View Status'}
           </button>
         )}
       </div>

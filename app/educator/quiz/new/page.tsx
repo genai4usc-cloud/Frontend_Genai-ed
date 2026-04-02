@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
 import {
@@ -32,6 +32,13 @@ interface QuizBatch {
   additional_instructions: string | null;
   quiz_name: string | null;
   saved_at: string | null;
+  available_at: string | null;
+  due_at: string | null;
+  time_limit_minutes: number | null;
+  published_at: string | null;
+  grade_release_mode: 'manual' | 'scheduled' | null;
+  grade_release_at: string | null;
+  grades_published_at: string | null;
   created_at: string;
 }
 
@@ -89,6 +96,9 @@ interface GeneratedQuiz {
 
 export default function CreateQuiz() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editBatchId = searchParams.get('id');
+  const preselectedCourseId = searchParams.get('courseId');
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -124,6 +134,11 @@ export default function CreateQuiz() {
   const [generating, setGenerating] = useState(false);
 
   const [quizName, setQuizName] = useState('');
+  const [availableAt, setAvailableAt] = useState('');
+  const [dueAt, setDueAt] = useState('');
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState(30);
+  const [gradeReleaseMode, setGradeReleaseMode] = useState<'manual' | 'scheduled'>('manual');
+  const [gradeReleaseAt, setGradeReleaseAt] = useState('');
   const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   const [expandedStep, setExpandedStep] = useState(1);
@@ -140,7 +155,7 @@ export default function CreateQuiz() {
       loadCourses();
       loadOrCreateBatch();
     }
-  }, [profile]);
+  }, [profile, editBatchId]);
 
   useEffect(() => {
     if (selectedCourseIds.size > 0 && quizBatchId) {
@@ -161,7 +176,7 @@ export default function CreateQuiz() {
   }, [useFixedAnswerKey, mcqCount]);
 
   useEffect(() => {
-    if (quizBatchId && quizBatch?.status === 'generated') {
+    if (quizBatchId && ['generated', 'saved', 'published'].includes(quizBatch?.status || '')) {
       loadGeneratedQuizzes();
     }
   }, [quizBatchId, quizBatch?.status]);
@@ -208,17 +223,43 @@ export default function CreateQuiz() {
   };
 
   const loadOrCreateBatch = async () => {
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    if (editBatchId) {
+      const { data: selectedBatch, error: selectedBatchError } = await supabase
+        .from('quiz_batches')
+        .select('*')
+        .eq('id', editBatchId)
+        .eq('educator_id', profile!.id)
+        .maybeSingle();
 
-    const { data: existingBatch } = await supabase
-      .from('quiz_batches')
-      .select('*')
-      .eq('educator_id', profile!.id)
-      .eq('status', 'draft')
-      .gte('created_at', twoHoursAgo)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      if (selectedBatchError) {
+        console.error('Failed to load selected quiz batch:', selectedBatchError);
+        return;
+      }
+
+      if (selectedBatch) {
+        setQuizBatchId(selectedBatch.id);
+        setQuizBatch(selectedBatch);
+        await loadBatchData(selectedBatch.id, selectedBatch);
+        return;
+      }
+    }
+
+    let existingBatch: QuizBatch | null = null;
+    if (!preselectedCourseId) {
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+
+      const { data } = await supabase
+        .from('quiz_batches')
+        .select('*')
+        .eq('educator_id', profile!.id)
+        .eq('status', 'draft')
+        .gte('created_at', twoHoursAgo)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      existingBatch = data as QuizBatch | null;
+    }
 
     if (existingBatch) {
       setQuizBatchId(existingBatch.id);
@@ -252,9 +293,25 @@ export default function CreateQuiz() {
       setAnswerKey([]);
       setAdditionalInstructions('');
       setQuizName('');
+      setAvailableAt('');
+      setDueAt('');
+      setTimeLimitMinutes(30);
+      setGradeReleaseMode('manual');
+      setGradeReleaseAt('');
       setQuizSettingsSaved(false);
       setPromptSaved(false);
       setExpandedStep(1);
+
+      if (preselectedCourseId) {
+        const nextSelected = new Set<string>([preselectedCourseId]);
+        setSelectedCourseIds(nextSelected);
+        await supabase
+          .from('quiz_batch_courses')
+          .insert({
+            quiz_batch_id: data.id,
+            course_id: preselectedCourseId,
+          });
+      }
     }
   };
 
@@ -267,6 +324,11 @@ export default function CreateQuiz() {
     setAnswerKey(batch.fixed_mcq_answer_key || []);
     setAdditionalInstructions(batch.additional_instructions || '');
     setQuizName(batch.quiz_name || '');
+    setAvailableAt(batch.available_at ? batch.available_at.slice(0, 16) : '');
+    setDueAt(batch.due_at ? batch.due_at.slice(0, 16) : '');
+    setTimeLimitMinutes(batch.time_limit_minutes || 30);
+    setGradeReleaseMode(batch.grade_release_mode || 'manual');
+    setGradeReleaseAt(batch.grade_release_at ? batch.grade_release_at.slice(0, 16) : '');
     setGeneralFile(
       batch.general_file_name && batch.general_file_url && batch.general_storage_path
         ? {
@@ -287,6 +349,8 @@ export default function CreateQuiz() {
 
     if (batchCourses && batchCourses.length > 0) {
       setSelectedCourseIds(new Set(batchCourses.map(bc => bc.course_id)));
+    } else if (preselectedCourseId) {
+      setSelectedCourseIds(new Set([preselectedCourseId]));
     }
 
     const { data: batchMaterials } = await supabase
@@ -299,6 +363,9 @@ export default function CreateQuiz() {
     }
 
     await loadStudentFilesForBatch(batchId);
+    setQuizSettingsSaved(Boolean(batch.mcq_count || batch.time_limit_minutes || batch.due_at));
+    setPromptSaved(batch.additional_instructions !== null || ['generated', 'saved', 'published'].includes(batch.status));
+    setExpandedStep(['generated', 'saved', 'published'].includes(batch.status) ? 7 : 1);
   };
 
   const loadStudentFilesForBatch = async (batchId: string) => {
@@ -874,18 +941,67 @@ export default function CreateQuiz() {
 
   const handleSaveQuizSettings = async () => {
     if (!quizBatchId) return;
+    if (!quizName.trim()) {
+      alert('Enter a quiz name before continuing.');
+      return;
+    }
+
+    if (courseMode === 'online') {
+      if (!dueAt) {
+        alert('Set a due date for the online quiz.');
+        return;
+      }
+
+      if (availableAt && new Date(dueAt).getTime() <= new Date(availableAt).getTime()) {
+        alert('The due date must be after the availability date.');
+        return;
+      }
+
+      if (gradeReleaseMode === 'scheduled' && !gradeReleaseAt) {
+        alert('Choose when grades should be released.');
+        return;
+      }
+    }
 
     setSaving(true);
     try {
       await supabase
         .from('quiz_batches')
         .update({
+          quiz_name: quizName.trim(),
           mcq_count: mcqCount,
           short_answer_count: shortAnswerCount,
           fixed_mcq_answer_key_enabled: useFixedAnswerKey,
           fixed_mcq_answer_key: useFixedAnswerKey ? answerKey : null,
+          available_at: courseMode === 'online' && availableAt ? new Date(availableAt).toISOString() : null,
+          due_at: courseMode === 'online' && dueAt ? new Date(dueAt).toISOString() : null,
+          time_limit_minutes: courseMode === 'online' ? timeLimitMinutes : null,
+          grade_release_mode: courseMode === 'online' ? gradeReleaseMode : 'manual',
+          grade_release_at:
+            courseMode === 'online' && gradeReleaseMode === 'scheduled' && gradeReleaseAt
+              ? new Date(gradeReleaseAt).toISOString()
+              : null,
         })
         .eq('id', quizBatchId);
+
+      setQuizBatch((current) => current
+        ? {
+            ...current,
+            quiz_name: quizName.trim(),
+            mcq_count: mcqCount,
+            short_answer_count: shortAnswerCount,
+            fixed_mcq_answer_key_enabled: useFixedAnswerKey,
+            fixed_mcq_answer_key: useFixedAnswerKey ? answerKey : null,
+            available_at: courseMode === 'online' && availableAt ? new Date(availableAt).toISOString() : null,
+            due_at: courseMode === 'online' && dueAt ? new Date(dueAt).toISOString() : null,
+            time_limit_minutes: courseMode === 'online' ? timeLimitMinutes : null,
+            grade_release_mode: courseMode === 'online' ? gradeReleaseMode : 'manual',
+            grade_release_at:
+              courseMode === 'online' && gradeReleaseMode === 'scheduled' && gradeReleaseAt
+                ? new Date(gradeReleaseAt).toISOString()
+                : null,
+          }
+        : current);
 
       setQuizSettingsSaved(true);
       setExpandedStep(5);
@@ -966,10 +1082,17 @@ export default function CreateQuiz() {
 
       await supabase
         .from('quiz_batches')
-        .update({ status: 'generated' })
+        .update({
+          quiz_name: quizName.trim() || null,
+          status: 'generated',
+        })
         .eq('id', quizBatchId);
 
-      const updatedBatch = { ...quizBatch!, status: 'generated' };
+      const updatedBatch = {
+        ...quizBatch!,
+        quiz_name: quizName.trim() || null,
+        status: 'generated',
+      };
       setQuizBatch(updatedBatch);
     } catch (error) {
       console.error('Error generating quizzes:', error);
@@ -981,20 +1104,39 @@ export default function CreateQuiz() {
 
   const handleSaveQuiz = async () => {
     if (!quizBatchId) return;
+    if (!quizName.trim()) {
+      alert('Enter a quiz name before saving.');
+      return;
+    }
 
     setSaving(true);
     try {
+      const nextStatus = courseMode === 'online' ? 'published' : 'saved';
+      const nowIso = new Date().toISOString();
+
       await supabase
         .from('quiz_batches')
         .update({
-          quiz_name: quizName || null,
-          status: 'saved',
-          saved_at: new Date().toISOString(),
+          quiz_name: quizName.trim(),
+          status: nextStatus,
+          saved_at: courseMode === 'in_class' ? nowIso : null,
+          published_at: courseMode === 'online' ? nowIso : null,
         })
         .eq('id', quizBatchId);
 
-      alert('Quiz saved successfully!');
-      router.push('/educator/dashboard');
+      setQuizBatch((current) => current
+        ? {
+            ...current,
+            quiz_name: quizName.trim(),
+            status: nextStatus,
+            saved_at: courseMode === 'in_class' ? nowIso : current.saved_at,
+            published_at: courseMode === 'online' ? nowIso : current.published_at,
+          }
+        : current);
+
+      alert(courseMode === 'online' ? 'Online quiz published successfully!' : 'Quiz saved successfully!');
+      const returnCourseId = selectedCourseIds.size === 1 ? Array.from(selectedCourseIds)[0] : null;
+      router.push(returnCourseId ? `/educator/course/${returnCourseId}` : '/educator/dashboard');
     } catch (error) {
       console.error('Error saving quiz:', error);
       alert('Failed to save quiz');
@@ -1055,8 +1197,8 @@ export default function CreateQuiz() {
     (materialSourceMode === 'students' && studentFiles.size > 0);
   const isStep4Complete = quizSettingsSaved;
   const isStep5Complete = promptSaved;
-  const isStep6Complete = quizBatch?.status === 'generated' || quizBatch?.status === 'saved';
-  const isStep7Complete = quizBatch?.status === 'saved';
+  const isStep6Complete = quizBatch?.status === 'generated' || quizBatch?.status === 'saved' || quizBatch?.status === 'published';
+  const isStep7Complete = quizBatch?.status === 'saved' || quizBatch?.status === 'published';
 
   if (loading || !profile) {
     return (
@@ -1182,22 +1324,29 @@ export default function CreateQuiz() {
                     </p>
                   </button>
 
-                  <div className="p-6 border-2 border-gray-200 rounded-xl text-left opacity-60 cursor-not-allowed relative">
+                  <button
+                    onClick={() => handleSelectCourseType('online')}
+                    className={`p-6 border-2 rounded-xl text-left transition-all ${
+                      courseMode === 'online'
+                        ? 'border-brand-maroon bg-red-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded-full border-2 border-gray-300" />
+                        <div className={`w-5 h-5 rounded-full border-2 ${
+                          courseMode === 'online' ? 'border-brand-maroon bg-brand-maroon' : 'border-gray-300'
+                        } flex items-center justify-center`}>
+                          {courseMode === 'online' && <div className="w-2 h-2 bg-white rounded-full" />}
+                        </div>
                         <span className="font-semibold text-gray-900">Online</span>
                       </div>
                       <Info className="w-5 h-5 text-gray-400" />
                     </div>
-                    <p className="text-sm text-gray-600 mb-3">
-                      Publish quizzes to student portals with automated grading
+                    <p className="text-sm text-gray-600">
+                      Publish a timed MCQ quiz to student portals with one locked attempt, AI grading, and controlled grade release.
                     </p>
-                    <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
-                      <AlertCircle className="w-3 h-3" />
-                      Coming Soon
-                    </span>
-                  </div>
+                  </button>
                 </div>
 
                 {isStep2Complete && (
@@ -1525,6 +1674,24 @@ export default function CreateQuiz() {
               <div className="px-6 py-4 border-t border-gray-200 space-y-6">
                 <div>
                   <label className="block font-medium text-gray-900 mb-2">
+                    Quiz Name
+                  </label>
+                  <input
+                    type="text"
+                    value={quizName}
+                    onChange={(e) => setQuizName(e.target.value)}
+                    placeholder={courseMode === 'online'
+                      ? 'e.g., Quiz 1, Midterm Practice, Week 4 Review'
+                      : 'e.g., Homework #1, Midterm Essay Quiz, Chapter 3 Review'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-brand-maroon"
+                  />
+                  <p className="mt-2 text-sm text-gray-500">
+                    This name will be used everywhere the quiz is listed.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-medium text-gray-900 mb-2">
                     Number of Multiple Choice Questions (0-30)
                   </label>
                   <div className="flex items-center gap-4">
@@ -1554,6 +1721,76 @@ export default function CreateQuiz() {
                     <span className="text-sm text-gray-500">Open-ended questions requiring written responses</span>
                   </div>
                 </div>
+
+                {courseMode === 'online' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-gray-200 pt-6">
+                    <div>
+                      <label className="block font-medium text-gray-900 mb-2">
+                        Available From
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={availableAt}
+                        onChange={(e) => setAvailableAt(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-brand-maroon"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-medium text-gray-900 mb-2">
+                        Due Date
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={dueAt}
+                        onChange={(e) => setDueAt(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-brand-maroon"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-medium text-gray-900 mb-2">
+                        Time Limit (minutes)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="180"
+                        value={timeLimitMinutes}
+                        onChange={(e) => setTimeLimitMinutes(Math.max(1, Math.min(180, parseInt(e.target.value) || 30)))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-brand-maroon"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-medium text-gray-900 mb-2">
+                        Grade Release
+                      </label>
+                      <select
+                        value={gradeReleaseMode}
+                        onChange={(e) => setGradeReleaseMode(e.target.value as 'manual' | 'scheduled')}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-brand-maroon"
+                      >
+                        <option value="manual">Manual publish by educator</option>
+                        <option value="scheduled">Scheduled publish time</option>
+                      </select>
+                    </div>
+
+                    {gradeReleaseMode === 'scheduled' && (
+                      <div className="md:col-span-2">
+                        <label className="block font-medium text-gray-900 mb-2">
+                          Publish Grades At
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={gradeReleaseAt}
+                          onChange={(e) => setGradeReleaseAt(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-brand-maroon"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="border-t border-gray-200 pt-6">
                   <label className="flex items-start gap-3 cursor-pointer">
@@ -1835,7 +2072,7 @@ export default function CreateQuiz() {
                     <div className="flex justify-between">
                       <span className="text-gray-600">Questions per Quiz:</span>
                       <span className="text-gray-900 font-medium">
-                        {mcqCount} MCQ, {shortAnswerCount} Short Answer
+                        {mcqCount} MCQ
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -1874,13 +2111,28 @@ export default function CreateQuiz() {
                   </div>
                 )}
 
+                {courseMode === 'online' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex gap-3">
+                      <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h5 className="font-semibold text-gray-900 mb-1">Online Quiz Publish</h5>
+                        <p className="text-sm text-gray-700">
+                          Publishing will make this quiz available to enrolled students based on the schedule above.
+                          AI grading runs immediately after submission, but students will not see grades until you publish them or the scheduled release time is reached.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex justify-end gap-3">
                   <button
                     onClick={handleSaveQuiz}
                     disabled={saving}
                     className="bg-brand-maroon text-white px-8 py-3 rounded-lg font-medium hover:bg-red-800 transition-colors disabled:opacity-50"
                   >
-                    {saving ? 'Saving...' : 'Save Quiz'}
+                    {saving ? (courseMode === 'online' ? 'Publishing...' : 'Saving...') : (courseMode === 'online' ? 'Publish Quiz' : 'Save Quiz')}
                   </button>
                 </div>
               </div>

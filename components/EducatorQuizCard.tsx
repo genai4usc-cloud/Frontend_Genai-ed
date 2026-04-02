@@ -8,6 +8,8 @@ interface EducatorQuizCardProps {
     quiz_name: string;
     created_at: string;
     status: 'draft' | 'generated' | 'saved' | 'published';
+    mode?: 'in_class' | 'online' | null;
+    due_at?: string | null;
     mcq_count: number;
     short_answer_count: number;
   };
@@ -60,6 +62,11 @@ export default function EducatorQuizCard({
   const completionRate = mockAnalytics
     ? (mockAnalytics.completed / mockAnalytics.totalStudents) * 100
     : 0;
+  const dueDate = quiz.due_at || mockAnalytics?.dueDate;
+  const modeLabel = quiz.mode === 'online' ? 'Online' : 'In Class';
+  const modeClasses = quiz.mode === 'online'
+    ? 'bg-amber-100 text-amber-700'
+    : 'bg-slate-100 text-slate-700';
 
   return (
     <div
@@ -75,12 +82,15 @@ export default function EducatorQuizCard({
             <div>
               <h3 className="text-lg font-semibold text-gray-900">{quiz.quiz_name || 'Untitled Quiz'}</h3>
               <div className="flex items-center gap-2 mt-1">
-                {mockAnalytics?.dueDate && (
+                {dueDate && (
                   <div className="flex items-center gap-1 text-xs text-gray-500">
                     <Calendar className="w-3.5 h-3.5" />
-                    <span>Due: {new Date(mockAnalytics.dueDate).toLocaleDateString()}</span>
+                    <span>Due: {new Date(dueDate).toLocaleDateString()}</span>
                   </div>
                 )}
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${modeClasses}`}>
+                  {modeLabel}
+                </span>
                 <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor()}`}>
                   {quiz.status.charAt(0).toUpperCase() + quiz.status.slice(1)}
                 </span>

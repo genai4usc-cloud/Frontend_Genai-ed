@@ -53,6 +53,8 @@ type Quiz = {
   quiz_name: string;
   created_at: string;
   status: 'draft' | 'generated' | 'saved' | 'published';
+  mode: 'in_class' | 'online' | null;
+  due_at: string | null;
   mcq_count: number;
   short_answer_count: number;
 };
@@ -210,6 +212,8 @@ export default function CourseLectures() {
             quiz_name,
             created_at,
             status,
+            mode,
+            due_at,
             mcq_count,
             short_answer_count
           )
@@ -227,6 +231,8 @@ export default function CourseLectures() {
           quiz_name: quiz.quiz_name,
           created_at: quiz.created_at,
           status: quiz.status,
+          mode: quiz.mode,
+          due_at: quiz.due_at,
           mcq_count: quiz.mcq_count,
           short_answer_count: quiz.short_answer_count,
         }));
@@ -325,6 +331,72 @@ export default function CourseLectures() {
     } catch (error) {
       console.error('Error loading assignments:', error);
       toast.error('Failed to load assignments');
+    }
+  };
+
+  const extractStoragePathFromPublicUrl = (url: string | null, bucket: string) => {
+    if (!url) return null;
+    const marker = `/storage/v1/object/public/${bucket}/`;
+    const index = url.indexOf(marker);
+    if (index === -1) return null;
+    return decodeURIComponent(url.slice(index + marker.length));
+  };
+
+  const handleDeleteQuiz = async (quiz: Quiz) => {
+    const confirmed = window.confirm(`Delete "${quiz.quiz_name || 'Untitled Quiz'}"? This will remove the quiz batch, generated content, attempts, and grading records.`);
+    if (!confirmed) return;
+
+    try {
+      const [
+        { data: studentFiles },
+        { data: generatedRows },
+        { data: batchRow },
+      ] = await Promise.all([
+        supabase
+          .from('quiz_batch_student_files')
+          .select('storage_path')
+          .eq('quiz_batch_id', quiz.id),
+        supabase
+          .from('quiz_generated')
+          .select('quiz_pdf_url, answers_pdf_url')
+          .eq('quiz_batch_id', quiz.id),
+        supabase
+          .from('quiz_batches')
+          .select('general_storage_path')
+          .eq('id', quiz.id)
+          .maybeSingle(),
+      ]);
+
+      const storagePaths = new Set<string>();
+      (studentFiles || []).forEach((row: { storage_path: string | null }) => {
+        if (row.storage_path) storagePaths.add(row.storage_path);
+      });
+      if (batchRow?.general_storage_path) {
+        storagePaths.add(batchRow.general_storage_path);
+      }
+      (generatedRows || []).forEach((row: { quiz_pdf_url: string | null; answers_pdf_url: string | null }) => {
+        const quizPdfPath = extractStoragePathFromPublicUrl(row.quiz_pdf_url, 'quiz-student-materials');
+        const answersPdfPath = extractStoragePathFromPublicUrl(row.answers_pdf_url, 'quiz-student-materials');
+        if (quizPdfPath) storagePaths.add(quizPdfPath);
+        if (answersPdfPath) storagePaths.add(answersPdfPath);
+      });
+
+      if (storagePaths.size > 0) {
+        await supabase.storage.from('quiz-student-materials').remove(Array.from(storagePaths));
+      }
+
+      const { error } = await supabase
+        .from('quiz_batches')
+        .delete()
+        .eq('id', quiz.id);
+
+      if (error) throw error;
+
+      toast.success('Quiz deleted successfully');
+      await loadCourseQuizzes();
+    } catch (error) {
+      console.error('Error deleting quiz:', error);
+      toast.error('Failed to delete quiz');
     }
   };
 
@@ -460,7 +532,7 @@ export default function CourseLectures() {
                       </button>
                       <button
                         onClick={() => {
-                          router.push('/educator/quiz/new');
+                          router.push(`/educator/quiz/new?courseId=${courseId}`);
                           setShowCreateMenu(false);
                         }}
                         className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
@@ -637,7 +709,7 @@ export default function CourseLectures() {
                   <p className="text-gray-600 text-sm mt-1">{quizzes.length} quizzes created</p>
                 </div>
                 <button
-                  onClick={() => router.push('/educator/quiz/new')}
+                  onClick={() => router.push(`/educator/quiz/new?courseId=${courseId}`)}
                   className="bg-brand-maroon hover:bg-brand-maroon-hover text-white font-semibold py-2.5 px-5 rounded-lg transition-colors flex items-center gap-2"
                 >
                   <Plus className="w-5 h-5" />
@@ -674,11 +746,18 @@ export default function CourseLectures() {
                         key={quiz.id}
                         quiz={quiz}
                         totalMarks={totalMarks}
-                        mockAnalytics={generateQuizMockAnalytics(index)}
+                        mockAnalytics={{
+                          ...generateQuizMockAnalytics(index),
+                          dueDate: quiz.due_at || generateQuizMockAnalytics(index).dueDate,
+                        }}
                         onEdit={() => router.push(`/educator/quiz/new?id=${quiz.id}`)}
-                        onDelete={() => toast.info('Delete quiz feature coming soon')}
-                        onView={() => toast.info('View quiz details coming soon')}
-                        onClick={() => toast.info('Quiz details coming soon')}
+                        onDelete={() => handleDeleteQuiz(quiz)}
+                        onView={() => quiz.mode === 'online'
+                          ? router.push(`/educator/quiz/${quiz.id}`)
+                          : router.push(`/educator/quiz/new?id=${quiz.id}`)}
+                        onClick={() => quiz.mode === 'online'
+                          ? router.push(`/educator/quiz/${quiz.id}`)
+                          : router.push(`/educator/quiz/new?id=${quiz.id}`)}
                       />
                     );
                   })}

@@ -18,6 +18,8 @@ import {
 } from '@/lib/assignments';
 import { BookOpen, MessageSquare, Upload, FileText, Trash2, Send, Video, SquareCheck as CheckSquare, FileCheck, ClipboardList, ChartBar as BarChart3, Clock, Calendar, Eye } from 'lucide-react';
 
+const backendBase = process.env.NEXT_PUBLIC_BACKEND_BASE;
+
 interface Course {
   id: string;
   course_number: string;
@@ -89,6 +91,18 @@ interface InClassQuiz {
   answers_pdf_url: string | null;
 }
 
+interface OnlineQuizSummary {
+  quiz_batch_id: string;
+  quiz_name: string;
+  status: 'upcoming' | 'available' | 'in_progress' | 'submitted' | 'grades_released' | 'closed';
+  question_count: number;
+  total_marks: number;
+  duration_minutes: number;
+  due_at: string | null;
+  available_at: string | null;
+  score: number | null;
+}
+
 export default function StudentCourse() {
   const router = useRouter();
   const params = useParams();
@@ -102,6 +116,7 @@ export default function StudentCourse() {
   const [myLectures, setMyLectures] = useState<StudentLecture[]>([]);
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [inClassQuizzes, setInClassQuizzes] = useState<InClassQuiz[]>([]);
+  const [onlineQuizzes, setOnlineQuizzes] = useState<OnlineQuizSummary[]>([]);
   const [studentAssignments, setStudentAssignments] = useState<StudentCourseAssignment[]>([]);
   const [assignmentSystemMissing, setAssignmentSystemMissing] = useState(false);
   const [quizView, setQuizView] = useState<'in-class' | 'online'>('in-class');
@@ -114,31 +129,6 @@ export default function StudentCourse() {
   const [prompt, setPrompt] = useState('');
   const [videoLength, setVideoLength] = useState(5);
   const [generating, setGenerating] = useState(false);
-
-  const dummyQuizzes = [
-    {
-      id: '1',
-      title: 'Linear Regression Quiz',
-      courseName: 'CS 229 Machine Learning',
-      instructorName: 'Prof. Andrew Ng',
-      questionCount: 10,
-      totalMarks: 20,
-      duration: 15,
-      dueDate: '2026-03-25',
-      status: 'available' as const
-    },
-    {
-      id: '2',
-      title: 'Neural Networks Quiz',
-      courseName: 'CS 229 Machine Learning',
-      instructorName: 'Prof. Andrew Ng',
-      questionCount: 8,
-      totalMarks: 16,
-      duration: 12,
-      dueDate: '2026-03-15',
-      status: 'attempted' as const
-    }
-  ];
 
   const assignmentSummaryData = useMemo(() => {
     const gradedAssignments = studentAssignments.filter((assignment) => assignment.grade_score !== null);
@@ -180,6 +170,12 @@ export default function StudentCourse() {
   useEffect(() => {
     checkAuthAndLoadData();
   }, [courseId]);
+
+  useEffect(() => {
+    if (onlineQuizzes.length > 0 && inClassQuizzes.length === 0 && quizView !== 'online') {
+      setQuizView('online');
+    }
+  }, [onlineQuizzes.length, inClassQuizzes.length, quizView]);
 
   const checkAuthAndLoadData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -278,6 +274,7 @@ export default function StudentCourse() {
 
     await Promise.all([
       loadInClassQuizzes(userId),
+      loadOnlineQuizzes(userId),
       loadStudentAssignments(),
     ]);
 
@@ -448,6 +445,29 @@ export default function StudentCourse() {
     })).filter((quiz) => quiz.status === 'generated' || quiz.status === 'saved');
 
     setInClassQuizzes(normalizedQuizzes);
+  };
+
+  const loadOnlineQuizzes = async (userId: string) => {
+    if (!backendBase) {
+      setOnlineQuizzes([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${backendBase}/api/student/quiz/online?courseId=${courseId}&studentId=${userId}`,
+      );
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const payload = await response.json();
+      setOnlineQuizzes((payload.quizzes || []) as OnlineQuizSummary[]);
+    } catch (error) {
+      console.error('Error loading online quizzes:', error);
+      setOnlineQuizzes([]);
+    }
   };
 
   const createDocumentWindow = (html: string) => {
@@ -902,35 +922,37 @@ export default function StudentCourse() {
 
             {quizView === 'online' && (
               <>
-                {dummyQuizzes.length > 0 ? (
+                {onlineQuizzes.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {dummyQuizzes.map((quiz) => (
+                    {onlineQuizzes.map((quiz) => (
                       <StudentQuizCard
-                        key={quiz.id}
-                        title={quiz.title}
-                        courseName={quiz.courseName}
-                        instructorName={quiz.instructorName}
-                        questionCount={quiz.questionCount}
-                        totalMarks={quiz.totalMarks}
-                        duration={quiz.duration}
-                        dueDate={quiz.dueDate}
+                        key={quiz.quiz_batch_id}
+                        title={quiz.quiz_name}
+                        courseName={`${course.course_number}: ${course.title}`}
+                        instructorName={course.instructor_name}
+                        questionCount={quiz.question_count}
+                        totalMarks={quiz.total_marks}
+                        duration={quiz.duration_minutes}
+                        dueDate={quiz.due_at || quiz.available_at || new Date().toISOString()}
                         status={quiz.status}
                         onViewQuestions={() => {
-                          alert('Opening quiz questions PDF...');
+                          router.push(`/student/course/${courseId}/quiz/${quiz.quiz_batch_id}`);
                         }}
                         onStartQuiz={quiz.status === 'available' ? () => {
-                          alert('Starting quiz: ' + quiz.title);
+                          router.push(`/student/course/${courseId}/quiz/${quiz.quiz_batch_id}`);
                         } : undefined}
-                        onViewAttempt={quiz.status === 'attempted' ? () => {
-                          alert('Viewing quiz attempt for: ' + quiz.title);
-                        } : undefined}
+                        onViewAttempt={
+                          quiz.status === 'in_progress' || quiz.status === 'submitted' || quiz.status === 'grades_released'
+                            ? () => router.push(`/student/course/${courseId}/quiz/${quiz.quiz_batch_id}`)
+                            : undefined
+                        }
                       />
                     ))}
                   </div>
                 ) : (
                   <div className="bg-card border border-border rounded-xl p-12 text-center">
                     <FileCheck className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">No quizzes available yet</p>
+                    <p className="text-muted-foreground">No online quizzes available yet</p>
                   </div>
                 )}
               </>
