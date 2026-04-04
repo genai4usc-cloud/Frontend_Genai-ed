@@ -1,193 +1,173 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Search, Download, UserPlus, MoveVertical as MoreVertical, TrendingUp, TrendingDown, Minus, Upload, ChartBar as BarChart3, Users } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Search, Upload, ChartBar as BarChart3, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import StudentMacroView from './StudentMacroView';
-import AIClassInsights from './AIClassInsights';
-import PerformanceDistribution from './PerformanceDistribution';
+import AIClassInsights, { InsightProps } from './AIClassInsights';
 
-type StudentData = {
-  id: string;
-  firstName: string;
-  lastName: string;
+export type StudentPerformanceRow = {
+  courseStudentId: string;
+  studentId: string | null;
   email: string;
-  assignmentsCompleted: number;
+  firstName: string | null;
+  lastName: string | null;
+  assignmentsSubmitted: number;
   assignmentsTotal: number;
-  assignmentsAvg: number;
-  quizAvg: number;
-  quizCompleted: number;
-  quizTotal: number;
-  lecturesAttended: number;
+  assignmentsAvg: number | null;
+  quizzesCompleted: number;
+  quizzesTotal: number;
+  quizzesAvg: number | null;
+  lecturesCompleted: number;
   lecturesTotal: number;
-  aiUsage: 'low' | 'medium' | 'high';
-  aiUsageCount: number;
-  trend: 'improving' | 'declining' | 'stable';
 };
 
 type Props = {
-  courseId: string;
+  students: StudentPerformanceRow[];
   onAddStudent: () => void;
   onBulkImport: () => void;
 };
 
-export default function StudentManagementTable({ courseId, onAddStudent, onBulkImport }: Props) {
+export default function StudentManagementTable({ students, onAddStudent, onBulkImport }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [view, setView] = useState<'table' | 'macro'>('table');
 
-  const mockStudents: StudentData[] = [
-    {
-      id: 'S001',
-      firstName: 'Emily',
-      lastName: 'Johnson',
-      email: 'emily.j@usc.edu',
-      assignmentsCompleted: 3,
-      assignmentsTotal: 4,
-      assignmentsAvg: 92,
-      quizAvg: 92,
-      quizCompleted: 11,
-      quizTotal: 12,
-      lecturesAttended: 22,
-      lecturesTotal: 24,
-      aiUsage: 'medium',
-      aiUsageCount: 45,
-      trend: 'improving'
-    },
-    {
-      id: 'S004',
-      firstName: 'James',
-      lastName: 'Rodriguez',
-      email: 'james.r@usc.edu',
-      assignmentsCompleted: 3,
-      assignmentsTotal: 4,
-      assignmentsAvg: 95,
-      quizAvg: 95,
-      quizCompleted: 12,
-      quizTotal: 12,
-      lecturesAttended: 23,
-      lecturesTotal: 24,
-      aiUsage: 'high',
-      aiUsageCount: 98,
-      trend: 'improving'
-    },
-    {
-      id: 'S002',
-      firstName: 'Michael',
-      lastName: 'Chen',
-      email: 'michael.c@usc.edu',
-      assignmentsCompleted: 4,
-      assignmentsTotal: 4,
-      assignmentsAvg: 88,
-      quizAvg: 88,
-      quizCompleted: 12,
-      quizTotal: 12,
-      lecturesAttended: 24,
-      lecturesTotal: 24,
-      aiUsage: 'high',
-      aiUsageCount: 127,
-      trend: 'stable'
-    },
-    {
-      id: 'S003',
-      firstName: 'Sarah',
-      lastName: 'Williams',
-      email: 'sarah.w@usc.edu',
-      assignmentsCompleted: 2,
-      assignmentsTotal: 4,
-      assignmentsAvg: 76,
-      quizAvg: 76,
-      quizCompleted: 10,
-      quizTotal: 12,
-      lecturesAttended: 18,
-      lecturesTotal: 24,
-      aiUsage: 'low',
-      aiUsageCount: 12,
-      trend: 'declining'
-    },
-    {
-      id: 'S005',
-      firstName: 'Sophia',
-      lastName: 'Martinez',
-      email: 'sophia.m@usc.edu',
-      assignmentsCompleted: 4,
-      assignmentsTotal: 4,
-      assignmentsAvg: 85,
-      quizAvg: 85,
-      quizCompleted: 11,
-      quizTotal: 12,
-      lecturesAttended: 21,
-      lecturesTotal: 24,
-      aiUsage: 'medium',
-      aiUsageCount: 52,
-      trend: 'stable'
-    }
-  ];
-
   const filteredStudents = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    return mockStudents.filter(student =>
-      student.firstName.toLowerCase().includes(query) ||
-      student.lastName.toLowerCase().includes(query) ||
-      student.email.toLowerCase().includes(query) ||
-      student.id.toLowerCase().includes(query)
-    );
-  }, [searchQuery]);
+    return students.filter((student) => {
+      const fullName = `${student.firstName || ''} ${student.lastName || ''}`.trim().toLowerCase();
+      return (
+        fullName.includes(query) ||
+        student.email.toLowerCase().includes(query) ||
+        student.courseStudentId.toLowerCase().includes(query)
+      );
+    });
+  }, [searchQuery, students]);
 
-  const getInitials = (firstName: string, lastName: string) => {
-    return `${firstName[0]}${lastName[0]}`.toUpperCase();
+  const getDisplayName = (student: StudentPerformanceRow) => {
+    const fullName = `${student.firstName || ''} ${student.lastName || ''}`.trim();
+    return fullName || student.email;
   };
 
-  const getUsageBadgeColor = (usage: string) => {
-    switch (usage) {
-      case 'high': return 'text-orange-700 bg-orange-50 border-orange-200';
-      case 'medium': return 'text-yellow-700 bg-yellow-50 border-yellow-200';
-      case 'low': return 'text-green-700 bg-green-50 border-green-200';
-      default: return 'text-gray-700 bg-gray-50 border-gray-200';
-    }
+  const getInitials = (student: StudentPerformanceRow) => {
+    const first = (student.firstName || student.email[0] || 'S').trim();
+    const last = (student.lastName || student.email[1] || '').trim();
+    return `${first[0] || 'S'}${last[0] || ''}`.toUpperCase();
   };
 
-  const getTrendIcon = (trend: string) => {
-    switch (trend) {
-      case 'improving': return <TrendingUp className="w-4 h-4 text-green-600" />;
-      case 'declining': return <TrendingDown className="w-4 h-4 text-red-600" />;
-      case 'stable': return <Minus className="w-4 h-4 text-gray-600" />;
-      default: return null;
-    }
+  const getLectureRate = (student: StudentPerformanceRow) => {
+    if (student.lecturesTotal === 0) return 0;
+    return Math.round((student.lecturesCompleted / student.lecturesTotal) * 100);
   };
 
-  const getTrendText = (trend: string) => {
-    switch (trend) {
-      case 'improving': return 'Improving';
-      case 'declining': return 'Declining';
-      case 'stable': return 'Stable';
-      default: return '';
-    }
+  const getOverallPercent = (student: StudentPerformanceRow) => {
+    const values = [
+      student.assignmentsAvg,
+      student.quizzesAvg,
+      getLectureRate(student),
+    ].filter((value): value is number => value !== null && !Number.isNaN(value));
+
+    if (values.length === 0) return null;
+    return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
   };
 
   const macroStats = useMemo(() => {
-    const totalStudents = mockStudents.length;
-    const avgAssignment = Math.round(
-      mockStudents.reduce((sum, s) => sum + s.assignmentsAvg, 0) / totalStudents
-    );
-    const avgQuizScore = Math.round(
-      mockStudents.reduce((sum, s) => sum + s.quizAvg, 0) / totalStudents
-    );
-    const avgLecture = Math.round(
-      mockStudents.reduce((sum, s) => sum + (s.lecturesAttended / s.lecturesTotal * 100), 0) / totalStudents
-    );
-    const atRisk = mockStudents.filter(s => s.trend === 'declining').length;
+    const totalStudents = students.length;
+    const assignmentAverages = students
+      .map((student) => student.assignmentsAvg)
+      .filter((value): value is number => value !== null);
+    const quizAverages = students
+      .map((student) => student.quizzesAvg)
+      .filter((value): value is number => value !== null);
+    const lectureRates = students.map((student) => getLectureRate(student));
 
     return {
       totalStudents,
-      avgAssignment,
-      avgQuizScore,
-      avgLecture,
-      atRisk
+      avgAssignment: assignmentAverages.length > 0
+        ? Math.round(assignmentAverages.reduce((sum, value) => sum + value, 0) / assignmentAverages.length)
+        : 0,
+      avgQuizScore: quizAverages.length > 0
+        ? Math.round(quizAverages.reduce((sum, value) => sum + value, 0) / quizAverages.length)
+        : 0,
+      avgLecture: lectureRates.length > 0
+        ? Math.round(lectureRates.reduce((sum, value) => sum + value, 0) / lectureRates.length)
+        : 0,
+      atRisk: students.filter((student) => {
+        const overallPercent = getOverallPercent(student);
+        const assignmentCompletion = student.assignmentsTotal > 0
+          ? (student.assignmentsSubmitted / student.assignmentsTotal) * 100
+          : 100;
+        const lectureRate = getLectureRate(student);
+
+        return (overallPercent !== null && overallPercent < 70) || assignmentCompletion < 50 || lectureRate < 50;
+      }).length,
     };
-  }, [mockStudents]);
+  }, [students]);
+
+  const insights = useMemo<InsightProps[]>(() => {
+    if (students.length === 0) {
+      return [
+        {
+          title: 'No Roster Data',
+          description: 'Add students to this course to unlock roster-level assignment, quiz, and lecture analytics.',
+          color: 'blue',
+        },
+      ];
+    }
+
+    const rankedStudents = [...students]
+      .map((student) => ({ student, score: getOverallPercent(student) }))
+      .filter((item): item is { student: StudentPerformanceRow; score: number } => item.score !== null)
+      .sort((a, b) => b.score - a.score);
+
+    const topStudent = rankedStudents[0]?.student;
+    const atRiskStudents = students.filter((student) => {
+      const overallPercent = getOverallPercent(student);
+      const assignmentCompletion = student.assignmentsTotal > 0
+        ? (student.assignmentsSubmitted / student.assignmentsTotal) * 100
+        : 100;
+      const lectureRate = getLectureRate(student);
+
+      return (overallPercent !== null && overallPercent < 70) || assignmentCompletion < 50 || lectureRate < 50;
+    });
+    const lowLectureStudents = students.filter((student) => getLectureRate(student) < 60);
+    const pendingAssignments = students.reduce((sum, student) => {
+      return sum + Math.max(student.assignmentsTotal - student.assignmentsSubmitted, 0);
+    }, 0);
+
+    return [
+      {
+        title: 'Top Performer',
+        description: topStudent
+          ? `${getDisplayName(topStudent)} is currently leading the course based on submitted work, quiz results, and lecture completion.`
+          : 'No graded or completed activity is available yet to rank student performance.',
+        color: 'green',
+      },
+      {
+        title: 'Students Needing Attention',
+        description: atRiskStudents.length > 0
+          ? `${atRiskStudents.length} student${atRiskStudents.length === 1 ? '' : 's'} show low completion or low scores and may need a check-in.`
+          : 'No students are currently flagged as at risk based on the tracked course metrics.',
+        color: atRiskStudents.length > 0 ? 'red' : 'blue',
+      },
+      {
+        title: 'Lecture Engagement',
+        description: lowLectureStudents.length > 0
+          ? `${lowLectureStudents.length} student${lowLectureStudents.length === 1 ? '' : 's'} have completed fewer than 60% of the course lectures.`
+          : 'Lecture completion is healthy across the current roster.',
+        color: lowLectureStudents.length > 0 ? 'yellow' : 'green',
+      },
+      {
+        title: 'Assignment Progress',
+        description: pendingAssignments > 0
+          ? `${pendingAssignments} assignment submission${pendingAssignments === 1 ? '' : 's'} are still pending across the class.`
+          : 'All assigned coursework has been submitted so far.',
+        color: pendingAssignments > 0 ? 'blue' : 'green',
+      },
+    ];
+  }, [students]);
 
   return (
     <div className="space-y-6">
@@ -214,6 +194,14 @@ export default function StudentManagementTable({ courseId, onAddStudent, onBulkI
             Table View
           </Button>
           <Button
+            onClick={onAddStudent}
+            variant="outline"
+            className="border-gray-300 hover:bg-gray-50 flex items-center gap-2"
+          >
+            <Users className="w-4 h-4" />
+            Add Student
+          </Button>
+          <Button
             onClick={onBulkImport}
             variant="outline"
             className="border-gray-300 hover:bg-gray-50 flex items-center gap-2"
@@ -228,7 +216,7 @@ export default function StudentManagementTable({ courseId, onAddStudent, onBulkI
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
         <Input
           type="text"
-          placeholder="Search students by name, email, or ID..."
+          placeholder="Search students by name, email, or roster ID..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="pl-10 h-12 text-base border-gray-300"
@@ -238,125 +226,83 @@ export default function StudentManagementTable({ courseId, onAddStudent, onBulkI
       {view === 'macro' ? (
         <>
           <StudentMacroView stats={macroStats} />
-          <AIClassInsights />
-          <PerformanceDistribution />
+          <AIClassInsights insights={insights} />
         </>
       ) : (
-
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Email
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Assignments
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Quiz Avg
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Lectures
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  AI Usage
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Trend
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredStudents.map((student) => (
-                <tr key={student.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-medium text-gray-900">{student.id}</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-10 w-10 bg-brand-maroon text-white">
-                        <AvatarFallback className="bg-brand-maroon text-white font-semibold">
-                          {getInitials(student.firstName, student.lastName)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="text-sm font-semibold text-gray-900">
-                          {student.firstName} {student.lastName}
-                        </div>
-                        {student.id === 'S001' || student.id === 'S004' ? (
-                          <span className="text-xs text-red-600 font-medium">New message</span>
-                        ) : null}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm text-gray-600">{student.email}</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm">
-                      <div className="font-semibold text-gray-900">
-                        {student.assignmentsCompleted}/{student.assignmentsTotal}
-                      </div>
-                      <div className="text-xs text-gray-500">{student.assignmentsAvg}% avg</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm">
-                      <div className="font-semibold text-gray-900">
-                        {student.quizCompleted}/{student.quizTotal}
-                      </div>
-                      <div className="text-xs text-gray-500">{student.quizAvg}% avg</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-gray-900">
-                        {student.lecturesAttended}/{student.lecturesTotal}
-                      </span>
-                      <div className="w-16 bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-brand-maroon h-2 rounded-full"
-                          style={{ width: `${(student.lecturesAttended / student.lecturesTotal) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm">
-                      <Badge className={`${getUsageBadgeColor(student.aiUsage)} border font-medium`}>
-                        {student.aiUsage}
-                      </Badge>
-                      <div className="text-xs text-gray-500 mt-1">{student.aiUsageCount} uses</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      {getTrendIcon(student.trend)}
-                      <span className="text-sm text-gray-700">{getTrendText(student.trend)}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <button className="text-brand-maroon hover:text-brand-maroon-hover font-medium text-sm">
-                      View Details
-                    </button>
-                  </td>
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    Student
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    Email
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    Assignments
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    Online Quizzes
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredStudents.map((student) => {
+                  return (
+                    <tr key={student.courseStudentId} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10 bg-brand-maroon text-white">
+                            <AvatarFallback className="bg-brand-maroon text-white font-semibold">
+                              {getInitials(student)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="text-sm font-semibold text-gray-900">
+                              {getDisplayName(student)}
+                            </div>
+                            <div className="text-xs text-gray-500">{student.courseStudentId}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm text-gray-600">{student.email}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm">
+                          <div className="font-semibold text-gray-900">
+                            {student.assignmentsSubmitted}/{student.assignmentsTotal}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {student.assignmentsAvg !== null ? `${student.assignmentsAvg}% avg` : 'No graded work yet'}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm">
+                          <div className="font-semibold text-gray-900">
+                            {student.quizzesCompleted}/{student.quizzesTotal}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {student.quizzesAvg !== null ? `${student.quizzesAvg}% avg` : 'No quiz results yet'}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {filteredStudents.length === 0 && (
+            <div className="p-12 text-center text-gray-600">
+              No students match your search.
+            </div>
+          )}
         </div>
-      </div>
       )}
     </div>
   );

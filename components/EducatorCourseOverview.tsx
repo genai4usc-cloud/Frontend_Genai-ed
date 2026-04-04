@@ -2,76 +2,79 @@
 
 import { Users, BookOpen, FileText, ListChecks, TrendingUp, Award, CircleAlert as AlertCircle, Sparkles } from 'lucide-react';
 
+type SummaryStats = {
+  totalStudents: number;
+  lecturesCreated: number;
+  assignmentsCreated: number;
+  quizzesCreated: number;
+  publishedLectures: number;
+  dueAssignments: number;
+  publishedQuizzes: number;
+  averageQuizScore: number | null;
+};
+
+type Insight = {
+  type: 'positive' | 'info' | 'warning';
+  text: string;
+};
+
 interface OverviewProps {
-  courseId: string;
+  stats: SummaryStats;
+  insights: Insight[];
 }
 
-export default function EducatorCourseOverview({ courseId }: OverviewProps) {
+export default function EducatorCourseOverview({ stats, insights }: OverviewProps) {
   const summaryCards = [
     {
       icon: Users,
       iconColor: 'text-blue-600',
       iconBg: 'bg-blue-50',
       title: 'Total Students',
-      value: '127',
-      subtext: '+12 this week',
-      trend: 'up'
+      value: stats.totalStudents.toString(),
+      subtext: stats.totalStudents === 1 ? '1 enrolled student' : `${stats.totalStudents} enrolled students`,
     },
     {
       icon: BookOpen,
       iconColor: 'text-red-600',
       iconBg: 'bg-red-50',
       title: 'Lectures Created',
-      value: '24',
-      subtext: '3 published this week',
-      trend: 'up'
+      value: stats.lecturesCreated.toString(),
+      subtext: `${stats.publishedLectures} published`,
     },
     {
       icon: FileText,
       iconColor: 'text-green-600',
       iconBg: 'bg-green-50',
       title: 'Assignments',
-      value: '8',
-      subtext: '2 due this week',
-      trend: 'neutral'
+      value: stats.assignmentsCreated.toString(),
+      subtext: stats.dueAssignments > 0 ? `${stats.dueAssignments} due soon` : 'No upcoming due dates',
     },
     {
       icon: ListChecks,
       iconColor: 'text-purple-600',
       iconBg: 'bg-purple-50',
       title: 'Quizzes',
-      value: '12',
-      subtext: 'Avg score: 84%',
-      trend: 'up'
+      value: stats.quizzesCreated.toString(),
+      subtext: stats.averageQuizScore !== null
+        ? `Avg score: ${stats.averageQuizScore}%`
+        : `${stats.publishedQuizzes} published`,
     }
   ];
 
-  const insights = [
-    {
-      type: 'positive',
+  const insightStyles = {
+    positive: {
       icon: TrendingUp,
-      text: 'Student engagement is up 23% compared to last week.',
-      color: 'border-green-200 bg-green-50'
+      color: 'border-green-200 bg-green-50',
     },
-    {
-      type: 'info',
+    info: {
       icon: Award,
-      text: 'Lecture 5 "Neural Networks Basics" has the highest completion rate at 94%.',
-      color: 'border-blue-200 bg-blue-50'
+      color: 'border-blue-200 bg-blue-50',
     },
-    {
-      type: 'warning',
+    warning: {
       icon: AlertCircle,
-      text: '15 students have not yet submitted Assignment 3 due in 2 days. Consider sending a reminder.',
-      color: 'border-yellow-200 bg-yellow-50'
+      color: 'border-yellow-200 bg-yellow-50',
     },
-    {
-      type: 'positive',
-      icon: TrendingUp,
-      text: 'Quiz completion improved by 11% after the last lecture release.',
-      color: 'border-green-200 bg-green-50'
-    }
-  ];
+  } as const;
 
   return (
     <div className="space-y-8">
@@ -101,15 +104,15 @@ export default function EducatorCourseOverview({ courseId }: OverviewProps) {
       <div className="bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-100 rounded-xl p-6">
         <div className="flex items-center gap-2 mb-4">
           <Sparkles className="w-5 h-5 text-purple-600" />
-          <h2 className="text-lg font-bold text-gray-900">AI-Generated Insights</h2>
+          <h2 className="text-lg font-bold text-gray-900">Course Insights</h2>
         </div>
         <div className="space-y-3">
           {insights.map((insight, index) => {
-            const Icon = insight.icon;
+            const Icon = insightStyles[insight.type].icon;
             return (
               <div
                 key={index}
-                className={`${insight.color} border rounded-lg p-4 flex items-start gap-3`}
+                className={`${insightStyles[insight.type].color} border rounded-lg p-4 flex items-start gap-3`}
               >
                 <Icon className="w-5 h-5 mt-0.5 flex-shrink-0 text-gray-700" />
                 <p className="text-sm text-gray-800 leading-relaxed">{insight.text}</p>

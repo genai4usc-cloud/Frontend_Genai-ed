@@ -2,7 +2,7 @@
 
 import { Sparkles } from 'lucide-react';
 
-type InsightProps = {
+export type InsightProps = {
   title: string;
   description: string;
   color: 'green' | 'red' | 'yellow' | 'blue';
@@ -24,35 +24,17 @@ function InsightCard({ title, description, color }: InsightProps) {
   );
 }
 
-export default function AIClassInsights() {
-  const insights = [
-    {
-      title: 'Top Performers',
-      description: 'James Rodriguez and Emily Johnson are excelling across all metrics. Consider offering them advanced challenges or peer mentoring opportunities.',
-      color: 'green' as const
-    },
-    {
-      title: 'Students Needing Support',
-      description: 'Sarah Williams shows declining engagement. 1 student(s) at risk. Recommend scheduling individual check-ins.',
-      color: 'red' as const
-    },
-    {
-      title: 'AI Usage Patterns',
-      description: '2 students show high AI usage. Michael Chen and James Rodriguez are effectively using AI tools to supplement learning.',
-      color: 'yellow' as const
-    },
-    {
-      title: 'Common Challenges',
-      description: 'Analysis shows students struggle with advanced theoretical concepts. Consider adding supplementary materials on mathematical foundations.',
-      color: 'blue' as const
-    }
-  ];
+type Props = {
+  insights: InsightProps[];
+};
+
+export default function AIClassInsights({ insights }: Props) {
 
   return (
     <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl border border-purple-200 p-6">
       <div className="flex items-center gap-2 mb-6">
         <Sparkles className="w-6 h-6 text-purple-600" />
-        <h3 className="text-xl font-bold text-gray-900">AI-Powered Class Insights</h3>
+        <h3 className="text-xl font-bold text-gray-900">Class Insights</h3>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import { AssignmentRecord } from '@/lib/assignments';
@@ -14,7 +14,7 @@ import EducatorCourseOverview from '@/components/EducatorCourseOverview';
 import EducatorLectureCard from '@/components/EducatorLectureCard';
 import EducatorAssignmentCard from '@/components/EducatorAssignmentCard';
 import EducatorQuizCard from '@/components/EducatorQuizCard';
-import StudentManagementTable from '@/components/StudentManagementTable';
+import StudentManagementTable, { StudentPerformanceRow } from '@/components/StudentManagementTable';
 import { ArrowLeft, Video, Plus, Users, BookOpen, FileText, ListChecks, X } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -59,6 +59,27 @@ type Quiz = {
   short_answer_count: number;
 };
 
+type LectureAnalytics = {
+  views: number;
+  completionRate: number;
+  avgWatchTimeSeconds: number;
+};
+
+type QuizAnalytics = {
+  totalStudents: number;
+  completed: number;
+  pending: number;
+  avgScore: number | null;
+  highestScore: number | null;
+  lowestScore: number | null;
+  scoreDistribution: {
+    excellent: number;
+    good: number;
+    fair: number;
+    needsImprovement: number;
+  };
+};
+
 export default function CourseLectures() {
   const router = useRouter();
   const params = useParams();
@@ -69,6 +90,9 @@ export default function CourseLectures() {
   const [assignments, setAssignments] = useState<AssignmentSummary[]>([]);
   const [assignmentSystemMissing, setAssignmentSystemMissing] = useState(false);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [lectureAnalytics, setLectureAnalytics] = useState<Record<string, LectureAnalytics>>({});
+  const [quizAnalytics, setQuizAnalytics] = useState<Record<string, QuizAnalytics>>({});
+  const [studentPerformance, setStudentPerformance] = useState<StudentPerformanceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDeleteLectureModal, setShowDeleteLectureModal] = useState<string | null>(null);
   const [showDeleteArtifactModal, setShowDeleteArtifactModal] = useState<{ lectureId: string; artifactId: string; type: string } | null>(null);
@@ -76,31 +100,6 @@ export default function CourseLectures() {
   const [playingMedia, setPlayingMedia] = useState<{ lectureId: string; type: 'video' | 'audio'; url: string } | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [showCreateMenu, setShowCreateMenu] = useState(false);
-
-  // Mock analytics for lectures
-  const generateLectureMockAnalytics = (index: number) => ({
-    views: [124, 118, 132, 95, 87][index % 5] || 100,
-    completionRate: [94, 87, 91, 78, 82][index % 5] || 85,
-    avgWatchTime: ['11:45', '13:20', '9:15', '14:50', '8:30'][index % 5] || '10:00',
-    publishDate: new Date(Date.now() - (index + 1) * 7 * 24 * 60 * 60 * 1000).toLocaleDateString()
-  });
-
-  // Mock analytics for quizzes
-  const generateQuizMockAnalytics = (index: number) => ({
-    dueDate: new Date(Date.now() + (index + 1) * 7 * 24 * 60 * 60 * 1000).toISOString(),
-    totalStudents: 127,
-    completed: [118, 109, 95, 88][index % 4] || 100,
-    pending: [9, 18, 32, 39][index % 4] || 27,
-    avgScore: [84, 78, 91, 73][index % 4] || 80,
-    highestScore: [98, 95, 100, 92][index % 4] || 95,
-    lowestScore: [62, 55, 71, 48][index % 4] || 60,
-    scoreDistribution: {
-      excellent: [42, 38, 55, 28][index % 4] || 40,
-      good: [38, 35, 25, 32][index % 4] || 35,
-      fair: [25, 22, 10, 18][index % 4] || 20,
-      needsImprovement: [13, 14, 5, 10][index % 4] || 12
-    }
-  });
 
   useEffect(() => {
     checkAuth();
@@ -141,7 +140,10 @@ export default function CourseLectures() {
         await Promise.all([
           loadCourseLectures(),
           loadCourseAssignments(),
-          loadCourseQuizzes()
+          loadCourseQuizzes(),
+          loadCourseLectureAnalytics(),
+          loadCourseQuizAnalytics(),
+          loadCourseStudentPerformance(),
         ]);
       }
     } catch (error) {
@@ -334,6 +336,98 @@ export default function CourseLectures() {
     }
   };
 
+  const loadCourseLectureAnalytics = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_course_lecture_analytics', {
+        p_course_id: courseId,
+      });
+
+      if (error) throw error;
+
+      const analyticsMap = Object.fromEntries(
+        ((data || []) as any[]).map((row) => [
+          row.lecture_id,
+          {
+            views: Number(row.total_views || 0),
+            completionRate: Number(row.completion_rate || 0),
+            avgWatchTimeSeconds: Number(row.avg_watch_seconds || 0),
+          } satisfies LectureAnalytics,
+        ]),
+      );
+
+      setLectureAnalytics(analyticsMap);
+    } catch (error) {
+      console.error('Error loading lecture analytics:', error);
+      setLectureAnalytics({});
+    }
+  };
+
+  const loadCourseQuizAnalytics = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_course_quiz_analytics', {
+        p_course_id: courseId,
+      });
+
+      if (error) throw error;
+
+      const analyticsMap = Object.fromEntries(
+        ((data || []) as any[]).map((row) => [
+          row.quiz_batch_id,
+          {
+            totalStudents: Number(row.total_students || 0),
+            completed: Number(row.completed_count || 0),
+            pending: Number(row.pending_count || 0),
+            avgScore: row.avg_score !== null ? Number(row.avg_score) : null,
+            highestScore: row.highest_score !== null ? Number(row.highest_score) : null,
+            lowestScore: row.lowest_score !== null ? Number(row.lowest_score) : null,
+            scoreDistribution: {
+              excellent: Number(row.excellent_count || 0),
+              good: Number(row.good_count || 0),
+              fair: Number(row.fair_count || 0),
+              needsImprovement: Number(row.needs_improvement_count || 0),
+            },
+          } satisfies QuizAnalytics,
+        ]),
+      );
+
+      setQuizAnalytics(analyticsMap);
+    } catch (error) {
+      console.error('Error loading quiz analytics:', error);
+      setQuizAnalytics({});
+    }
+  };
+
+  const loadCourseStudentPerformance = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_course_student_performance', {
+        p_course_id: courseId,
+      });
+
+      if (error) throw error;
+
+      const normalizedStudents: StudentPerformanceRow[] = ((data || []) as any[]).map((row) => ({
+        courseStudentId: row.course_student_id,
+        studentId: row.student_id,
+        email: row.email,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        assignmentsSubmitted: Number(row.assignments_submitted || 0),
+        assignmentsTotal: Number(row.assignments_total || 0),
+        assignmentsAvg: row.assignments_avg !== null ? Number(row.assignments_avg) : null,
+        quizzesCompleted: Number(row.quizzes_completed || 0),
+        quizzesTotal: Number(row.quizzes_total || 0),
+        quizzesAvg: row.quizzes_avg !== null ? Number(row.quizzes_avg) : null,
+        lecturesCompleted: Number(row.lectures_completed || 0),
+        lecturesTotal: Number(row.lectures_total || 0),
+      }));
+
+      setStudentPerformance(normalizedStudents);
+    } catch (error) {
+      console.error('Error loading student performance:', error);
+      setStudentPerformance([]);
+    }
+  };
+
   const extractStoragePathFromPublicUrl = (url: string | null, bucket: string) => {
     if (!url) return null;
     const marker = `/storage/v1/object/public/${bucket}/`;
@@ -448,6 +542,99 @@ export default function CourseLectures() {
       setDeleting(false);
     }
   };
+
+  const overviewStats = useMemo(() => {
+    const quizAverages = Object.values(quizAnalytics)
+      .map((analytics) => analytics.avgScore)
+      .filter((value): value is number => value !== null);
+    const dueAssignments = assignments.filter((assignment) => {
+      if (!assignment.due_at) return false;
+      const dueTime = new Date(assignment.due_at).getTime();
+      const now = Date.now();
+      const sevenDaysFromNow = now + (7 * 24 * 60 * 60 * 1000);
+      return dueTime >= now && dueTime <= sevenDaysFromNow;
+    }).length;
+
+    return {
+      totalStudents: studentPerformance.length,
+      lecturesCreated: lectures.length,
+      assignmentsCreated: assignments.length,
+      quizzesCreated: quizzes.length,
+      publishedLectures: lectures.filter((lecture) => lecture.status === 'published' || lecture.status === 'completed').length,
+      dueAssignments,
+      publishedQuizzes: quizzes.filter((quiz) => quiz.status === 'published').length,
+      averageQuizScore: quizAverages.length > 0
+        ? Math.round(quizAverages.reduce((sum, value) => sum + value, 0) / quizAverages.length)
+        : null,
+    };
+  }, [assignments, lectures, quizzes, quizAnalytics, studentPerformance.length]);
+
+  const overviewInsights = useMemo(() => {
+    const insights: Array<{ type: 'positive' | 'info' | 'warning'; text: string }> = [];
+    const highestLecture = lectures
+      .map((lecture) => ({
+        lecture,
+        analytics: lectureAnalytics[lecture.id],
+      }))
+      .filter((item) => item.analytics)
+      .sort((a, b) => (b.analytics?.completionRate || 0) - (a.analytics?.completionRate || 0))[0];
+
+    if (highestLecture?.analytics) {
+      insights.push({
+        type: 'info',
+        text: `"${highestLecture.lecture.title}" has the highest lecture completion rate at ${Math.round(highestLecture.analytics.completionRate)}%.`,
+      });
+    }
+
+    const pendingAssignments = assignments.reduce((sum, assignment) => sum + assignment.analytics.pending, 0);
+    insights.push({
+      type: pendingAssignments > 0 ? 'warning' : 'positive',
+      text: pendingAssignments > 0
+        ? `${pendingAssignments} assignment submission${pendingAssignments === 1 ? '' : 's'} are still pending across this course.`
+        : 'All current assignments have been submitted by the enrolled roster.',
+    });
+
+    const lowestQuiz = quizzes
+      .map((quiz) => ({
+        quiz,
+        analytics: quizAnalytics[quiz.id],
+      }))
+      .filter((item) => item.analytics && item.analytics.totalStudents > 0)
+      .sort((a, b) => {
+        const left = (a.analytics!.completed / Math.max(a.analytics!.totalStudents, 1));
+        const right = (b.analytics!.completed / Math.max(b.analytics!.totalStudents, 1));
+        return left - right;
+      })[0];
+
+    if (lowestQuiz?.analytics) {
+      const completionRate = Math.round((lowestQuiz.analytics.completed / Math.max(lowestQuiz.analytics.totalStudents, 1)) * 100);
+      insights.push({
+        type: completionRate < 75 ? 'warning' : 'positive',
+        text: `"${lowestQuiz.quiz.quiz_name || 'Untitled Quiz'}" is currently at ${completionRate}% completion.`,
+      });
+    }
+
+    if (studentPerformance.length > 0) {
+      const lowLectureCount = studentPerformance.filter((student) => {
+        return student.lecturesTotal > 0 && (student.lecturesCompleted / student.lecturesTotal) < 0.5;
+      }).length;
+      insights.push({
+        type: lowLectureCount > 0 ? 'warning' : 'positive',
+        text: lowLectureCount > 0
+          ? `${lowLectureCount} student${lowLectureCount === 1 ? '' : 's'} have completed fewer than half of the published lectures.`
+          : 'Lecture engagement is strong across the current roster.',
+      });
+    }
+
+    if (insights.length === 0) {
+      insights.push({
+        type: 'info',
+        text: 'Create course content to unlock overview insights for this course.',
+      });
+    }
+
+    return insights.slice(0, 4);
+  }, [assignments, lectureAnalytics, lectures, quizAnalytics, quizzes, studentPerformance]);
 
   if (loading) {
     return (
@@ -595,7 +782,7 @@ export default function CourseLectures() {
             </div>
 
             <TabsContent value="overview" className="mt-0">
-              <EducatorCourseOverview courseId={courseId} />
+              <EducatorCourseOverview stats={overviewStats} insights={overviewInsights} />
             </TabsContent>
 
             <TabsContent value="lectures" className="mt-0">
@@ -633,11 +820,11 @@ export default function CourseLectures() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {lectures.map((lecture, index) => (
+                  {lectures.map((lecture) => (
                     <EducatorLectureCard
                       key={lecture.id}
                       lecture={lecture}
-                      mockAnalytics={generateLectureMockAnalytics(index)}
+                      analytics={lectureAnalytics[lecture.id]}
                       onEdit={() => router.push(`/educator/lecture/new?id=${lecture.id}&mode=edit`)}
                       onDelete={() => setShowDeleteLectureModal(lecture.id)}
                       onPlayVideo={(url) => setPlayingMedia({ lectureId: lecture.id, type: 'video', url })}
@@ -737,19 +924,17 @@ export default function CourseLectures() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {quizzes.map((quiz, index) => {
-                    const totalQuestions = quiz.mcq_count + quiz.short_answer_count;
-                    const totalMarks = (quiz.mcq_count * 2) + (quiz.short_answer_count * 5);
+                  {quizzes.map((quiz) => {
+                    const totalMarks = quiz.mode === 'online'
+                      ? (quiz.mcq_count + quiz.short_answer_count)
+                      : ((quiz.mcq_count * 2) + (quiz.short_answer_count * 5));
 
                     return (
                       <EducatorQuizCard
                         key={quiz.id}
                         quiz={quiz}
                         totalMarks={totalMarks}
-                        mockAnalytics={{
-                          ...generateQuizMockAnalytics(index),
-                          dueDate: quiz.due_at || generateQuizMockAnalytics(index).dueDate,
-                        }}
+                        analytics={quizAnalytics[quiz.id]}
                         onEdit={() => router.push(`/educator/quiz/new?id=${quiz.id}`)}
                         onDelete={() => handleDeleteQuiz(quiz)}
                         onView={() => quiz.mode === 'online'
@@ -767,7 +952,7 @@ export default function CourseLectures() {
 
             <TabsContent value="students" className="mt-0">
               <StudentManagementTable
-                courseId={courseId}
+                students={studentPerformance}
                 onAddStudent={() => toast.info('Add student feature coming soon')}
                 onBulkImport={() => toast.info('Bulk import feature coming soon')}
               />

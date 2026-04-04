@@ -18,11 +18,10 @@ interface EducatorLectureCardProps {
     video_length: number;
     artifacts: LectureArtifact[];
   };
-  mockAnalytics?: {
+  analytics?: {
     views: number;
     completionRate: number;
-    avgWatchTime: string;
-    publishDate: string;
+    avgWatchTimeSeconds: number;
   };
   onEdit: () => void;
   onDelete: () => void;
@@ -33,7 +32,7 @@ interface EducatorLectureCardProps {
 
 export default function EducatorLectureCard({
   lecture,
-  mockAnalytics,
+  analytics,
   onEdit,
   onDelete,
   onPlayVideo,
@@ -43,6 +42,12 @@ export default function EducatorLectureCard({
   const videoArtifact = lecture.artifacts.find(a => a.artifact_type === 'video_avatar');
   const audioArtifact = lecture.artifacts.find(a => a.artifact_type === 'audio');
   const pptxArtifact = lecture.artifacts.find(a => a.artifact_type === 'pptx');
+
+  const formatWatchTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.round(seconds % 60);
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
 
   const getCompletionColor = (rate: number) => {
     if (rate >= 90) return 'bg-green-500';
@@ -69,40 +74,40 @@ export default function EducatorLectureCard({
               <p className="text-gray-600 text-sm mb-3">{lecture.description}</p>
             )}
 
-            {mockAnalytics && (
-              <div className="flex items-center gap-4 text-xs text-gray-600 mb-3">
-                <div className="flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>{lecture.video_length} min</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5" />
-                  <span>{mockAnalytics.publishDate}</span>
-                </div>
+            <div className="flex items-center gap-4 text-xs text-gray-600 mb-3">
+              <div className="flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" />
+                <span>{lecture.video_length} min</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>{new Date(lecture.created_at).toLocaleDateString()}</span>
+              </div>
+              {analytics && (
                 <div className="flex items-center gap-1">
                   <Eye className="w-3.5 h-3.5" />
-                  <span>{mockAnalytics.views} views</span>
+                  <span>{analytics.views} views</span>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
-            {mockAnalytics && (
+            {analytics && (
               <div className="grid grid-cols-2 gap-4 mb-3">
                 <div>
                   <div className="text-xs text-gray-500 mb-1">Completion Rate</div>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 bg-gray-200 rounded-full h-2">
                       <div
-                        className={`h-2 rounded-full ${getCompletionColor(mockAnalytics.completionRate)}`}
-                        style={{ width: `${mockAnalytics.completionRate}%` }}
+                        className={`h-2 rounded-full ${getCompletionColor(analytics.completionRate)}`}
+                        style={{ width: `${analytics.completionRate}%` }}
                       />
                     </div>
-                    <span className="text-sm font-semibold text-gray-900">{mockAnalytics.completionRate}%</span>
+                    <span className="text-sm font-semibold text-gray-900">{analytics.completionRate}%</span>
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-gray-500 mb-1">Avg Watch Time</div>
-                  <div className="text-sm font-semibold text-gray-900">{mockAnalytics.avgWatchTime}</div>
+                  <div className="text-sm font-semibold text-gray-900">{formatWatchTime(analytics.avgWatchTimeSeconds)}</div>
                 </div>
               </div>
             )}

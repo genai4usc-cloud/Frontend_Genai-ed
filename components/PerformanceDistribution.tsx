@@ -1,6 +1,6 @@
 'use client';
 
-type PerformanceLevel = {
+export type PerformanceLevel = {
   label: string;
   range: string;
   count: number;
@@ -8,31 +8,11 @@ type PerformanceLevel = {
   color: string;
 };
 
-export default function PerformanceDistribution() {
-  const levels: PerformanceLevel[] = [
-    {
-      label: 'Excellent',
-      range: '90-100%',
-      count: 2,
-      percentage: 40,
-      color: 'bg-green-500'
-    },
-    {
-      label: 'Good',
-      range: '80-89%',
-      count: 2,
-      percentage: 40,
-      color: 'bg-blue-500'
-    },
-    {
-      label: 'Fair',
-      range: '70-79%',
-      count: 1,
-      percentage: 20,
-      color: 'bg-yellow-500'
-    }
-  ];
+type Props = {
+  levels: PerformanceLevel[];
+};
 
+export default function PerformanceDistribution({ levels }: Props) {
   const totalStudents = levels.reduce((sum, level) => sum + level.count, 0);
 
   return (

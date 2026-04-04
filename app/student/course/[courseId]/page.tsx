@@ -103,6 +103,11 @@ interface OnlineQuizSummary {
   score: number | null;
 }
 
+type LectureProgress = {
+  completedLectures: number;
+  totalLectures: number;
+};
+
 export default function StudentCourse() {
   const router = useRouter();
   const params = useParams();
@@ -120,6 +125,10 @@ export default function StudentCourse() {
   const [studentAssignments, setStudentAssignments] = useState<StudentCourseAssignment[]>([]);
   const [assignmentSystemMissing, setAssignmentSystemMissing] = useState(false);
   const [quizView, setQuizView] = useState<'in-class' | 'online'>('in-class');
+  const [lectureProgress, setLectureProgress] = useState<LectureProgress>({
+    completedLectures: 0,
+    totalLectures: 0,
+  });
 
   const [contextSources, setContextSources] = useState({
     syllabus: true,
@@ -131,41 +140,36 @@ export default function StudentCourse() {
   const [generating, setGenerating] = useState(false);
 
   const assignmentSummaryData = useMemo(() => {
-    const gradedAssignments = studentAssignments.filter((assignment) => assignment.grade_score !== null);
-    const submittedAssignments = studentAssignments.filter((assignment) => Boolean(assignment.submitted_at));
-
-    const averageAssignmentScore = gradedAssignments.length > 0
-      ? Math.round(
-          gradedAssignments.reduce((sum, assignment) => {
-            const score = Number(assignment.grade_score || 0);
-            const percentage = assignment.points_possible > 0
-              ? (score / assignment.points_possible) * 100
-              : 0;
-            return sum + percentage;
-          }, 0) / gradedAssignments.length,
-        )
-      : 0;
-
     return {
-      averageQuizScore: 0,
-      averageAssignmentScore,
-      completedLectures: courseLectures.length,
-      totalLectures: courseLectures.length,
-      submittedAssignments: submittedAssignments.length,
+      totalQuizzes: inClassQuizzes.length + onlineQuizzes.length,
       totalAssignments: studentAssignments.length,
-      performanceItems: studentAssignments.map((assignment) => ({
-        name: assignment.assignment_label,
-        type: 'assignment' as const,
-        marksScored: assignment.grade_score,
-        totalMarks: assignment.points_possible,
-        status: assignment.grade_score !== null
-          ? 'completed' as const
-          : assignment.submitted_at
-          ? 'submitted' as const
-          : 'pending' as const,
-      })),
+      totalLectures: courseLectures.length,
+      performanceItems: [
+        ...onlineQuizzes.map((quiz) => ({
+          name: quiz.quiz_name,
+          type: 'quiz' as const,
+          marksScored: quiz.status === 'grades_released' ? quiz.score : null,
+          totalMarks: quiz.total_marks,
+          status: quiz.status === 'grades_released'
+            ? 'completed' as const
+            : quiz.status === 'submitted'
+            ? 'submitted' as const
+            : 'pending' as const,
+        })),
+        ...studentAssignments.map((assignment) => ({
+          name: assignment.assignment_label,
+          type: 'assignment' as const,
+          marksScored: assignment.grade_score,
+          totalMarks: assignment.points_possible,
+          status: assignment.grade_score !== null
+            ? 'completed' as const
+            : assignment.submitted_at
+            ? 'submitted' as const
+            : 'pending' as const,
+        })),
+      ],
     };
-  }, [courseLectures.length, studentAssignments]);
+  }, [courseLectures.length, inClassQuizzes.length, onlineQuizzes, studentAssignments]);
 
   useEffect(() => {
     checkAuthAndLoadData();
@@ -259,6 +263,38 @@ export default function StudentCourse() {
 
       setCourseLectures(educatorLectures);
       setMyLectures(studentLectures);
+
+      const educatorLectureIds = educatorLectures.map((lecture) => lecture.id);
+      if (educatorLectureIds.length > 0) {
+        const { data: lectureViews } = await supabase
+          .from('student_lecture_views')
+          .select('lecture_id, completed')
+          .eq('student_id', userId)
+          .in('lecture_id', educatorLectureIds);
+
+        const completedLectureIds = new Set(
+          (lectureViews || [])
+            .filter((view: { lecture_id: string; completed: boolean }) => view.completed)
+            .map((view: { lecture_id: string }) => view.lecture_id),
+        );
+
+        setLectureProgress({
+          completedLectures: completedLectureIds.size,
+          totalLectures: educatorLectures.length,
+        });
+      } else {
+        setLectureProgress({
+          completedLectures: 0,
+          totalLectures: 0,
+        });
+      }
+    } else {
+      setCourseLectures([]);
+      setMyLectures([]);
+      setLectureProgress({
+        completedLectures: 0,
+        totalLectures: 0,
+      });
     }
 
     const { data: uploadsData } = await supabase
@@ -1011,12 +1047,9 @@ export default function StudentCourse() {
           <div>
             <h2 className="text-xl font-bold text-foreground mb-6">Course Overview</h2>
             <StudentPerformanceSummary
-              averageQuizScore={assignmentSummaryData.averageQuizScore}
-              averageAssignmentScore={assignmentSummaryData.averageAssignmentScore}
-              completedLectures={assignmentSummaryData.completedLectures}
-              totalLectures={assignmentSummaryData.totalLectures}
-              submittedAssignments={assignmentSummaryData.submittedAssignments}
+              totalQuizzes={assignmentSummaryData.totalQuizzes}
               totalAssignments={assignmentSummaryData.totalAssignments}
+              totalLectures={assignmentSummaryData.totalLectures}
               performanceItems={assignmentSummaryData.performanceItems}
             />
           </div>

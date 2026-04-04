@@ -1,6 +1,6 @@
 'use client';
 
-import { Calendar, Users, CircleCheck as CheckCircle, Clock, TrendingUp, TrendingDown, ListChecks, CreditCard as Edit, Trash2, Eye } from 'lucide-react';
+import { Calendar, Users, CircleCheck as CheckCircle, Clock, TrendingUp, ListChecks, CreditCard as Edit, Trash2, Eye } from 'lucide-react';
 
 interface EducatorQuizCardProps {
   quiz: {
@@ -14,14 +14,13 @@ interface EducatorQuizCardProps {
     short_answer_count: number;
   };
   totalMarks: number;
-  mockAnalytics?: {
-    dueDate?: string;
+  analytics?: {
     totalStudents: number;
     completed: number;
     pending: number;
-    avgScore: number;
-    highestScore: number;
-    lowestScore: number;
+    avgScore: number | null;
+    highestScore: number | null;
+    lowestScore: number | null;
     scoreDistribution: {
       excellent: number;
       good: number;
@@ -38,7 +37,7 @@ interface EducatorQuizCardProps {
 export default function EducatorQuizCard({
   quiz,
   totalMarks,
-  mockAnalytics,
+  analytics,
   onEdit,
   onDelete,
   onView,
@@ -59,14 +58,19 @@ export default function EducatorQuizCard({
     }
   };
 
-  const completionRate = mockAnalytics
-    ? (mockAnalytics.completed / mockAnalytics.totalStudents) * 100
+  const completionRate = analytics
+    ? (analytics.completed / Math.max(analytics.totalStudents, 1)) * 100
     : 0;
-  const dueDate = quiz.due_at || mockAnalytics?.dueDate;
+  const dueDate = quiz.due_at;
   const modeLabel = quiz.mode === 'online' ? 'Online' : 'In Class';
   const modeClasses = quiz.mode === 'online'
     ? 'bg-amber-100 text-amber-700'
     : 'bg-slate-100 text-slate-700';
+  const hasScoreData = Boolean(
+    analytics &&
+    analytics.avgScore !== null &&
+    analytics.highestScore !== null,
+  );
 
   return (
     <div
@@ -145,7 +149,7 @@ export default function EducatorQuizCard({
         </div>
       </div>
 
-      {mockAnalytics && (
+      {analytics && (
         <>
           <div className="grid grid-cols-5 gap-3 mb-4">
             <div>
@@ -153,35 +157,35 @@ export default function EducatorQuizCard({
                 <Users className="w-3.5 h-3.5" />
                 <span>Total</span>
               </div>
-              <div className="text-lg font-bold text-gray-900">{mockAnalytics.totalStudents}</div>
+              <div className="text-lg font-bold text-gray-900">{analytics.totalStudents}</div>
             </div>
             <div>
               <div className="flex items-center gap-1 text-xs text-green-600 mb-1">
                 <CheckCircle className="w-3.5 h-3.5" />
                 <span>Done</span>
               </div>
-              <div className="text-lg font-bold text-green-600">{mockAnalytics.completed}</div>
+              <div className="text-lg font-bold text-green-600">{analytics.completed}</div>
             </div>
             <div>
               <div className="flex items-center gap-1 text-xs text-orange-600 mb-1">
                 <Clock className="w-3.5 h-3.5" />
                 <span>Pending</span>
               </div>
-              <div className="text-lg font-bold text-orange-600">{mockAnalytics.pending}</div>
+              <div className="text-lg font-bold text-orange-600">{analytics.pending}</div>
             </div>
             <div>
               <div className="flex items-center gap-1 text-xs text-purple-600 mb-1">
                 <TrendingUp className="w-3.5 h-3.5" />
                 <span>Avg</span>
               </div>
-              <div className="text-lg font-bold text-purple-600">{mockAnalytics.avgScore}%</div>
+              <div className="text-lg font-bold text-purple-600">{hasScoreData ? `${analytics.avgScore}%` : '--'}</div>
             </div>
             <div>
               <div className="flex items-center gap-1 text-xs text-blue-600 mb-1">
                 <TrendingUp className="w-3.5 h-3.5" />
                 <span>High</span>
               </div>
-              <div className="text-lg font-bold text-blue-600">{mockAnalytics.highestScore}%</div>
+              <div className="text-lg font-bold text-blue-600">{hasScoreData ? `${analytics.highestScore}%` : '--'}</div>
             </div>
           </div>
 
@@ -200,17 +204,18 @@ export default function EducatorQuizCard({
 
           <div className="border-t border-gray-100 pt-4">
             <h4 className="text-xs font-semibold text-gray-700 mb-3">Score Distribution</h4>
+            {hasScoreData ? (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <div className="w-24 text-xs text-gray-600">90-100%</div>
                 <div className="flex-1 bg-gray-200 rounded-full h-1.5">
                   <div
                     className="bg-green-500 h-1.5 rounded-full"
-                    style={{ width: `${(mockAnalytics.scoreDistribution.excellent / mockAnalytics.totalStudents) * 100}%` }}
+                    style={{ width: `${(analytics.scoreDistribution.excellent / Math.max(analytics.totalStudents, 1)) * 100}%` }}
                   />
                 </div>
                 <div className="w-16 text-xs text-right text-gray-900 font-medium">
-                  {mockAnalytics.scoreDistribution.excellent} students
+                  {analytics.scoreDistribution.excellent} students
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -218,11 +223,11 @@ export default function EducatorQuizCard({
                 <div className="flex-1 bg-gray-200 rounded-full h-1.5">
                   <div
                     className="bg-blue-500 h-1.5 rounded-full"
-                    style={{ width: `${(mockAnalytics.scoreDistribution.good / mockAnalytics.totalStudents) * 100}%` }}
+                    style={{ width: `${(analytics.scoreDistribution.good / Math.max(analytics.totalStudents, 1)) * 100}%` }}
                   />
                 </div>
                 <div className="w-16 text-xs text-right text-gray-900 font-medium">
-                  {mockAnalytics.scoreDistribution.good} students
+                  {analytics.scoreDistribution.good} students
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -230,11 +235,11 @@ export default function EducatorQuizCard({
                 <div className="flex-1 bg-gray-200 rounded-full h-1.5">
                   <div
                     className="bg-yellow-500 h-1.5 rounded-full"
-                    style={{ width: `${(mockAnalytics.scoreDistribution.fair / mockAnalytics.totalStudents) * 100}%` }}
+                    style={{ width: `${(analytics.scoreDistribution.fair / Math.max(analytics.totalStudents, 1)) * 100}%` }}
                   />
                 </div>
                 <div className="w-16 text-xs text-right text-gray-900 font-medium">
-                  {mockAnalytics.scoreDistribution.fair} students
+                  {analytics.scoreDistribution.fair} students
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -242,14 +247,17 @@ export default function EducatorQuizCard({
                 <div className="flex-1 bg-gray-200 rounded-full h-1.5">
                   <div
                     className="bg-red-500 h-1.5 rounded-full"
-                    style={{ width: `${(mockAnalytics.scoreDistribution.needsImprovement / mockAnalytics.totalStudents) * 100}%` }}
+                    style={{ width: `${(analytics.scoreDistribution.needsImprovement / Math.max(analytics.totalStudents, 1)) * 100}%` }}
                   />
                 </div>
                 <div className="w-16 text-xs text-right text-gray-900 font-medium">
-                  {mockAnalytics.scoreDistribution.needsImprovement} students
+                  {analytics.scoreDistribution.needsImprovement} students
                 </div>
               </div>
             </div>
+            ) : (
+              <p className="text-sm text-gray-500">Score data will appear once this quiz has recorded graded results.</p>
+            )}
           </div>
         </>
       )}
