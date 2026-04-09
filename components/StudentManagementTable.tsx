@@ -28,9 +28,10 @@ type Props = {
   students: StudentPerformanceRow[];
   onAddStudent: () => void;
   onBulkImport: () => void;
+  onViewStudent: (student: StudentPerformanceRow) => void;
 };
 
-export default function StudentManagementTable({ students, onAddStudent, onBulkImport }: Props) {
+export default function StudentManagementTable({ students, onAddStudent, onBulkImport, onViewStudent }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [view, setView] = useState<'table' | 'macro'>('table');
 
@@ -251,7 +252,11 @@ export default function StudentManagementTable({ students, onAddStudent, onBulkI
               <tbody className="divide-y divide-gray-200">
                 {filteredStudents.map((student) => {
                   return (
-                    <tr key={student.courseStudentId} className="hover:bg-gray-50 transition-colors">
+                    <tr
+                      key={student.courseStudentId}
+                      className="hover:bg-gray-50 transition-colors cursor-pointer"
+                      onClick={() => onViewStudent(student)}
+                    >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-3">
                           <Avatar className="h-10 w-10 bg-brand-maroon text-white">

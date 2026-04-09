@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import { AssignmentRecord } from '@/lib/assignments';
 import {
@@ -83,6 +83,7 @@ type QuizAnalytics = {
 export default function CourseLectures() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const courseId = params.courseId as string;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [course, setCourse] = useState<Course | null>(null);
@@ -104,6 +105,13 @@ export default function CourseLectures() {
   useEffect(() => {
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && ['overview', 'lectures', 'assignments', 'quizzes', 'students'].includes(tab)) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   const checkAuth = async () => {
     try {
@@ -955,6 +963,7 @@ export default function CourseLectures() {
                 students={studentPerformance}
                 onAddStudent={() => toast.info('Add student feature coming soon')}
                 onBulkImport={() => toast.info('Bulk import feature coming soon')}
+                onViewStudent={(student) => router.push(`/educator/course/${courseId}/student/${student.courseStudentId}`)}
               />
             </TabsContent>
           </Tabs>

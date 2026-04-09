@@ -151,7 +151,7 @@ BEGIN
   ),
   online_stats AS (
     SELECT
-      quiz_batch_id,
+      attempt_scores.quiz_batch_id,
       count(*) FILTER (WHERE status IN ('submitted', 'timed_out', 'graded'))::integer AS completed_count,
       round(avg(score_pct)::numeric, 1) AS avg_score,
       round(max(score_pct)::numeric, 1) AS highest_score,
@@ -161,7 +161,7 @@ BEGIN
       count(*) FILTER (WHERE score_pct >= 70 AND score_pct < 80)::integer AS fair_count,
       count(*) FILTER (WHERE score_pct < 70)::integer AS needs_improvement_count
     FROM attempt_scores
-    GROUP BY quiz_batch_id
+    GROUP BY attempt_scores.quiz_batch_id
   )
   SELECT
     cb.id AS quiz_batch_id,
