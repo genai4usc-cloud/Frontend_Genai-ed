@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import EducatorLayout from '@/components/EducatorLayout';
+import { getBackendBase } from '@/lib/backend';
 import { Profile, supabase } from '@/lib/supabase';
 import { ArrowLeft, Loader2, Send, Save, Clock } from 'lucide-react';
 
-const backendBase = process.env.NEXT_PUBLIC_BACKEND_BASE;
+const backendBase = getBackendBase();
 
 interface ReviewQuestion {
   question_index: number;

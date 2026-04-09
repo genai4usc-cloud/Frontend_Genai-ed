@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import StudentLayout from '@/components/StudentLayout';
+import { getBackendBase } from '@/lib/backend';
 import { Profile, supabase } from '@/lib/supabase';
 import { ArrowLeft, Clock, CheckCircle2, FileCheck, Loader2 } from 'lucide-react';
 
-const backendBase = process.env.NEXT_PUBLIC_BACKEND_BASE;
+const backendBase = getBackendBase();
 
 interface OnlineQuizQuestion {
   question_index: number;

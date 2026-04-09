@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, Profile } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
+import { getBackendBase } from '@/lib/backend';
 import GenerationSettings from '@/components/GenerationSettings';
 import Markdown from '@/components/Markdown';
 import { ModelOutputExpandModal, ExpandButton } from '@/components/ModelOutputExpandModal';
@@ -144,11 +145,7 @@ const AI_MODELS: AIModel[] = [
   { id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5', provider: 'Anthropic', icon: '🧠', color: 'bg-purple-500' }
 ];
 
-const BACKEND_BASE =
-  process.env.NEXT_PUBLIC_BACKEND_BASE ||
-  (process.env.NODE_ENV === 'development'
-    ? 'http://127.0.0.1:8000'
-    : 'https://backend-genai-ed.onrender.com');
+const BACKEND_BASE = getBackendBase();
 
 function getEnvelopeText(item?: EnvelopeItem | null): string {
   const v = item?.content?.value;

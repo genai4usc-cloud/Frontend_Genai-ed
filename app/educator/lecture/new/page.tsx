@@ -6,6 +6,7 @@ import { supabase, Profile, Course } from '@/lib/supabase';
 import EducatorLayout from '@/components/EducatorLayout';
 import { ArrowLeft, Upload, Check, ChevronDown, ChevronUp, Info, Video, Mic, FileText, Sparkles, Download, Eye, CheckCircle, File } from 'lucide-react';
 import { toast } from 'sonner';
+import { getBackendBase } from '@/lib/backend';
 import { validateFileSize } from '@/lib/fileUpload';
 import { AvatarName, AvatarVoiceMap } from "@/lib/avatarVoiceMap";
 
@@ -35,13 +36,7 @@ type AvatarStyles = {
   harry: 'business' | 'casual' | 'youthful';
 };
 
-const BACKEND_URL = (
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  process.env.NEXT_PUBLIC_BACKEND_BASE ||
-  (process.env.NODE_ENV === 'development'
-    ? 'http://127.0.0.1:8000'
-    : 'https://backend-genai-ed.onrender.com')
-).replace(/\/$/, '');
+const BACKEND_URL = getBackendBase().replace(/\/$/, '');
 
 const STYLE_TO_JOB: Record<string, string> = {
   audio: 'audio',

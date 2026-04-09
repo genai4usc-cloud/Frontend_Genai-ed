@@ -7,6 +7,7 @@ import LectureCard from '@/components/LectureCard';
 import StudentQuizCard from '@/components/StudentQuizCard';
 import StudentAssignmentCard from '@/components/StudentAssignmentCard';
 import StudentPerformanceSummary from '@/components/StudentPerformanceSummary';
+import { getBackendBase } from '@/lib/backend';
 import { supabase, Profile } from '@/lib/supabase';
 import {
   getAssignmentSystemMissingMessage,
@@ -18,7 +19,7 @@ import {
 } from '@/lib/assignments';
 import { BookOpen, MessageSquare, Upload, FileText, Trash2, Send, Video, SquareCheck as CheckSquare, FileCheck, ClipboardList, ChartBar as BarChart3, Clock, Calendar, Eye } from 'lucide-react';
 
-const backendBase = process.env.NEXT_PUBLIC_BACKEND_BASE;
+const backendBase = getBackendBase();
 
 interface Course {
   id: string;

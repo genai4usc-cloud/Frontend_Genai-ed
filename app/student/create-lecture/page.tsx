@@ -6,6 +6,7 @@ import { supabase, Profile, Course } from '@/lib/supabase';
 import StudentLayout from '@/components/StudentLayout';
 import { ArrowLeft, Upload, File, Check, ChevronDown, ChevronUp, Info, Video, Mic, FileText, Sparkles, Download, Eye, Play, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { getBackendBase } from '@/lib/backend';
 import { validateFileSize } from '@/lib/fileUpload';
 
 type MaterialWithType = {
@@ -19,13 +20,7 @@ type MaterialWithType = {
 
 type AvatarType = 'professional_male' | 'professional_female' | 'casual_male' | 'casual_female';
 
-const BACKEND_URL = (
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  process.env.NEXT_PUBLIC_BACKEND_BASE ||
-  (process.env.NODE_ENV === 'development'
-    ? 'http://127.0.0.1:8000'
-    : 'https://backend-genai-ed.onrender.com')
-).replace(/\/$/, '');
+const BACKEND_URL = getBackendBase().replace(/\/$/, '');
 
 export default function CreateLecture() {
   const router = useRouter();

@@ -10,8 +10,9 @@ import {
 } from 'lucide-react';
 import { uploadFile } from '@/lib/fileUpload';
 import { sanitizeFileName } from '@/lib/assignments';
+import { getBackendBase } from '@/lib/backend';
 
-const base = process.env.NEXT_PUBLIC_BACKEND_BASE;
+const base = getBackendBase();
 
 interface QuizBatch {
   id: string;

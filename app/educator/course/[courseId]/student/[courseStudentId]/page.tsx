@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import EducatorLayout from '@/components/EducatorLayout';
 import Markdown from '@/components/Markdown';
+import { getBackendBase } from '@/lib/backend';
 import { supabase, Profile } from '@/lib/supabase';
 import { ArrowLeft, BookOpen, Brain, ClipboardList, FileCheck, FileText, Upload, Users } from 'lucide-react';
 
-const backendBase = process.env.NEXT_PUBLIC_BACKEND_BASE;
+const backendBase = getBackendBase();
 
 type StudentProfileResponse = {
   course: {
