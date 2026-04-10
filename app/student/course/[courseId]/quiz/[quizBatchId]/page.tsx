@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import StudentLayout from '@/components/StudentLayout';
 import { getBackendBase } from '@/lib/backend';
 import { Profile, supabase } from '@/lib/supabase';
-import { ArrowLeft, Clock, CheckCircle2, FileCheck, Loader2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Clock, FileCheck, Loader2, Monitor } from 'lucide-react';
 
 const backendBase = getBackendBase();
 
@@ -33,12 +33,22 @@ interface OnlineQuizDetail {
   question_count: number;
   total_marks: number;
   grades_published_at: string | null;
+  policy_notice: string | null;
   attempt: {
     id: string;
     status: string;
     started_at: string;
     submitted_at: string | null;
     expires_at: string;
+    integrity?: {
+      refresh_count: number;
+      integrity_warning_count: number;
+      integrity_violation_count: number;
+      fullscreen_exit_warning_count: number;
+      policy_auto_submit_reason: string | null;
+      policy_notice: string | null;
+      last_policy_event_at: string | null;
+    } | null;
     final_score?: number;
     overall_feedback?: string | null;
   } | null;
@@ -58,6 +68,37 @@ export default function StudentOnlineQuizPage() {
   const [starting, setStarting] = useState(false);
   const [savingQuestionIndex, setSavingQuestionIndex] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+  const [policyMessage, setPolicyMessage] = useState<string | null>(null);
+  const [integrityError, setIntegrityError] = useState<string | null>(null);
+  const [isFullscreenReady, setIsFullscreenReady] = useState(false);
+  const [needsFullscreenResume, setNeedsFullscreenResume] = useState(false);
+  const [policyDismissed, setPolicyDismissed] = useState(false);
+
+  const pendingIntegrityEventRef = useRef<string | null>(null);
+  const reloadHandledForAttemptRef = useRef<string | null>(null);
+  const ignoreIntegrityUntilRef = useRef<number>(0);
+
+  const isQuizInProgress = detail?.status === 'in_progress' && !!detail?.attempt;
+
+  const enterFullscreen = async () => {
+    if (typeof document === 'undefined') return false;
+    if (document.fullscreenElement) return true;
+
+    ignoreIntegrityUntilRef.current = Date.now() + 2000;
+
+    try {
+      await document.documentElement.requestFullscreen();
+      setIsFullscreenReady(true);
+      setNeedsFullscreenResume(false);
+      setIntegrityError(null);
+      pendingIntegrityEventRef.current = null;
+      return true;
+    } catch (error) {
+      console.error('Failed to enter fullscreen:', error);
+      setIntegrityError('Fullscreen is required to continue this quiz.');
+      return false;
+    }
+  };
 
   useEffect(() => {
     loadPage();
@@ -82,6 +123,98 @@ export default function StudentOnlineQuizPage() {
     const intervalId = window.setInterval(updateRemaining, 1000);
     return () => window.clearInterval(intervalId);
   }, [detail?.attempt?.expires_at, detail?.status]);
+
+  useEffect(() => {
+    const syncFullscreenState = () => {
+      const active = !!document.fullscreenElement;
+      setIsFullscreenReady(active);
+      if (isQuizInProgress && !active) {
+        setNeedsFullscreenResume(true);
+      }
+    };
+
+    syncFullscreenState();
+    document.addEventListener('fullscreenchange', syncFullscreenState);
+    return () => document.removeEventListener('fullscreenchange', syncFullscreenState);
+  }, [isQuizInProgress]);
+
+  useEffect(() => {
+    if (!isQuizInProgress || !profile) return;
+
+    const shouldIgnoreIntegrityEvent = () => Date.now() < ignoreIntegrityUntilRef.current;
+
+    const handleVisibilityChange = () => {
+      if (shouldIgnoreIntegrityEvent()) return;
+      if (document.visibilityState === 'hidden') {
+        pendingIntegrityEventRef.current = 'tab_switch';
+      }
+    };
+
+    const handleWindowBlur = () => {
+      if (shouldIgnoreIntegrityEvent()) return;
+      pendingIntegrityEventRef.current = 'window_blur';
+    };
+
+    const handleWindowFocus = () => {
+      void handlePendingIntegrityEvent();
+    };
+
+    const handleFullscreenChange = () => {
+      if (shouldIgnoreIntegrityEvent()) {
+        const fullscreenActive = !!document.fullscreenElement;
+        setIsFullscreenReady(fullscreenActive);
+        if (fullscreenActive) {
+          setNeedsFullscreenResume(false);
+        }
+        return;
+      }
+
+      const fullscreenActive = !!document.fullscreenElement;
+      if (fullscreenActive) {
+        setIsFullscreenReady(true);
+        setNeedsFullscreenResume(false);
+        return;
+      }
+
+      setIsFullscreenReady(false);
+      if (!isQuizInProgress || submitting) return;
+
+      if (document.visibilityState === 'visible' && document.hasFocus()) {
+        pendingIntegrityEventRef.current = 'fullscreen_exit';
+        setNeedsFullscreenResume(true);
+        void handlePendingIntegrityEvent();
+      } else {
+        pendingIntegrityEventRef.current = 'tab_switch';
+        setNeedsFullscreenResume(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, [isQuizInProgress, profile?.id, submitting]);
+
+  useEffect(() => {
+    if (!isQuizInProgress || !profile || !detail?.attempt?.id) return;
+
+    const navigationEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+    const isReload = navigationEntries.some((entry) => entry.type === 'reload');
+    if (!isReload || reloadHandledForAttemptRef.current === detail.attempt.id) {
+      return;
+    }
+
+    reloadHandledForAttemptRef.current = detail.attempt.id;
+    setNeedsFullscreenResume(true);
+    void registerRefreshAttempt();
+  }, [isQuizInProgress, profile?.id, detail?.attempt?.id]);
 
   const formattedRemaining = useMemo(() => {
     if (remainingSeconds === null) return null;
@@ -130,11 +263,84 @@ export default function StudentOnlineQuizPage() {
     }
 
     const payload = await response.json();
-    setDetail(payload as OnlineQuizDetail);
+    const nextDetail = payload as OnlineQuizDetail;
+    setDetail(nextDetail);
+    setPolicyMessage(nextDetail.policy_notice || nextDetail.attempt?.integrity?.policy_notice || null);
+  };
+
+  const registerRefreshAttempt = async () => {
+    if (!profile || !backendBase) return;
+
+    try {
+      const response = await fetch(`${backendBase}/api/student/quiz/online/register-refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quizBatchId,
+          studentId: profile.id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const payload = await response.json();
+      setDetail(payload.detail as OnlineQuizDetail);
+      if (payload.message) {
+        setPolicyMessage(payload.message);
+      }
+    } catch (error) {
+      console.error('Error registering quiz refresh:', error);
+      setIntegrityError('Unable to validate the refresh policy right now.');
+    }
+  };
+
+  const handlePendingIntegrityEvent = async () => {
+    const eventType = pendingIntegrityEventRef.current;
+    if (!eventType || !profile || !backendBase || !isQuizInProgress) {
+      return;
+    }
+
+    pendingIntegrityEventRef.current = null;
+
+    try {
+      const response = await fetch(`${backendBase}/api/student/quiz/online/report-integrity-event`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quizBatchId,
+          studentId: profile.id,
+          eventType,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const payload = await response.json();
+      setDetail(payload.detail as OnlineQuizDetail);
+      setNeedsFullscreenResume(Boolean(payload.require_fullscreen) && !document.fullscreenElement);
+
+      if (payload.message) {
+        setPolicyMessage(payload.message);
+        setPolicyDismissed(false);
+      }
+    } catch (error) {
+      console.error('Error reporting integrity event:', error);
+      setIntegrityError('Unable to validate quiz policy state right now.');
+    }
   };
 
   const startQuiz = async () => {
     if (!profile || !backendBase) return;
+    const fullscreenEntered = await enterFullscreen();
+    if (!fullscreenEntered) {
+      alert('You must enter fullscreen mode before starting the quiz.');
+      return;
+    }
+
     setStarting(true);
     try {
       const response = await fetch(`${backendBase}/api/student/quiz/online/start`, {
@@ -151,7 +357,13 @@ export default function StudentOnlineQuizPage() {
       }
 
       const payload = await response.json();
-      setDetail(payload as OnlineQuizDetail);
+      const nextDetail = payload as OnlineQuizDetail;
+      ignoreIntegrityUntilRef.current = Date.now() + 2000;
+      pendingIntegrityEventRef.current = null;
+      setDetail(nextDetail);
+      setNeedsFullscreenResume(false);
+      setPolicyMessage(nextDetail.policy_notice || nextDetail.attempt?.integrity?.policy_notice || null);
+      setPolicyDismissed(false);
     } catch (error) {
       console.error('Error starting online quiz:', error);
       alert('Failed to start the quiz.');
@@ -218,7 +430,10 @@ export default function StudentOnlineQuizPage() {
       }
 
       const payload = await response.json();
-      setDetail(payload as OnlineQuizDetail);
+      const nextDetail = payload as OnlineQuizDetail;
+      setDetail(nextDetail);
+      setNeedsFullscreenResume(false);
+      setPolicyMessage(nextDetail.policy_notice || nextDetail.attempt?.integrity?.policy_notice || null);
       if (!silent) {
         alert('Quiz submitted successfully.');
       }
@@ -312,7 +527,46 @@ export default function StudentOnlineQuizPage() {
               <p>Status: <span className="font-medium text-gray-900">{detail.status.replace('_', ' ')}</span></p>
               {detail.available_at && <p>Available From: {new Date(detail.available_at).toLocaleString()}</p>}
               {detail.due_at && <p>Due Date: {new Date(detail.due_at).toLocaleString()}</p>}
+              {detail.attempt?.integrity && (
+                <>
+                  <p>
+                    Refreshes Used: <span className="font-medium text-gray-900">{detail.attempt.integrity.refresh_count}/3</span>
+                  </p>
+                  <p>
+                    Policy Warnings: <span className="font-medium text-gray-900">{detail.attempt.integrity.integrity_warning_count}</span>
+                  </p>
+                  <p>
+                    Policy Violations: <span className="font-medium text-gray-900">{detail.attempt.integrity.integrity_violation_count}</span>
+                  </p>
+                  <p>
+                    Esc Warnings: <span className="font-medium text-gray-900">{detail.attempt.integrity.fullscreen_exit_warning_count}</span>
+                  </p>
+                </>
+              )}
             </div>
+
+            {policyMessage && !policyDismissed && (
+              <div className="mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-red-800">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 mt-0.5" />
+                    <span>{policyMessage}</span>
+                  </div>
+                  <button
+                    onClick={() => setPolicyDismissed(true)}
+                    className="text-sm font-medium text-red-800 hover:text-red-900"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {integrityError && (
+              <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-800">
+                {integrityError}
+              </div>
+            )}
 
             {detail.status === 'upcoming' && (
               <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-amber-800">
@@ -323,22 +577,31 @@ export default function StudentOnlineQuizPage() {
             {detail.status === 'available' && (
               <div className="mt-4">
                 <p className="text-gray-600 mb-4">
-                  This quiz allows one attempt only. Once you start, the timer will continue even if you refresh the page.
+                  This quiz allows one attempt only. Enter fullscreen first, then start the quiz. After the quiz starts, the timer will continue even if you refresh the page.
                 </p>
-                <button
-                  onClick={startQuiz}
-                  disabled={starting}
-                  className="bg-brand-maroon hover:bg-brand-maroon-hover text-white px-6 py-3 rounded-lg font-medium disabled:opacity-50"
-                >
-                  {starting ? 'Starting...' : 'Start Quiz'}
-                </button>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={() => void enterFullscreen()}
+                    className="border border-gray-300 hover:bg-gray-50 text-gray-900 px-6 py-3 rounded-lg font-medium inline-flex items-center gap-2"
+                  >
+                    <Monitor className="w-4 h-4" />
+                    {isFullscreenReady ? 'Fullscreen Ready' : 'Enter Fullscreen'}
+                  </button>
+                  <button
+                    onClick={startQuiz}
+                    disabled={starting || !isFullscreenReady}
+                    className="bg-brand-maroon hover:bg-brand-maroon-hover text-white px-6 py-3 rounded-lg font-medium disabled:opacity-50"
+                  >
+                    {starting ? 'Starting...' : 'Start Quiz'}
+                  </button>
+                </div>
               </div>
             )}
 
             {detail.status === 'submitted' && (
               <div className="mt-4 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-blue-800 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4" />
-                Submitted. Grades will appear after your educator publishes them.
+                {detail.policy_notice || 'Submitted. Grades will appear after your educator publishes them.'}
               </div>
             )}
 
@@ -351,7 +614,28 @@ export default function StudentOnlineQuizPage() {
         </div>
 
         {detail.status === 'in_progress' && (
-          <div className="bg-white rounded-2xl border border-gray-200 p-8 space-y-8">
+          <div className="relative bg-white rounded-2xl border border-gray-200 p-8 space-y-8">
+            {needsFullscreenResume && (
+              <div className="absolute inset-0 z-10 rounded-2xl bg-white/95 backdrop-blur-sm flex items-center justify-center p-6">
+                <div className="max-w-lg rounded-2xl border border-red-200 bg-red-50 p-6 text-center space-y-4">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-sm">
+                    <Monitor className="w-6 h-6 text-red-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900">Return to Fullscreen</h2>
+                    <p className="mt-2 text-sm text-gray-700">
+                      You must stay in fullscreen mode while this quiz is in progress. Re-enter fullscreen to continue.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => void enterFullscreen()}
+                    className="bg-brand-maroon hover:bg-brand-maroon-hover text-white px-5 py-2.5 rounded-lg font-medium"
+                  >
+                    Re-enter Fullscreen
+                  </button>
+                </div>
+              </div>
+            )}
             {detail.questions.map((question) => (
               <div key={question.question_index} className="border-b border-gray-200 pb-6 last:border-b-0 last:pb-0">
                 <div className="font-semibold text-gray-900 mb-4">

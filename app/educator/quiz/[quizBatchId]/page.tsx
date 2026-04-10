@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import EducatorLayout from '@/components/EducatorLayout';
 import { getBackendBase } from '@/lib/backend';
 import { Profile, supabase } from '@/lib/supabase';
-import { ArrowLeft, Loader2, Send, Save, Clock } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Clock, Loader2, Save, Send, ShieldAlert, X } from 'lucide-react';
 
 const backendBase = getBackendBase();
 
@@ -35,6 +35,18 @@ interface ReviewAttempt {
   final_score: number | null;
   raw_score: number | null;
   overall_feedback: string | null;
+  refresh_count: number;
+  integrity_warning_count: number;
+  integrity_violation_count: number;
+  fullscreen_exit_warning_count: number;
+  policy_auto_submit_reason: string | null;
+  last_policy_event_at: string | null;
+  integrity_events: Array<{
+    id: string;
+    event_type: string;
+    event_details: Record<string, unknown>;
+    created_at: string | null;
+  }>;
   questions: ReviewQuestion[];
 }
 
@@ -67,6 +79,15 @@ export default function EducatorOnlineQuizPage() {
   const [publishing, setPublishing] = useState(false);
   const [gradeReleaseMode, setGradeReleaseMode] = useState<'manual' | 'scheduled'>('manual');
   const [gradeReleaseAt, setGradeReleaseAt] = useState('');
+  const [integrityAttempt, setIntegrityAttempt] = useState<ReviewAttempt | null>(null);
+
+  const formatPolicyReason = (reason: string | null) => {
+    if (!reason) return 'None';
+    if (reason === 'refresh_limit') return 'Auto-submitted due to refresh limit';
+    if (reason === 'policy_violation') return 'Auto-submitted due to policy violation';
+    if (reason === 'time_expired') return 'Auto-submitted due to time expiration';
+    return reason.replace(/_/g, ' ');
+  };
 
   useEffect(() => {
     loadPage();
@@ -353,9 +374,20 @@ export default function EducatorOnlineQuizPage() {
                   <h2 className="text-xl font-semibold text-gray-900">{attempt.student_name}</h2>
                   <p className="text-sm text-gray-600">{attempt.student_email || 'No email on file'}</p>
                 </div>
-                <div className="text-sm text-gray-600">
-                  <div>Status: <span className="font-medium text-gray-900">{attempt.status}</span></div>
-                  <div>Score: <span className="font-medium text-gray-900">{attempt.final_score ?? attempt.raw_score ?? 0}</span></div>
+                <div className="flex flex-col items-start gap-3 md:items-end">
+                  <div className="text-sm text-gray-600">
+                    <div>Status: <span className="font-medium text-gray-900">{attempt.status}</span></div>
+                    <div>Score: <span className="font-medium text-gray-900">{attempt.final_score ?? attempt.raw_score ?? 0}</span></div>
+                  </div>
+                  {attempt.attempt_id && (
+                    <button
+                      onClick={() => setIntegrityAttempt(attempt)}
+                      className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                    >
+                      <ShieldAlert className="w-4 h-4" />
+                      Integrity Details
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -436,6 +468,89 @@ export default function EducatorOnlineQuizPage() {
             </div>
           ))}
         </div>
+
+        {integrityAttempt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">Quiz Integrity Details</h2>
+                  <p className="text-sm text-gray-600">
+                    {integrityAttempt.student_name} {integrityAttempt.student_email ? `| ${integrityAttempt.student_email}` : ''}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIntegrityAttempt(null)}
+                  className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="max-h-[calc(85vh-72px)] overflow-y-auto px-6 py-5 space-y-6">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-xl bg-gray-50 p-4">
+                    <div className="text-sm text-gray-500">Refresh Count</div>
+                    <div className="mt-1 text-2xl font-semibold text-gray-900">{integrityAttempt.refresh_count}</div>
+                  </div>
+                  <div className="rounded-xl bg-gray-50 p-4">
+                    <div className="text-sm text-gray-500">Policy Warnings</div>
+                    <div className="mt-1 text-2xl font-semibold text-gray-900">{integrityAttempt.integrity_warning_count}</div>
+                  </div>
+                  <div className="rounded-xl bg-gray-50 p-4">
+                    <div className="text-sm text-gray-500">Policy Violations</div>
+                    <div className="mt-1 text-2xl font-semibold text-gray-900">{integrityAttempt.integrity_violation_count}</div>
+                  </div>
+                  <div className="rounded-xl bg-gray-50 p-4">
+                    <div className="text-sm text-gray-500">Esc Warnings</div>
+                    <div className="mt-1 text-2xl font-semibold text-gray-900">{integrityAttempt.fullscreen_exit_warning_count}</div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-600" />
+                    <div className="space-y-1 text-sm text-gray-700">
+                      <div>
+                        <span className="font-medium text-gray-900">Auto-submit reason:</span>{' '}
+                        {formatPolicyReason(integrityAttempt.policy_auto_submit_reason)}
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-900">Last policy event:</span>{' '}
+                        {integrityAttempt.last_policy_event_at ? new Date(integrityAttempt.last_policy_event_at).toLocaleString() : 'No policy events recorded'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold text-gray-900">Event History</h3>
+                  {integrityAttempt.integrity_events.length === 0 ? (
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                      No integrity or refresh events were recorded for this attempt.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {integrityAttempt.integrity_events.map((event) => (
+                        <div key={event.id} className="rounded-xl border border-gray-200 p-4">
+                          <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                            <div className="font-medium text-gray-900">{event.event_type.replace(/_/g, ' ')}</div>
+                            <div className="text-sm text-gray-500">
+                              {event.created_at ? new Date(event.created_at).toLocaleString() : 'Unknown time'}
+                            </div>
+                          </div>
+                          <pre className="mt-3 overflow-x-auto rounded-lg bg-gray-50 p-3 text-xs text-gray-700">
+                            {JSON.stringify(event.event_details || {}, null, 2)}
+                          </pre>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </EducatorLayout>
   );
