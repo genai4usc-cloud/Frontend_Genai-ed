@@ -2,9 +2,10 @@
 
 import { ChangeEvent, MouseEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Calendar, FileText, Save, Send, Upload, Users } from 'lucide-react';
+import { ArrowLeft, BookOpen, Brain, Calendar, FileText, Save, Send, Upload, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import EducatorLayout from '@/components/EducatorLayout';
+import SocraticStudioConfigurator from '@/components/socratic-writing/SocraticStudioConfigurator';
 import { supabase, Course, Profile } from '@/lib/supabase';
 import { uploadFile } from '@/lib/fileUpload';
 import {
@@ -18,6 +19,13 @@ import {
   formatFileSizeLabel,
   sanitizeFileName,
 } from '@/lib/assignments';
+import {
+  createDefaultStudioBlueprint,
+  loadStudioDraft,
+  saveStudioBlueprint,
+  saveStudioDraft,
+  SocraticStudioBlueprint,
+} from '@/lib/socraticWriting';
 
 type CourseRosterEntry = {
   course_student_id: string;
@@ -54,6 +62,10 @@ export default function NewAssignmentPage() {
   const [questionFile, setQuestionFile] = useState<File | null>(null);
   const [previewNumber, setPreviewNumber] = useState(1);
   const [assignmentSystemMissing, setAssignmentSystemMissing] = useState(false);
+  const [assignmentExperience, setAssignmentExperience] = useState<'standard' | 'socratic'>(
+    searchParams.get('mode') === 'socratic' ? 'socratic' : 'standard',
+  );
+  const [studioBlueprint, setStudioBlueprint] = useState<SocraticStudioBlueprint | null>(null);
 
   const [selectedCourseId, setSelectedCourseId] = useState('');
   const [assignmentTitle, setAssignmentTitle] = useState('');
@@ -89,6 +101,41 @@ export default function NewAssignmentPage() {
 
     void Promise.all([loadRoster(selectedCourseId), loadAssignmentPreview(selectedCourseId)]);
   }, [selectedCourseId]);
+
+  useEffect(() => {
+    const seed = createDefaultStudioBlueprint({
+      assignmentId: `draft-${selectedCourseId || 'course'}`,
+      courseId: selectedCourseId || 'course',
+      courseCode: selectedCourse?.course_number || 'COURSE',
+      courseTitle: selectedCourse?.title || 'Course',
+      assignmentTitle: assignmentTitle.trim() || 'Socratic Writing Assignment',
+      assignmentBrief: description.trim() || 'Use Clarify, Research, Build, and Write to produce the final essay.',
+      dueAt: fromDateTimeLocalValue(dueAt) || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      pointsPossible: Number(pointsPossible) || 100,
+    });
+
+    const savedDraft = selectedCourseId ? loadStudioDraft(selectedCourseId) : null;
+    const nextBlueprint = savedDraft
+      ? {
+          ...savedDraft,
+          assignmentId: seed.assignmentId,
+          courseId: seed.courseId,
+          courseCode: seed.courseCode,
+          courseTitle: seed.courseTitle,
+          assignmentTitle: seed.assignmentTitle,
+          assignmentBrief: seed.assignmentBrief,
+          dueAt: seed.dueAt,
+          pointsPossible: seed.pointsPossible,
+        }
+      : seed;
+
+    setStudioBlueprint(nextBlueprint);
+  }, [assignmentTitle, description, dueAt, pointsPossible, selectedCourse, selectedCourseId]);
+
+  useEffect(() => {
+    if (assignmentExperience !== 'socratic' || !selectedCourseId || !studioBlueprint) return;
+    saveStudioDraft(selectedCourseId, studioBlueprint);
+  }, [assignmentExperience, selectedCourseId, studioBlueprint]);
 
   const bootstrap = async () => {
     try {
@@ -302,6 +349,20 @@ export default function NewAssignmentPage() {
         }
       }
 
+      if (assignmentExperience === 'socratic' && studioBlueprint) {
+        saveStudioBlueprint(assignmentId, {
+          ...studioBlueprint,
+          assignmentId,
+          courseId: selectedCourseId,
+          courseCode: selectedCourse?.course_number || studioBlueprint.courseCode,
+          courseTitle: selectedCourse?.title || studioBlueprint.courseTitle,
+          assignmentTitle: assignmentTitle.trim(),
+          assignmentBrief: description.trim() || studioBlueprint.assignmentBrief,
+          dueAt: fromDateTimeLocalValue(dueAt) || studioBlueprint.dueAt,
+          pointsPossible: Number(pointsPossible) || studioBlueprint.pointsPossible,
+        });
+      }
+
       toast.success(
         status === 'published'
           ? 'Assignment published successfully.'
@@ -441,6 +502,64 @@ export default function NewAssignmentPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-brand-maroon resize-none"
               />
             </div>
+          </section>
+
+          <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-5">
+            <div className="flex items-center gap-3">
+              <div className="bg-purple-50 p-3 rounded-xl">
+                <Brain className="w-6 h-6 text-purple-700" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Assignment Experience</h2>
+                <p className="text-sm text-gray-600">
+                  Keep the standard submission flow, or prototype the new Socratic Writing Studio experience.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => setAssignmentExperience('standard')}
+                className={`rounded-2xl border p-5 text-left transition-colors ${
+                  assignmentExperience === 'standard'
+                    ? 'border-brand-maroon bg-brand-maroon/5'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="inline-flex items-center gap-2 text-base font-semibold text-gray-900">
+                  <FileText className="w-5 h-5 text-brand-maroon" />
+                  Standard Assignment
+                </div>
+                <p className="text-sm text-gray-600 mt-2">
+                  Students upload files or submit text through the existing assignment workflow.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssignmentExperience('socratic')}
+                className={`rounded-2xl border p-5 text-left transition-colors ${
+                  assignmentExperience === 'socratic'
+                    ? 'border-purple-500 bg-purple-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="inline-flex items-center gap-2 text-base font-semibold text-gray-900">
+                  <BookOpen className="w-5 h-5 text-purple-700" />
+                  Socratic Writing Studio
+                </div>
+                <p className="text-sm text-gray-600 mt-2">
+                  Four-stage guided writing flow with per-stage AI policy, attached resources, a notebook, and ledger.
+                </p>
+              </button>
+            </div>
+
+            {assignmentExperience === 'socratic' && studioBlueprint && (
+              <SocraticStudioConfigurator
+                blueprint={studioBlueprint}
+                onChange={setStudioBlueprint}
+              />
+            )}
           </section>
 
           <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-5">

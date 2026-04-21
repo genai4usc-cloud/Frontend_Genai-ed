@@ -4,6 +4,7 @@ import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
+  BookOpen,
   Calendar,
   Download,
   ExternalLink,
@@ -424,6 +425,30 @@ export default function StudentAssignmentDetailPage() {
               </a>
             </div>
           )}
+
+          <div className="rounded-2xl border border-purple-200 bg-purple-50 px-4 py-4 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h3 className="font-semibold text-purple-950">Socratic Writing Studio</h3>
+              <p className="text-sm text-purple-900/80 mt-1">
+                Open the frontend prototype to work through Clarify, Research, Build, and Write with notes and ledger tracking.
+              </p>
+            </div>
+            <button
+              onClick={() => router.push(
+                `/student/course/${courseId}/assignment/${assignment.id}/studio`
+                + `?courseCode=${encodeURIComponent(course.course_number || '')}`
+                + `&courseTitle=${encodeURIComponent(course.title)}`
+                + `&assignmentTitle=${encodeURIComponent(assignment.assignment_title)}`
+                + `&assignmentBrief=${encodeURIComponent(assignment.description || '')}`
+                + `&dueAt=${encodeURIComponent(assignment.due_at || '')}`
+                + `&pointsPossible=${assignment.points_possible}`,
+              )}
+              className="inline-flex items-center gap-2 rounded-lg border border-purple-300 bg-white px-4 py-2 font-semibold text-purple-700 hover:bg-purple-100 transition-colors"
+            >
+              <BookOpen className="w-4 h-4" />
+              Launch Studio
+            </button>
+          </div>
         </section>
 
         <section className="bg-card border border-border rounded-2xl p-6 space-y-4">

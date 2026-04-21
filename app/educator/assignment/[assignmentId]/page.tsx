@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
+  BookOpen,
   Calendar,
   Download,
   ExternalLink,
@@ -553,6 +554,31 @@ export default function EducatorAssignmentDetailPage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() =>
+                router.push(
+                  `/educator/assignment/${assignment.id}/socratic-review`
+                  + `?courseId=${assignment.course_id}`
+                  + `&courseCode=${encodeURIComponent(course?.course_number || '')}`
+                  + `&courseTitle=${encodeURIComponent(course?.title || '')}`
+                  + `&assignmentTitle=${encodeURIComponent(assignment.assignment_title)}`
+                  + `&assignmentBrief=${encodeURIComponent(assignment.description || '')}`
+                  + `&dueAt=${encodeURIComponent(assignment.due_at || '')}`
+                  + `&studentId=${encodeURIComponent(targets[0]?.student_id || 'student-preview')}`
+                  + `&studentName=${encodeURIComponent(
+                    targets[0]
+                      ? [rosterMap.get(targets[0].course_student_id)?.first_name, rosterMap.get(targets[0].course_student_id)?.last_name]
+                          .filter(Boolean)
+                          .join(' ') || targets[0].email
+                      : 'Student Preview',
+                  )}`,
+                )
+              }
+              className="border border-purple-300 text-purple-700 font-semibold py-3 px-5 rounded-lg hover:bg-purple-50 transition-colors inline-flex items-center gap-2"
+            >
+              <BookOpen className="w-4 h-4" />
+              Socratic Review
+            </button>
             <button
               onClick={() => {
                 if (!assignment) return;

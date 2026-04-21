@@ -1,6 +1,6 @@
 'use client';
 
-import { FileText, Calendar, Award, Eye, Upload, CircleCheck as CheckCircle, Clock, ClipboardCheck } from 'lucide-react';
+import { FileText, Calendar, Award, Eye, Upload, CircleCheck as CheckCircle, Clock, ClipboardCheck, BookOpen } from 'lucide-react';
 import { formatAssignmentDate } from '@/lib/assignments';
 
 interface StudentAssignmentCardProps {
@@ -13,6 +13,7 @@ interface StudentAssignmentCardProps {
   status: 'submitted' | 'pending' | 'late' | 'graded' | 'closed';
   submittedAt?: string | null;
   gradeScore?: number | null;
+  isSocratic?: boolean;
   onViewAssignment: () => void;
   onSubmitWork?: () => void;
   onViewSubmission?: () => void;
@@ -28,6 +29,7 @@ export default function StudentAssignmentCard({
   status,
   submittedAt,
   gradeScore,
+  isSocratic = false,
   onViewAssignment,
   onSubmitWork,
   onViewSubmission
@@ -77,6 +79,12 @@ export default function StudentAssignmentCard({
               <p className="text-sm text-muted-foreground">{title}</p>
             </div>
           </div>
+          {isSocratic && (
+            <div className="mb-2 inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">
+              <BookOpen className="w-3.5 h-3.5" />
+              Socratic Studio
+            </div>
+          )}
           <p className="text-sm text-muted-foreground mb-1">{courseName}</p>
           <p className="text-xs text-muted-foreground">Instructor: {instructorName}</p>
         </div>

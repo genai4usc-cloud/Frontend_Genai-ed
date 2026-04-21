@@ -1,6 +1,6 @@
 'use client';
 
-import { Calendar, Users, CircleCheck as CheckCircle, Clock, TrendingUp, FileText, Award } from 'lucide-react';
+import { BookOpen, Calendar, Users, CircleCheck as CheckCircle, Clock, TrendingUp, FileText, Award } from 'lucide-react';
 import { formatAssignmentDate } from '@/lib/assignments';
 
 interface EducatorAssignmentCardProps {
@@ -20,12 +20,14 @@ interface EducatorAssignmentCardProps {
     pending: number;
     avgScore: number | null;
   };
+  isSocratic?: boolean;
   onViewDetails?: () => void;
 }
 
 export default function EducatorAssignmentCard({
   assignment,
   analytics,
+  isSocratic = false,
   onViewDetails
 }: EducatorAssignmentCardProps) {
   const submissionProgress = analytics.totalStudents > 0
@@ -63,6 +65,12 @@ export default function EducatorAssignmentCard({
                   <Calendar className="w-3.5 h-3.5" />
                   <span>Due: {formatAssignmentDate(assignment.due_at)}</span>
                 </div>
+                {isSocratic && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border border-purple-200 bg-purple-50 text-purple-700">
+                    <BookOpen className="w-3 h-3" />
+                    Socratic Studio
+                  </span>
+                )}
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(assignment.status)}`}>
                   {assignment.status.charAt(0).toUpperCase() + assignment.status.slice(1)}
                 </span>

@@ -17,6 +17,7 @@ import {
   getStudentAssignmentCardStatus,
   StudentCourseAssignment,
 } from '@/lib/assignments';
+import { hasStudioBlueprint } from '@/lib/socraticWriting';
 import { BookOpen, MessageSquare, Upload, FileText, Trash2, Send, Video, SquareCheck as CheckSquare, FileCheck, ClipboardList, ChartBar as BarChart3, Clock, Calendar, Eye } from 'lucide-react';
 
 const backendBase = getBackendBase();
@@ -1022,6 +1023,7 @@ export default function StudentCourse() {
                     status={cardStatus}
                     submittedAt={assignment.submitted_at}
                     gradeScore={assignment.grade_score}
+                    isSocratic={hasStudioBlueprint(assignment.id)}
                     onViewAssignment={() => {
                       router.push(`/student/course/${courseId}/assignment/${assignment.id}`);
                     }}

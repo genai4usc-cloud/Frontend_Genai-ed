@@ -17,6 +17,7 @@ import EducatorQuizCard from '@/components/EducatorQuizCard';
 import StudentManagementTable, { StudentPerformanceRow } from '@/components/StudentManagementTable';
 import { ArrowLeft, Video, Plus, Users, BookOpen, FileText, ListChecks, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { hasStudioBlueprint } from '@/lib/socraticWriting';
 
 type Lecture = {
   id: string;
@@ -727,6 +728,16 @@ export default function CourseLectures() {
                       </button>
                       <button
                         onClick={() => {
+                          router.push(`/educator/assignment/new?courseId=${courseId}&mode=socratic`);
+                          setShowCreateMenu(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors flex items-center gap-2"
+                      >
+                        <BookOpen className="w-4 h-4" />
+                        New Socratic Assignment
+                      </button>
+                      <button
+                        onClick={() => {
                           router.push(`/educator/quiz/new?courseId=${courseId}`);
                           setShowCreateMenu(false);
                         }}
@@ -890,6 +901,7 @@ export default function CourseLectures() {
                       key={assignment.id}
                       assignment={assignment}
                       analytics={assignment.analytics}
+                      isSocratic={hasStudioBlueprint(assignment.id)}
                       onViewDetails={() => router.push(`/educator/assignment/${assignment.id}`)}
                     />
                   ))}
