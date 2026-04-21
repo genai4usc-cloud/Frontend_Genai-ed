@@ -17,7 +17,7 @@ import {
   getStudentAssignmentCardStatus,
   StudentCourseAssignment,
 } from '@/lib/assignments';
-import { hasStudioBlueprint } from '@/lib/socraticWriting';
+import { loadSocraticAssignmentIds } from '@/lib/socraticWriting';
 import { BookOpen, MessageSquare, Upload, FileText, Trash2, Send, Video, SquareCheck as CheckSquare, FileCheck, ClipboardList, ChartBar as BarChart3, Clock, Calendar, Eye } from 'lucide-react';
 
 const backendBase = getBackendBase();
@@ -131,6 +131,7 @@ export default function StudentCourse() {
     completedLectures: 0,
     totalLectures: 0,
   });
+  const [socraticAssignmentIds, setSocraticAssignmentIds] = useState<Set<string>>(new Set());
 
   const [contextSources, setContextSources] = useState({
     syllabus: true,
@@ -176,6 +177,21 @@ export default function StudentCourse() {
   useEffect(() => {
     checkAuthAndLoadData();
   }, [courseId]);
+
+  useEffect(() => {
+    const syncSocraticAssignments = () => {
+      setSocraticAssignmentIds(new Set(loadSocraticAssignmentIds()));
+    };
+
+    syncSocraticAssignments();
+    window.addEventListener('focus', syncSocraticAssignments);
+    window.addEventListener('storage', syncSocraticAssignments);
+
+    return () => {
+      window.removeEventListener('focus', syncSocraticAssignments);
+      window.removeEventListener('storage', syncSocraticAssignments);
+    };
+  }, []);
 
   useEffect(() => {
     if (onlineQuizzes.length > 0 && inClassQuizzes.length === 0 && quizView !== 'online') {
@@ -1023,7 +1039,7 @@ export default function StudentCourse() {
                     status={cardStatus}
                     submittedAt={assignment.submitted_at}
                     gradeScore={assignment.grade_score}
-                    isSocratic={hasStudioBlueprint(assignment.id)}
+                    isSocratic={socraticAssignmentIds.has(assignment.id)}
                     onViewAssignment={() => {
                       router.push(`/student/course/${courseId}/assignment/${assignment.id}`);
                     }}

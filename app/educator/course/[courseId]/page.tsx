@@ -17,7 +17,7 @@ import EducatorQuizCard from '@/components/EducatorQuizCard';
 import StudentManagementTable, { StudentPerformanceRow } from '@/components/StudentManagementTable';
 import { ArrowLeft, Video, Plus, Users, BookOpen, FileText, ListChecks, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { hasStudioBlueprint } from '@/lib/socraticWriting';
+import { loadSocraticAssignmentIds } from '@/lib/socraticWriting';
 
 type Lecture = {
   id: string;
@@ -96,6 +96,7 @@ export default function CourseLectures() {
   const [quizAnalytics, setQuizAnalytics] = useState<Record<string, QuizAnalytics>>({});
   const [studentPerformance, setStudentPerformance] = useState<StudentPerformanceRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [socraticAssignmentIds, setSocraticAssignmentIds] = useState<Set<string>>(new Set());
   const [showDeleteLectureModal, setShowDeleteLectureModal] = useState<string | null>(null);
   const [showDeleteArtifactModal, setShowDeleteArtifactModal] = useState<{ lectureId: string; artifactId: string; type: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -105,6 +106,21 @@ export default function CourseLectures() {
 
   useEffect(() => {
     checkAuth();
+  }, []);
+
+  useEffect(() => {
+    const syncSocraticAssignments = () => {
+      setSocraticAssignmentIds(new Set(loadSocraticAssignmentIds()));
+    };
+
+    syncSocraticAssignments();
+    window.addEventListener('focus', syncSocraticAssignments);
+    window.addEventListener('storage', syncSocraticAssignments);
+
+    return () => {
+      window.removeEventListener('focus', syncSocraticAssignments);
+      window.removeEventListener('storage', syncSocraticAssignments);
+    };
   }, []);
 
   useEffect(() => {
@@ -901,7 +917,7 @@ export default function CourseLectures() {
                       key={assignment.id}
                       assignment={assignment}
                       analytics={assignment.analytics}
-                      isSocratic={hasStudioBlueprint(assignment.id)}
+                      isSocratic={socraticAssignmentIds.has(assignment.id)}
                       onViewDetails={() => router.push(`/educator/assignment/${assignment.id}`)}
                     />
                   ))}

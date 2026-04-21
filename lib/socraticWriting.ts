@@ -115,6 +115,8 @@ type CreateBlueprintInput = {
 };
 
 const STORAGE_PREFIX = 'socratic-writing';
+const REGISTRY_KEY = `${STORAGE_PREFIX}:assignment-registry`;
+const BLUEPRINT_KEY_PREFIX = `${STORAGE_PREFIX}:blueprint:`;
 
 const GLOBAL_PROMPT = `You are an essay-writing coach for students. Your job is to develop the student's thinking, not to do their thinking for them.
 
@@ -250,6 +252,37 @@ const safeJsonParse = <T>(value: string | null): T | null => {
 };
 
 const storageKey = (kind: string, id: string) => `${STORAGE_PREFIX}:${kind}:${id}`;
+
+const loadRegistry = () => {
+  if (typeof window === 'undefined') return [] as string[];
+  return safeJsonParse<string[]>(window.localStorage.getItem(REGISTRY_KEY)) || [];
+};
+
+const saveRegistry = (assignmentIds: string[]) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(REGISTRY_KEY, JSON.stringify(Array.from(new Set(assignmentIds))));
+};
+
+export const markAssignmentAsSocratic = (assignmentId: string) => {
+  const registry = loadRegistry();
+  saveRegistry([...registry, assignmentId]);
+};
+
+export const loadSocraticAssignmentIds = () => {
+  if (typeof window === 'undefined') return [] as string[];
+
+  const assignmentIds = new Set(loadRegistry());
+
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index);
+    if (!key || !key.startsWith(BLUEPRINT_KEY_PREFIX)) continue;
+    assignmentIds.add(key.slice(BLUEPRINT_KEY_PREFIX.length));
+  }
+
+  const normalizedAssignmentIds = Array.from(assignmentIds);
+  saveRegistry(normalizedAssignmentIds);
+  return normalizedAssignmentIds;
+};
 
 const nowIso = () => new Date().toISOString();
 
@@ -490,6 +523,7 @@ export const buildPdfHtml = (blueprint: SocraticStudioBlueprint, session: Socrat
 export const saveStudioBlueprint = (assignmentId: string, blueprint: SocraticStudioBlueprint) => {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(storageKey('blueprint', assignmentId), JSON.stringify(blueprint));
+  markAssignmentAsSocratic(assignmentId);
 };
 
 export const loadStudioBlueprint = (assignmentId: string) => {
@@ -499,7 +533,9 @@ export const loadStudioBlueprint = (assignmentId: string) => {
   );
 };
 
-export const hasStudioBlueprint = (assignmentId: string) => Boolean(loadStudioBlueprint(assignmentId));
+export const hasStudioBlueprint = (assignmentId: string) => {
+  return loadSocraticAssignmentIds().includes(assignmentId) || Boolean(loadStudioBlueprint(assignmentId));
+};
 
 export const saveStudioDraft = (courseId: string, blueprint: SocraticStudioBlueprint) => {
   if (typeof window === 'undefined') return;
