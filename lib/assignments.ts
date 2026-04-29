@@ -1,6 +1,7 @@
 export type AssignmentStatus = 'draft' | 'published' | 'closed' | 'archived';
 export type AssignmentSubmissionMode = 'file_upload' | 'text_entry' | 'file_and_text';
 export type StudentAssignmentCardStatus = 'pending' | 'submitted' | 'late' | 'graded' | 'closed';
+export type AssignmentExperienceType = 'standard' | 'socratic_writing';
 
 export type AssignmentRecord = {
   id: string;
@@ -16,6 +17,7 @@ export type AssignmentRecord = {
   points_possible: number;
   status: AssignmentStatus;
   submission_mode: AssignmentSubmissionMode;
+  experience_type: AssignmentExperienceType;
   allowed_mime_types: string[];
   max_file_size_bytes: number | null;
   max_files: number;
@@ -38,6 +40,7 @@ export type StudentCourseAssignment = {
   points_possible: number;
   status: AssignmentStatus;
   submission_mode: AssignmentSubmissionMode;
+  experience_type: AssignmentExperienceType;
   allowed_mime_types: string[];
   max_file_size_bytes: number | null;
   max_files: number;

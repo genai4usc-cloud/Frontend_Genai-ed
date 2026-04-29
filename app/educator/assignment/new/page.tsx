@@ -20,12 +20,15 @@ import {
   sanitizeFileName,
 } from '@/lib/assignments';
 import {
+  clearPendingSocraticCreatedResource,
   createDefaultStudioBlueprint,
+  loadPendingSocraticCreatedResource,
   loadStudioDraft,
-  saveStudioBlueprint,
   saveStudioDraft,
+  SocraticResource,
   SocraticStudioBlueprint,
 } from '@/lib/socraticWriting';
+import { saveSocraticAssignmentConfig } from '@/lib/socraticWritingApi';
 
 type CourseRosterEntry = {
   course_student_id: string;
@@ -35,6 +38,28 @@ type CourseRosterEntry = {
   last_name: string | null;
   created_at: string;
 };
+
+type ExistingReadingOption = {
+  id: string;
+  title: string;
+  summary: string;
+  url?: string | null;
+  storageBucket?: string | null;
+  storagePath?: string | null;
+};
+
+type ExistingLinkedOption = {
+  id: string;
+  title: string;
+  summary: string;
+};
+
+const LEGACY_SOCRATIC_RESOURCE_TITLES = new Set([
+  'Epistemology Reading Pack',
+  'Avatar Lecture: Framing Knowledge and Justification',
+  'Personalized Knowledge Check',
+  'Optional Lecture: Counterarguments in Philosophy Essays',
+]);
 
 const toDateTimeLocalValue = (value: string | null) => {
   if (!value) return '';
@@ -66,6 +91,9 @@ export default function NewAssignmentPage() {
     searchParams.get('mode') === 'socratic' ? 'socratic' : 'standard',
   );
   const [studioBlueprint, setStudioBlueprint] = useState<SocraticStudioBlueprint | null>(null);
+  const [availableReadings, setAvailableReadings] = useState<ExistingReadingOption[]>([]);
+  const [availableQuizzes, setAvailableQuizzes] = useState<ExistingLinkedOption[]>([]);
+  const [availableAvatarLectures, setAvailableAvatarLectures] = useState<ExistingLinkedOption[]>([]);
 
   const [selectedCourseId, setSelectedCourseId] = useState('');
   const [assignmentTitle, setAssignmentTitle] = useState('');
@@ -96,10 +124,17 @@ export default function NewAssignmentPage() {
     if (!selectedCourseId) {
       setRoster([]);
       setPreviewNumber(1);
+      setAvailableReadings([]);
+      setAvailableQuizzes([]);
+      setAvailableAvatarLectures([]);
       return;
     }
 
-    void Promise.all([loadRoster(selectedCourseId), loadAssignmentPreview(selectedCourseId)]);
+    void Promise.all([
+      loadRoster(selectedCourseId),
+      loadAssignmentPreview(selectedCourseId),
+      loadSocraticResourceLibrary(selectedCourseId),
+    ]);
   }, [selectedCourseId]);
 
   useEffect(() => {
@@ -126,6 +161,15 @@ export default function NewAssignmentPage() {
           assignmentBrief: seed.assignmentBrief,
           dueAt: seed.dueAt,
           pointsPossible: seed.pointsPossible,
+          resources:
+            (savedDraft.resources || []).length > 0
+            && (savedDraft.resources || []).every(
+              (resource) =>
+                resource.type === 'lecture'
+                || LEGACY_SOCRATIC_RESOURCE_TITLES.has(resource.title),
+            )
+              ? []
+              : (savedDraft.resources || []),
         }
       : seed;
 
@@ -135,6 +179,42 @@ export default function NewAssignmentPage() {
   useEffect(() => {
     if (assignmentExperience !== 'socratic' || !selectedCourseId || !studioBlueprint) return;
     saveStudioDraft(selectedCourseId, studioBlueprint);
+  }, [assignmentExperience, selectedCourseId, studioBlueprint]);
+
+  useEffect(() => {
+    if (assignmentExperience !== 'socratic' || !selectedCourseId || !studioBlueprint) return;
+    const pendingResource = loadPendingSocraticCreatedResource();
+    if (!pendingResource || pendingResource.courseId !== selectedCourseId) return;
+
+    setStudioBlueprint((current) => {
+      if (!current) return current;
+
+      const nextResource: SocraticResource = {
+        id:
+          pendingResource.type === 'reading'
+            ? pendingResource.id
+            : `${pendingResource.type === 'quiz' ? 'quiz' : 'avatar'}-${pendingResource.id}`,
+        type: pendingResource.type,
+        title: pendingResource.title,
+        summary: pendingResource.summary,
+        required: false,
+        createdFrom: 'new',
+        resourceRefId: pendingResource.type === 'reading' ? undefined : pendingResource.id,
+        url: pendingResource.url || null,
+        storageBucket: pendingResource.storageBucket || null,
+        storagePath: pendingResource.storagePath || null,
+        stage: 'research',
+      };
+
+      const exists = current.resources.some((resource) => resource.id === nextResource.id);
+      if (exists) return current;
+
+      return {
+        ...current,
+        resources: [...current.resources, nextResource],
+      };
+    });
+    clearPendingSocraticCreatedResource();
   }, [assignmentExperience, selectedCourseId, studioBlueprint]);
 
   const bootstrap = async () => {
@@ -225,6 +305,199 @@ export default function NewAssignmentPage() {
     setPreviewNumber((data?.assignment_number || 0) + 1);
   };
 
+  const loadSocraticResourceLibrary = async (courseId: string) => {
+    try {
+      const courseRecord = courses.find((course) => course.id === courseId) || null;
+
+      const readingOptions: ExistingReadingOption[] = [];
+      const seen = new Set<string>();
+      const appendReading = (reading: ExistingReadingOption) => {
+        if (!reading.id || seen.has(reading.id)) return;
+        seen.add(reading.id);
+        readingOptions.push(reading);
+      };
+
+      const addCourseMaterialList = (
+        items: Array<Record<string, unknown>> | null | undefined,
+        prefix: string,
+        fallbackLabel: string,
+      ) => {
+        items?.forEach((item, index) => {
+          if (!item || typeof item !== 'object') return;
+          const title = String(item.name || item.title || `${fallbackLabel} ${index + 1}`);
+          const summary = String(item.description || item.summary || '');
+          const url = typeof item.url === 'string' ? item.url : typeof item.file_url === 'string' ? item.file_url : null;
+          const storagePath = typeof item.storage_path === 'string' ? item.storage_path : null;
+          appendReading({
+            id: `${prefix}:${storagePath || url || index}`,
+            title,
+            summary,
+            url,
+            storageBucket: storagePath ? 'course-files' : null,
+            storagePath,
+          });
+        });
+      };
+
+      addCourseMaterialList(courseRecord?.course_materials_data as Array<Record<string, unknown>> | undefined, 'course-material', 'Course material');
+      addCourseMaterialList(courseRecord?.background_materials_data as Array<Record<string, unknown>> | undefined, 'background-material', 'Background material');
+
+      (courseRecord?.course_materials_urls || []).forEach((url, index) => {
+        appendReading({
+          id: `course-url:${url}`,
+          title: `Course material ${index + 1}`,
+          summary: '',
+          url,
+        });
+      });
+
+      (courseRecord?.background_materials_urls || []).forEach((url, index) => {
+        appendReading({
+          id: `background-url:${url}`,
+          title: `Background material ${index + 1}`,
+          summary: '',
+          url,
+        });
+      });
+
+      const [{ data: lectureRows, error: lectureError }, { data: quizRows, error: quizError }, { data: uploadRows, error: uploadError }] = await Promise.all([
+        supabase
+          .from('lecture_courses')
+          .select('lecture_id, lectures(id, title, description)')
+          .eq('course_id', courseId),
+        supabase
+          .from('quiz_batch_courses')
+          .select('quiz_batch_id, quiz_batches(id, quiz_name, status)')
+          .eq('course_id', courseId),
+        supabase
+          .from('student_uploads')
+          .select('id, file_name, file_url')
+          .eq('course_id', courseId),
+      ]);
+
+      if (lectureError) throw lectureError;
+      if (quizError) throw quizError;
+      if (uploadError) throw uploadError;
+
+      const lectureIds = (lectureRows || []).map((row: any) => row.lecture_id).filter(Boolean);
+      const { data: lectureArtifacts, error: lectureArtifactsError } = lectureIds.length
+        ? await supabase
+            .from('lecture_artifacts')
+            .select('id, lecture_id, artifact_type, artifact_url, file_url, storage_path')
+            .in('lecture_id', lectureIds)
+        : { data: [], error: null as any };
+
+      if (lectureArtifactsError) throw lectureArtifactsError;
+
+      const avatarLectureOptions: ExistingLinkedOption[] = (lectureRows || []).map((row: any) => ({
+        id: row.lecture_id,
+        title: row.lectures?.title || 'Untitled lecture',
+        summary: row.lectures?.description || '',
+      }));
+
+      const artifactsByLectureId = (lectureArtifacts || []).reduce<Record<string, any[]>>((acc, artifact: any) => {
+        const lectureId = artifact.lecture_id;
+        if (!lectureId) return acc;
+        if (!acc[lectureId]) {
+          acc[lectureId] = [];
+        }
+        acc[lectureId].push(artifact);
+        return acc;
+      }, {});
+
+      (lectureRows || []).forEach((row: any) => {
+        const lectureTitle = row.lectures?.title || 'Lecture';
+        (artifactsByLectureId[row.lecture_id] || []).forEach((artifact: any) => {
+          const fileUrl = artifact.file_url || artifact.artifact_url || null;
+          if (!fileUrl || !String(fileUrl).toLowerCase().includes('.pdf')) return;
+          appendReading({
+            id: `lecture-artifact:${artifact.id}`,
+            title: `${lectureTitle} PDF`,
+            summary: artifact.artifact_type || 'Lecture artifact',
+            url: fileUrl,
+            storageBucket: artifact.storage_path ? 'lecture-assets' : null,
+            storagePath: artifact.storage_path || null,
+          });
+        });
+      });
+
+      (uploadRows || []).forEach((upload: any) => {
+        const fileName = upload.file_name || 'Student upload';
+        const fileUrl = upload.file_url || null;
+        if (!String(fileName).toLowerCase().includes('.pdf') && !String(fileUrl).toLowerCase().includes('.pdf')) {
+          return;
+        }
+        appendReading({
+          id: `student-upload:${upload.id}`,
+          title: fileName,
+          summary: 'Uploaded course PDF',
+          url: fileUrl,
+        });
+      });
+
+      setAvailableReadings(readingOptions);
+      setAvailableAvatarLectures(avatarLectureOptions);
+      setAvailableQuizzes(
+        (quizRows || []).map((row: any) => ({
+          id: row.quiz_batch_id,
+          title: row.quiz_batches?.quiz_name || 'Untitled quiz',
+          summary: row.quiz_batches?.status || '',
+        })),
+      );
+    } catch (error) {
+      console.error('Error loading Socratic resource library:', error);
+      toast.error('Failed to load Socratic course resources.');
+      setAvailableReadings([]);
+      setAvailableQuizzes([]);
+      setAvailableAvatarLectures([]);
+    }
+  };
+
+  const handleUploadSocraticReading = async (file: File) => {
+    if (!selectedCourseId || !studioBlueprint) return;
+    if (file.type !== 'application/pdf') {
+      throw new Error('Only PDF readings can be uploaded here.');
+    }
+
+    const storagePath = `${selectedCourseId}/materials/${Date.now()}-${sanitizeFileName(file.name)}`;
+    const uploadResult = await uploadFile(file, storagePath, 'course-files');
+    if (uploadResult.error || !uploadResult.url) {
+      throw new Error(uploadResult.error || 'Failed to upload reading PDF.');
+    }
+
+    const nextResource: SocraticResource = {
+      id: `reading-upload-${Date.now()}`,
+      type: 'reading',
+      title: file.name.replace(/\.pdf$/i, ''),
+      summary: 'Uploaded reading PDF',
+      required: false,
+      createdFrom: 'upload',
+      url: uploadResult.url,
+      storageBucket: 'course-files',
+      storagePath,
+      stage: 'research',
+    };
+
+    setStudioBlueprint({
+      ...studioBlueprint,
+      resources: [...studioBlueprint.resources, nextResource],
+    });
+  };
+
+  const navigateToCreateQuiz = () => {
+    const returnTo = `/educator/assignment/new?courseId=${selectedCourseId}&mode=socratic`;
+    router.push(
+      `/educator/quiz/new?courseId=${selectedCourseId}&socraticMode=online&socraticAttach=quiz&returnTo=${encodeURIComponent(returnTo)}`,
+    );
+  };
+
+  const navigateToCreateAvatarLecture = () => {
+    const returnTo = `/educator/assignment/new?courseId=${selectedCourseId}&mode=socratic`;
+    router.push(
+      `/educator/lecture/new?courseId=${selectedCourseId}&socraticAttach=avatar_lecture&returnTo=${encodeURIComponent(returnTo)}`,
+    );
+  };
+
   const toggleAllowedMimeType = (mime: string) => {
     setAllowedMimeTypes((current) =>
       current.includes(mime)
@@ -289,6 +562,9 @@ export default function NewAssignmentPage() {
     let assignmentId: string | null = null;
 
     try {
+      const effectiveSubmissionMode: AssignmentSubmissionMode =
+        assignmentExperience === 'socratic' ? 'text_entry' : submissionMode;
+
       const { data: assignmentRows, error: createError } = await supabase.rpc(
         'create_course_assignment',
         {
@@ -297,14 +573,14 @@ export default function NewAssignmentPage() {
           p_description: description,
           p_points_possible: Number(pointsPossible) || 0,
           p_status: status,
-          p_submission_mode: submissionMode,
+          p_submission_mode: effectiveSubmissionMode,
           p_allowed_mime_types:
-            submissionMode === 'text_entry' ? [] : allowedMimeTypes,
+            effectiveSubmissionMode === 'text_entry' ? [] : allowedMimeTypes,
           p_max_file_size_bytes:
-            submissionMode === 'text_entry'
+            effectiveSubmissionMode === 'text_entry'
               ? null
               : (Number(maxFileSizeMb) || 0) * 1024 * 1024,
-          p_max_files: submissionMode === 'text_entry' ? 0 : Number(maxFiles) || 1,
+          p_max_files: effectiveSubmissionMode === 'text_entry' ? 0 : Number(maxFiles) || 1,
           p_available_at: fromDateTimeLocalValue(availableAt),
           p_due_at: fromDateTimeLocalValue(dueAt),
           p_late_until: fromDateTimeLocalValue(lateUntil),
@@ -350,7 +626,7 @@ export default function NewAssignmentPage() {
       }
 
       if (assignmentExperience === 'socratic' && studioBlueprint) {
-        saveStudioBlueprint(assignmentId, {
+        await saveSocraticAssignmentConfig(assignmentId, {
           ...studioBlueprint,
           assignmentId,
           courseId: selectedCourseId,
@@ -554,12 +830,20 @@ export default function NewAssignmentPage() {
               </button>
             </div>
 
-            {assignmentExperience === 'socratic' && studioBlueprint && (
-              <SocraticStudioConfigurator
-                blueprint={studioBlueprint}
-                onChange={setStudioBlueprint}
-              />
-            )}
+              {assignmentExperience === 'socratic' && studioBlueprint && (
+                <SocraticStudioConfigurator
+                  blueprint={studioBlueprint}
+                  availableResources={{
+                    readings: availableReadings,
+                    quizzes: availableQuizzes,
+                    avatarLectures: availableAvatarLectures,
+                  }}
+                  onChange={setStudioBlueprint}
+                  onUploadReading={handleUploadSocraticReading}
+                  onCreateQuiz={navigateToCreateQuiz}
+                  onCreateAvatarLecture={navigateToCreateAvatarLecture}
+                />
+              )}
           </section>
 
           <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-5">

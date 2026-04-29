@@ -17,7 +17,6 @@ import {
   getStudentAssignmentCardStatus,
   StudentCourseAssignment,
 } from '@/lib/assignments';
-import { loadSocraticAssignmentIds } from '@/lib/socraticWriting';
 import { BookOpen, MessageSquare, Upload, FileText, Trash2, Send, Video, SquareCheck as CheckSquare, FileCheck, ClipboardList, ChartBar as BarChart3, Clock, Calendar, Eye } from 'lucide-react';
 
 const backendBase = getBackendBase();
@@ -131,8 +130,6 @@ export default function StudentCourse() {
     completedLectures: 0,
     totalLectures: 0,
   });
-  const [socraticAssignmentIds, setSocraticAssignmentIds] = useState<Set<string>>(new Set());
-
   const [contextSources, setContextSources] = useState({
     syllabus: true,
     courseMaterials: true,
@@ -177,21 +174,6 @@ export default function StudentCourse() {
   useEffect(() => {
     checkAuthAndLoadData();
   }, [courseId]);
-
-  useEffect(() => {
-    const syncSocraticAssignments = () => {
-      setSocraticAssignmentIds(new Set(loadSocraticAssignmentIds()));
-    };
-
-    syncSocraticAssignments();
-    window.addEventListener('focus', syncSocraticAssignments);
-    window.addEventListener('storage', syncSocraticAssignments);
-
-    return () => {
-      window.removeEventListener('focus', syncSocraticAssignments);
-      window.removeEventListener('storage', syncSocraticAssignments);
-    };
-  }, []);
 
   useEffect(() => {
     if (onlineQuizzes.length > 0 && inClassQuizzes.length === 0 && quizView !== 'online') {
@@ -358,7 +340,35 @@ export default function StudentCourse() {
         : [],
     })) as StudentCourseAssignment[];
 
-    setStudentAssignments(normalizedAssignments);
+    if (normalizedAssignments.length === 0) {
+      setStudentAssignments([]);
+      return;
+    }
+
+    const { data: assignmentRows, error: assignmentRowsError } = await supabase
+      .from('assignments')
+      .select('id, experience_type')
+      .in('id', normalizedAssignments.map((assignment) => assignment.id));
+
+    if (assignmentRowsError) {
+      console.error('Error loading assignment experience types:', assignmentRowsError);
+      setStudentAssignments(normalizedAssignments);
+      return;
+    }
+
+    const experienceTypeById = new Map(
+      ((assignmentRows || []) as Array<{ id: string; experience_type: StudentCourseAssignment['experience_type'] }>).map((row) => [
+        row.id,
+        row.experience_type || 'standard',
+      ]),
+    );
+
+    setStudentAssignments(
+      normalizedAssignments.map((assignment) => ({
+        ...assignment,
+        experience_type: experienceTypeById.get(assignment.id) || 'standard',
+      })),
+    );
   };
 
   const loadInClassQuizzes = async (userId: string) => {
@@ -1039,7 +1049,7 @@ export default function StudentCourse() {
                     status={cardStatus}
                     submittedAt={assignment.submitted_at}
                     gradeScore={assignment.grade_score}
-                    isSocratic={socraticAssignmentIds.has(assignment.id)}
+                    isSocratic={assignment.experience_type === 'socratic_writing'}
                     onViewAssignment={() => {
                       router.push(`/student/course/${courseId}/assignment/${assignment.id}`);
                     }}

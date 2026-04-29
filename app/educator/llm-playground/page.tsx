@@ -189,6 +189,108 @@ async function apiPost(path: string, body: any): Promise<any> {
   return json;
 }
 
+async function streamSinglePlaygroundResponse(
+  body: any,
+  handlers: {
+    onDelta: (chunk: string) => void;
+    onDone: (item: EnvelopeItem | null) => void;
+    onError: (message: string) => void;
+  }
+): Promise<void> {
+  const res = await fetch(`${BACKEND_BASE}/api/llm-playground/single/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    let json: any = {};
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      json = {};
+    }
+    throw new Error(json.detail || json.message || text || `HTTP ${res.status}`);
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) {
+    throw new Error('Streaming response body was not available.');
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let currentEvent = 'message';
+
+  const processEvent = (eventName: string, data: string) => {
+    if (!data.trim()) return;
+    const payload = JSON.parse(data);
+    if (eventName === 'delta') {
+      handlers.onDelta(payload.text || '');
+      return;
+    }
+    if (eventName === 'done') {
+      handlers.onDone((payload.item as EnvelopeItem | undefined) ?? null);
+      return;
+    }
+    if (eventName === 'error') {
+      handlers.onError(payload.message || 'Streaming request failed.');
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+
+    let boundary = buffer.indexOf('\n\n');
+    while (boundary !== -1) {
+      const rawEvent = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+
+      const lines = rawEvent.split(/\r?\n/);
+      const dataLines: string[] = [];
+      currentEvent = 'message';
+
+      for (const line of lines) {
+        if (line.startsWith('event:')) {
+          currentEvent = line.slice(6).trim();
+        } else if (line.startsWith('data:')) {
+          dataLines.push(line.slice(5).trimStart());
+        }
+      }
+
+      if (dataLines.length > 0) {
+        processEvent(currentEvent, dataLines.join('\n'));
+      }
+
+      boundary = buffer.indexOf('\n\n');
+    }
+
+    if (done) {
+      const trailing = buffer.trim();
+      if (trailing) {
+        const lines = trailing.split(/\r?\n/);
+        const dataLines: string[] = [];
+        currentEvent = 'message';
+        for (const line of lines) {
+          if (line.startsWith('event:')) {
+            currentEvent = line.slice(6).trim();
+          } else if (line.startsWith('data:')) {
+            dataLines.push(line.slice(5).trimStart());
+          }
+        }
+        if (dataLines.length > 0) {
+          processEvent(currentEvent, dataLines.join('\n'));
+        }
+      }
+      break;
+    }
+  }
+}
+
 type JudgeAssessment = {
   targetModelId: string;
   risk_score: number;
@@ -297,6 +399,7 @@ export default function LLMPlayground() {
 
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [activeSingleAssistantId, setActiveSingleAssistantId] = useState<string | null>(null);
 
   const [temperature, setTemperature] = useState(0.2);
   const [maxTokens, setMaxTokens] = useState(2000);
@@ -409,17 +512,27 @@ export default function LLMPlayground() {
     setInput('');
 
     if (mode === 'single') {
+      const userMessageId = Date.now().toString();
+      const assistantMessageId = `${userMessageId}-assistant`;
       const userMessage: Message = {
-        id: Date.now().toString(),
+        id: userMessageId,
         role: 'user',
         content: userPrompt,
         timestamp: new Date()
       };
-      setSingleMessages((prev) => [...prev, userMessage]);
+      const assistantMessage: Message = {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: '',
+        model: selectedModel,
+        timestamp: new Date()
+      };
+      setSingleMessages((prev) => [...prev, userMessage, assistantMessage]);
 
       setIsProcessing(true);
+      setActiveSingleAssistantId(assistantMessageId);
       try {
-        const resp = await apiPost('/api/llm-playground/single', {
+        await streamSinglePlaygroundResponse({
           modelId: selectedModel,
           prompt: userPrompt,
           config: {
@@ -428,31 +541,47 @@ export default function LLMPlayground() {
             includeSystemInstruction,
             systemPrompt,
           },
+        }, {
+          onDelta: (chunk) => {
+            setSingleMessages((prev) =>
+              prev.map((message) =>
+                message.id === assistantMessageId
+                  ? { ...message, content: `${message.content}${chunk}` }
+                  : message
+              )
+            );
+          },
+          onDone: (item) => {
+            const text = getEnvelopeText(item);
+            setSingleMessages((prev) =>
+              prev.map((message) =>
+                message.id === assistantMessageId
+                  ? { ...message, content: text }
+                  : message
+              )
+            );
+          },
+          onError: (message) => {
+            setSingleMessages((prev) =>
+              prev.map((entry) =>
+                entry.id === assistantMessageId
+                  ? { ...entry, content: `Error: ${message}` }
+                  : entry
+              )
+            );
+          },
         });
-
-        const env = resp as EnvelopeResponse;
-        const item = env.items?.[0];
-        const text = getEnvelopeText(item);
-
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: text,
-          model: selectedModel,
-          timestamp: new Date()
-        };
-        setSingleMessages((prev) => [...prev, assistantMessage]);
       } catch (error: any) {
-        const errorMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: `Error: ${error.message}`,
-          model: selectedModel,
-          timestamp: new Date()
-        };
-        setSingleMessages((prev) => [...prev, errorMessage]);
+        setSingleMessages((prev) =>
+          prev.map((entry) =>
+            entry.id === assistantMessageId
+              ? { ...entry, content: `Error: ${error.message}` }
+              : entry
+          )
+        );
       } finally {
         setIsProcessing(false);
+        setActiveSingleAssistantId(null);
       }
       return;
     }
@@ -2281,7 +2410,7 @@ export default function LLMPlayground() {
                       </div>
                     ))}
 
-                    {isProcessing && (
+                    {isProcessing && !activeSingleAssistantId && (
                       <div className="flex gap-3 justify-start">
                         <div className="w-8 h-8 bg-brand-maroon rounded-full flex items-center justify-center flex-shrink-0">
                           <Bot className="w-5 h-5 text-white" />

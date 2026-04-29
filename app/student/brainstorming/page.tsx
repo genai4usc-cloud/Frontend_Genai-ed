@@ -5,10 +5,6 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, BookOpen, Clock3, FileText, Lightbulb, Sparkles } from 'lucide-react';
 import StudentLayout from '@/components/StudentLayout';
 import { supabase, Profile } from '@/lib/supabase';
-import {
-  createDefaultStudioBlueprint,
-  toAssignmentSummary,
-} from '@/lib/socraticWriting';
 
 type CourseRow = {
   id: string;
@@ -26,11 +22,22 @@ type StudentAssignmentRow = {
   course_id: string;
 };
 
+type AssignmentExperienceRow = {
+  id: string;
+  experience_type: string;
+};
+
+type SocraticResourceCountRow = {
+  assignment_id: string;
+  required: boolean;
+};
+
 export default function Brainstorming() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [assignments, setAssignments] = useState<StudentAssignmentRow[]>([]);
+  const [resourceCountsByAssignment, setResourceCountsByAssignment] = useState<Record<string, { total: number; required: number }>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,23 +47,24 @@ export default function Brainstorming() {
   const assignmentCards = useMemo(() => {
     return assignments.map((assignment) => {
       const course = courses.find((courseRow) => courseRow.id === assignment.course_id);
-      const blueprint = createDefaultStudioBlueprint({
+      const resourceCounts = resourceCountsByAssignment[assignment.id] || { total: 0, required: 0 };
+
+      return {
         assignmentId: assignment.id,
         courseId: assignment.course_id,
         courseCode: course?.course_number || 'COURSE',
         courseTitle: course?.title || 'Course',
         assignmentTitle: assignment.assignment_title || assignment.assignment_label,
-        assignmentBrief: assignment.description || 'Use the four-stage studio to clarify the prompt, complete research, build the argument, and write the essay.',
+        assignmentBrief:
+          assignment.description
+          || 'Use the four-stage studio to clarify the prompt, complete research, build the argument, and write the essay.',
         dueAt: assignment.due_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        pointsPossible: assignment.points_possible || 100,
-      });
-
-      return {
-        ...toAssignmentSummary(blueprint),
+        requiredResources: resourceCounts.required,
+        totalResources: resourceCounts.total,
         label: assignment.assignment_label,
       };
     });
-  }, [assignments, courses]);
+  }, [assignments, courses, resourceCountsByAssignment]);
 
   const bootstrap = async () => {
     try {
@@ -93,6 +101,7 @@ export default function Brainstorming() {
       if (courseIds.length === 0) {
         setCourses([]);
         setAssignments([]);
+        setResourceCountsByAssignment({});
         return;
       }
 
@@ -116,7 +125,66 @@ export default function Brainstorming() {
         }),
       );
 
-      setAssignments(assignmentResults.flat());
+      const allAssignments = assignmentResults.flat();
+      const assignmentIds = allAssignments.map((assignment) => assignment.id);
+
+      if (assignmentIds.length === 0) {
+        setAssignments([]);
+        setResourceCountsByAssignment({});
+        return;
+      }
+
+      const { data: assignmentTypeRows, error: assignmentTypeError } = await supabase
+        .from('assignments')
+        .select('id, experience_type')
+        .in('id', assignmentIds);
+
+      if (assignmentTypeError) {
+        throw assignmentTypeError;
+      }
+
+      const socraticAssignmentIds = new Set(
+        ((assignmentTypeRows || []) as AssignmentExperienceRow[])
+          .filter((assignment) => assignment.experience_type === 'socratic_writing')
+          .map((assignment) => assignment.id),
+      );
+
+      const socraticAssignments = allAssignments.filter((assignment) => socraticAssignmentIds.has(assignment.id));
+      setAssignments(socraticAssignments);
+
+      if (socraticAssignments.length === 0) {
+        setResourceCountsByAssignment({});
+        return;
+      }
+
+      const { data: resourceRows, error: resourceError } = await supabase
+        .from('assignment_socratic_resources')
+        .select('assignment_id, required')
+        .in('assignment_id', socraticAssignments.map((assignment) => assignment.id));
+
+      if (resourceError) {
+        throw resourceError;
+      }
+
+      const nextResourceCounts = socraticAssignments.reduce<Record<string, { total: number; required: number }>>(
+        (acc, assignment) => {
+          acc[assignment.id] = { total: 0, required: 0 };
+          return acc;
+        },
+        {},
+      );
+
+      ((resourceRows || []) as SocraticResourceCountRow[]).forEach((resource) => {
+        if (!nextResourceCounts[resource.assignment_id]) {
+          nextResourceCounts[resource.assignment_id] = { total: 0, required: 0 };
+        }
+        nextResourceCounts[resource.assignment_id].total += 1;
+        if (resource.required) {
+          nextResourceCounts[resource.assignment_id].required += 1;
+        }
+      });
+
+      setResourceCountsByAssignment(nextResourceCounts);
     } catch (error) {
       console.error('Error loading Socratic Writing Studio assignments:', error);
     } finally {

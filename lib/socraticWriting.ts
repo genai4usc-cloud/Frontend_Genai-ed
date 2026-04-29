@@ -21,7 +21,12 @@ export interface SocraticResource {
   title: string;
   summary: string;
   required: boolean;
-  createdFrom: 'existing' | 'new';
+  createdFrom: 'existing' | 'new' | 'upload';
+  resourceRefId?: string | null;
+  url?: string | null;
+  storageBucket?: string | null;
+  storagePath?: string | null;
+  stage?: SocraticStageKey | 'research';
 }
 
 export interface SocraticStudioBlueprint {
@@ -53,6 +58,8 @@ export interface SocraticLedgerEntry {
   title: string;
   content: string;
   createdAt: string;
+  entryType?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface SocraticResourceProgress {
@@ -102,6 +109,17 @@ export interface SocraticAssignmentSummary {
   totalResources: number;
 }
 
+export interface PendingSocraticCreatedResource {
+  courseId: string;
+  type: 'reading' | 'quiz' | 'avatar_lecture';
+  id: string;
+  title: string;
+  summary: string;
+  url?: string | null;
+  storageBucket?: string | null;
+  storagePath?: string | null;
+}
+
 type CreateBlueprintInput = {
   assignmentId: string;
   courseId: string;
@@ -117,6 +135,7 @@ type CreateBlueprintInput = {
 const STORAGE_PREFIX = 'socratic-writing';
 const REGISTRY_KEY = `${STORAGE_PREFIX}:assignment-registry`;
 const BLUEPRINT_KEY_PREFIX = `${STORAGE_PREFIX}:blueprint:`;
+const CREATED_RESOURCE_KEY = `${STORAGE_PREFIX}:created-resource`;
 
 const GLOBAL_PROMPT = `You are an essay-writing coach for students. Your job is to develop the student's thinking, not to do their thinking for them.
 
@@ -205,41 +224,6 @@ STAGE: WRITE
   },
 };
 
-const DEFAULT_RESOURCES: SocraticResource[] = [
-  {
-    id: 'reading-1',
-    type: 'reading',
-    title: 'Epistemology Reading Pack',
-    summary: 'Required article with key terms and competing definitions.',
-    required: true,
-    createdFrom: 'existing',
-  },
-  {
-    id: 'lecture-1',
-    type: 'avatar_lecture',
-    title: 'Avatar Lecture: Framing Knowledge and Justification',
-    summary: 'Short lecture connecting the prompt to course concepts.',
-    required: true,
-    createdFrom: 'existing',
-  },
-  {
-    id: 'quiz-1',
-    type: 'quiz',
-    title: 'Personalized Knowledge Check',
-    summary: 'Required quiz to test understanding before building the argument.',
-    required: true,
-    createdFrom: 'existing',
-  },
-  {
-    id: 'lecture-2',
-    type: 'lecture',
-    title: 'Optional Lecture: Counterarguments in Philosophy Essays',
-    summary: 'Optional refresher on building objections and responses.',
-    required: false,
-    createdFrom: 'new',
-  },
-];
-
 const defaultEssayHtml = `<h1>Working Draft</h1><p>Use Clarify to pin down the question, Research to gather evidence, Build to shape your argument, and Write to compose the essay in your own voice.</p>`;
 
 const safeJsonParse = <T>(value: string | null): T | null => {
@@ -284,6 +268,21 @@ export const loadSocraticAssignmentIds = () => {
   return normalizedAssignmentIds;
 };
 
+export const savePendingSocraticCreatedResource = (resource: PendingSocraticCreatedResource) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(CREATED_RESOURCE_KEY, JSON.stringify(resource));
+};
+
+export const loadPendingSocraticCreatedResource = () => {
+  if (typeof window === 'undefined') return null;
+  return safeJsonParse<PendingSocraticCreatedResource>(window.localStorage.getItem(CREATED_RESOURCE_KEY));
+};
+
+export const clearPendingSocraticCreatedResource = () => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(CREATED_RESOURCE_KEY);
+};
+
 const nowIso = () => new Date().toISOString();
 
 const uid = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -303,14 +302,6 @@ const getStepCompletion = (
     return requiredResources.every((resource) => {
       const progress = session.resourceProgress[resource.id];
       if (!progress) return false;
-
-      if (resource.type === 'reading') {
-        return progress.opened && (
-          progress.manuallyReviewed
-          || session.notes.some((note) => note.stage === 'research')
-        );
-      }
-
       return progress.completed;
     });
   }
@@ -350,7 +341,7 @@ export const createDefaultStudioBlueprint = (
     build: { ...STAGE_BASE_CONFIG.build, aiAllowed: true },
     write: { ...STAGE_BASE_CONFIG.write, aiAllowed: true },
   },
-  resources: DEFAULT_RESOURCES.map((resource) => ({ ...resource })),
+  resources: [],
 });
 
 export const createInitialStudioSession = (): SocraticStudioSession => ({
@@ -453,14 +444,7 @@ export const summarizeStudioState = (
     .filter((resource) => resource.required)
     .filter((resource) => {
       const progress = session.resourceProgress[resource.id];
-      if (!progress) return false;
-      if (resource.type === 'reading') {
-        return progress.opened && (
-          progress.manuallyReviewed
-          || session.notes.some((note) => note.stage === 'research')
-        );
-      }
-      return progress.completed;
+      return Boolean(progress?.completed);
     }).length;
 
   return `Assignment: ${blueprint.assignmentTitle}. Notes: ${noteCount}. Required resources completed: ${completedRequiredResources}/${blueprint.resources.filter((resource) => resource.required).length}. Current stage: ${session.activeStage}.`;

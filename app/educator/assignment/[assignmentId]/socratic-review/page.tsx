@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import EducatorLayout from '@/components/EducatorLayout';
 import SocraticStudioReview from '@/components/socratic-writing/SocraticStudioReview';
 import { supabase, Profile } from '@/lib/supabase';
@@ -9,7 +9,6 @@ import { supabase, Profile } from '@/lib/supabase';
 export default function EducatorSocraticReviewPage() {
   const router = useRouter();
   const params = useParams();
-  const searchParams = useSearchParams();
   const assignmentId = params.assignmentId as string;
 
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -61,17 +60,7 @@ export default function EducatorSocraticReviewPage() {
   return (
     <EducatorLayout profile={profile}>
       <SocraticStudioReview
-        seed={{
-          assignmentId,
-          courseId: searchParams.get('courseId') || 'course',
-          courseCode: searchParams.get('courseCode') || 'COURSE',
-          courseTitle: searchParams.get('courseTitle') || 'Course',
-          assignmentTitle: searchParams.get('assignmentTitle') || 'Socratic Writing Assignment',
-          assignmentBrief: searchParams.get('assignmentBrief') || 'Frontend-only review seed.',
-          dueAt: searchParams.get('dueAt') || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          studentId: searchParams.get('studentId') || 'student-preview',
-          studentName: searchParams.get('studentName') || 'Student Preview',
-        }}
+        assignmentId={assignmentId}
         onBack={() => router.push(`/educator/assignment/${assignmentId}`)}
       />
     </EducatorLayout>

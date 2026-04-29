@@ -11,6 +11,7 @@ import {
 import { uploadFile } from '@/lib/fileUpload';
 import { sanitizeFileName } from '@/lib/assignments';
 import { getBackendBase } from '@/lib/backend';
+import { savePendingSocraticCreatedResource } from '@/lib/socraticWriting';
 
 const base = getBackendBase();
 
@@ -100,6 +101,9 @@ export default function CreateQuiz() {
   const searchParams = useSearchParams();
   const editBatchId = searchParams.get('id');
   const preselectedCourseId = searchParams.get('courseId');
+  const socraticMode = searchParams.get('socraticMode');
+  const socraticAttach = searchParams.get('socraticAttach');
+  const returnTo = searchParams.get('returnTo');
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -150,6 +154,12 @@ export default function CreateQuiz() {
   useEffect(() => {
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    if (socraticMode === 'online') {
+      setCourseMode('online');
+    }
+  }, [socraticMode]);
 
   useEffect(() => {
     if (profile) {
@@ -1137,6 +1147,17 @@ export default function CreateQuiz() {
 
       alert(courseMode === 'online' ? 'Online quiz published successfully!' : 'Quiz saved successfully!');
       const returnCourseId = selectedCourseIds.size === 1 ? Array.from(selectedCourseIds)[0] : null;
+      if (returnTo && socraticAttach === 'quiz' && quizBatchId) {
+        savePendingSocraticCreatedResource({
+          courseId: preselectedCourseId || returnCourseId || '',
+          type: 'quiz',
+          id: quizBatchId,
+          title: quizName.trim() || 'Untitled quiz',
+          summary: courseMode === 'online' ? 'Online quiz created for Socratic Writing.' : 'Quiz created for Socratic Writing.',
+        });
+        router.push(returnTo);
+        return;
+      }
       router.push(returnCourseId ? `/educator/course/${returnCourseId}` : '/educator/dashboard');
     } catch (error) {
       console.error('Error saving quiz:', error);

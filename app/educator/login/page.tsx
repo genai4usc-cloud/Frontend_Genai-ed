@@ -4,6 +4,7 @@ import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { X, Mail, Lock, User, GraduationCap } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { warmAllModels } from '@/lib/modelWarmup';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function EducatorLoginPage() {
@@ -11,6 +12,7 @@ export default function EducatorLoginPage() {
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState('Please wait...');
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -24,6 +26,7 @@ export default function EducatorLoginPage() {
     e.preventDefault();
     setError(null);
     setLoading(true);
+    setLoadingMessage('Signing in...');
 
     try {
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -47,6 +50,8 @@ export default function EducatorLoginPage() {
           throw new Error('This account is not registered as an educator');
         }
 
+        setLoadingMessage('Preparing AI models...');
+        await warmAllModels(true);
         router.push('/educator/dashboard');
       }
     } catch (err: any) {
@@ -60,6 +65,7 @@ export default function EducatorLoginPage() {
     e.preventDefault();
     setError(null);
     setLoading(true);
+    setLoadingMessage('Creating account...');
 
     try {
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -80,6 +86,8 @@ export default function EducatorLoginPage() {
 
         if (profileError) throw profileError;
 
+        setLoadingMessage('Preparing AI models...');
+        await warmAllModels(true);
         router.push('/educator/dashboard');
       }
     } catch (err: any) {
@@ -178,7 +186,7 @@ export default function EducatorLoginPage() {
                     disabled={loading}
                     className="w-full bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 rounded-lg transition-colors focus:outline-none focus:ring-4 focus:ring-[#FFCC00]/50 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {loading ? 'Please wait...' : 'Continue'}
+                    {loading ? loadingMessage : 'Continue'}
                   </button>
                 </form>
               </TabsContent>
@@ -272,7 +280,7 @@ export default function EducatorLoginPage() {
                     disabled={loading}
                     className="w-full bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 rounded-lg transition-colors focus:outline-none focus:ring-4 focus:ring-[#FFCC00]/50 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {loading ? 'Creating account...' : 'Continue'}
+                    {loading ? loadingMessage : 'Continue'}
                   </button>
                 </form>
               </TabsContent>

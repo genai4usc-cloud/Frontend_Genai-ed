@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { getBackendBase } from '@/lib/backend';
 import { validateFileSize } from '@/lib/fileUpload';
 import { AvatarName, AvatarVoiceMap } from "@/lib/avatarVoiceMap";
+import { savePendingSocraticCreatedResource } from '@/lib/socraticWriting';
 
 type MaterialWithType = {
   url: string;
@@ -53,6 +54,9 @@ const JOB_TO_ARTIFACT: Record<string, string> = {
 export default function CreateLecture() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const preselectedCourseId = searchParams.get('courseId');
+  const socraticAttach = searchParams.get('socraticAttach');
+  const returnTo = searchParams.get('returnTo');
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentStep, setCurrentStep] = useState(1);
@@ -118,6 +122,12 @@ export default function CreateLecture() {
       setIsEditMode(modeFromUrl === 'edit');
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (preselectedCourseId && selectedCourseIds.length === 0) {
+      setSelectedCourseIds([preselectedCourseId]);
+    }
+  }, [preselectedCourseId, selectedCourseIds.length]);
 
   useEffect(() => {
     if (lectureId) {
@@ -736,11 +746,11 @@ export default function CreateLecture() {
       if (fileExtension === 'txt') {
         extractedText = await file.text();
       } else if (fileExtension === 'pdf') {
-        const pdfjsLib = await import('pdfjs-dist');
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/legacy/build/pdf.worker.min.mjs`;
 
         const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
 
         const textParts: string[] = [];
         for (let i = 1; i <= pdf.numPages; i++) {
@@ -1611,6 +1621,17 @@ SLIDE 1: Untitled Lecture
       if (updateError) throw updateError;
 
       toast.success('Content published successfully!');
+      if (returnTo && socraticAttach === 'avatar_lecture' && lectureId) {
+        savePendingSocraticCreatedResource({
+          courseId: preselectedCourseId || selectedCourseIds[0] || '',
+          type: 'avatar_lecture',
+          id: lectureId,
+          title: lectureTitle.trim() || 'Untitled avatar lecture',
+          summary: 'Avatar lecture created for Socratic Writing.',
+        });
+        router.push(returnTo);
+        return;
+      }
       router.push('/educator/dashboard');
     } catch (error) {
       console.error('Error publishing content:', error);

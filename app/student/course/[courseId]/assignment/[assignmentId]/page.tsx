@@ -145,9 +145,22 @@ export default function StudentAssignmentDetailPage() {
           : [],
       } as StudentCourseAssignment;
 
+      const { data: assignmentMetaRow, error: assignmentMetaError } = await supabase
+        .from('assignments')
+        .select('experience_type')
+        .eq('id', assignmentId)
+        .maybeSingle();
+
+      if (assignmentMetaError) {
+        throw assignmentMetaError;
+      }
+
       setCourse((courseRow || null) as CourseSummary | null);
       setEnrollment(enrollmentRow as EnrollmentRow);
-      setAssignment(normalizedAssignment);
+      setAssignment({
+        ...normalizedAssignment,
+        experience_type: assignmentMetaRow?.experience_type || 'standard',
+      });
       setSubmissionText(normalizedAssignment.submission_text || '');
 
       if (normalizedAssignment.submission_id) {
@@ -357,6 +370,8 @@ export default function StudentAssignmentDetailPage() {
     return null;
   }
 
+  const isSocraticAssignment = assignment.experience_type === 'socratic_writing';
+
   return (
     <StudentLayout profile={profile}>
       <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
@@ -426,29 +441,23 @@ export default function StudentAssignmentDetailPage() {
             </div>
           )}
 
-          <div className="rounded-2xl border border-purple-200 bg-purple-50 px-4 py-4 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h3 className="font-semibold text-purple-950">Socratic Writing Studio</h3>
-              <p className="text-sm text-purple-900/80 mt-1">
-                Open the frontend prototype to work through Clarify, Research, Build, and Write with notes and ledger tracking.
-              </p>
+          {isSocraticAssignment && (
+            <div className="rounded-2xl border border-purple-200 bg-purple-50 px-4 py-4 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h3 className="font-semibold text-purple-950">Socratic Writing Studio</h3>
+                <p className="text-sm text-purple-900/80 mt-1">
+                  Continue the guided Clarify, Research, Build, and Write workflow. Submissions for this assignment are handled through the studio.
+                </p>
+              </div>
+              <button
+                onClick={() => router.push(`/student/course/${courseId}/assignment/${assignment.id}/studio`)}
+                className="inline-flex items-center gap-2 rounded-lg border border-purple-300 bg-white px-4 py-2 font-semibold text-purple-700 hover:bg-purple-100 transition-colors"
+              >
+                <BookOpen className="w-4 h-4" />
+                Launch Studio
+              </button>
             </div>
-            <button
-              onClick={() => router.push(
-                `/student/course/${courseId}/assignment/${assignment.id}/studio`
-                + `?courseCode=${encodeURIComponent(course.course_number || '')}`
-                + `&courseTitle=${encodeURIComponent(course.title)}`
-                + `&assignmentTitle=${encodeURIComponent(assignment.assignment_title)}`
-                + `&assignmentBrief=${encodeURIComponent(assignment.description || '')}`
-                + `&dueAt=${encodeURIComponent(assignment.due_at || '')}`
-                + `&pointsPossible=${assignment.points_possible}`,
-              )}
-              className="inline-flex items-center gap-2 rounded-lg border border-purple-300 bg-white px-4 py-2 font-semibold text-purple-700 hover:bg-purple-100 transition-colors"
-            >
-              <BookOpen className="w-4 h-4" />
-              Launch Studio
-            </button>
-          </div>
+          )}
         </section>
 
         <section className="bg-card border border-border rounded-2xl p-6 space-y-4">
@@ -511,6 +520,12 @@ export default function StudentAssignmentDetailPage() {
         <section className="bg-card border border-border rounded-2xl p-6 space-y-4">
           <h2 className="text-xl font-semibold text-foreground">Submit or Resubmit Work</h2>
 
+          {isSocraticAssignment ? (
+            <div className="rounded-xl border border-purple-200 bg-purple-50 px-4 py-4 text-sm text-purple-900">
+              Submit this assignment through <span className="font-semibold">Socratic Writing Studio</span>. The final essay, notebook, and ledger will sync back here automatically after submission.
+            </div>
+          ) : (
+            <>
           {!canSubmit && (
             <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
               This assignment is currently closed for submissions.
@@ -591,6 +606,8 @@ export default function StudentAssignmentDetailPage() {
             <Save className="w-4 h-4" />
             {saving ? 'Saving Submission...' : assignment.submitted_at ? 'Save Resubmission' : 'Submit Assignment'}
           </button>
+            </>
+          )}
         </section>
       </div>
     </StudentLayout>

@@ -4,6 +4,7 @@ import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { X, Mail, Lock, GraduationCap, BookOpen, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { warmAllModels } from '@/lib/modelWarmup';
 
 interface AuthCardProps {
   role: 'educator' | 'student';
@@ -15,11 +16,13 @@ export default function AuthCard({ role }: AuthCardProps) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [loadingMessage, setLoadingMessage] = useState('Signing in...');
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+    setLoadingMessage('Signing in...');
 
     console.log('Starting login process...');
 
@@ -73,10 +76,12 @@ export default function AuthCard({ role }: AuthCardProps) {
       }
 
       console.log('Login successful, redirecting to dashboard...');
+      setLoadingMessage('Preparing AI models...');
+      await warmAllModels(true);
       router.push(`/${role}/dashboard`);
     } catch (err) {
       console.error('Unexpected error:', err);
-      setError('An unexpected error occurred. Please try again.');
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred. Please try again.');
       setLoading(false);
     }
   };
@@ -170,7 +175,7 @@ export default function AuthCard({ role }: AuthCardProps) {
                 disabled={loading}
                 className="w-full bg-brand-yellow hover:bg-brand-yellow-hover text-black font-bold py-3 rounded-lg transition-colors focus:outline-none focus:ring-4 focus:ring-[#FFCC00]/50 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Signing in...' : 'Sign In'}
+                {loading ? loadingMessage : 'Sign In'}
               </button>
             </div>
 

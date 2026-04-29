@@ -1,62 +1,62 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   BookOpen,
   CheckCircle2,
   Circle,
   Clock3,
+  ExternalLink,
   FlaskConical,
   MessageSquareText,
   NotebookPen,
-  Plus,
   Send,
   Sparkles,
+  Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import SocraticRichTextEditor from '@/components/socratic-writing/SocraticRichTextEditor';
+import SocraticPdfReader from '@/components/socratic-writing/SocraticPdfReader';
 import {
   buildPdfHtml,
   createStudioLedgerEntry,
   createStudioNote,
-  createDefaultStudioBlueprint,
-  createInitialStudioSession,
-  createResourceProgressMap,
-  getMockCoachReply,
   getRecommendedStage,
   getStageBadgeClasses,
   isStageUnlocked,
-  loadStudioBlueprint,
-  loadStudioSession,
   recomputeStageStatuses,
-  saveStudioBlueprint,
-  saveStudioSession,
   SOCRATIC_STAGE_ORDER,
   SocraticResource,
   SocraticStageKey,
   SocraticStudioBlueprint,
   SocraticStudioSession,
 } from '@/lib/socraticWriting';
-
-type StudentSeed = {
-  assignmentId: string;
-  courseId: string;
-  courseCode: string;
-  courseTitle: string;
-  assignmentTitle: string;
-  assignmentBrief: string;
-  dueAt: string;
-  pointsPossible: number;
-};
+import { supabase } from '@/lib/supabase';
+import {
+  fetchStudentSocraticWorkspace,
+  saveStudentSocraticWorkspace,
+  streamSocraticCoachMessage,
+  submitSocraticWorkspace,
+} from '@/lib/socraticWritingApi';
 
 type SocraticStudioWorkspaceProps = {
-  studentId: string;
-  seed: StudentSeed;
+  assignmentId: string;
   onBack: () => void;
+};
+
+type StudentAddedSource = SocraticResource & {
+  sourceCreatedAt: string;
+};
+
+const isPdfLikeResource = (resource: Pick<SocraticResource, 'url' | 'storagePath'>) => {
+  const candidates = [resource.url, resource.storagePath]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map((value) => value.toLowerCase());
+  return candidates.some((value) => value.includes('.pdf'));
 };
 
 const stageIcons = {
@@ -66,71 +66,185 @@ const stageIcons = {
   write: NotebookPen,
 } satisfies Record<SocraticStageKey, typeof MessageSquareText>;
 
+const createClientId = (prefix: string) =>
+  `${prefix}-${typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2, 10)}`;
+
 export default function SocraticStudioWorkspace({
-  studentId,
-  seed,
+  assignmentId,
   onBack,
 }: SocraticStudioWorkspaceProps) {
+  const [loading, setLoading] = useState(true);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [courseStudentId, setCourseStudentId] = useState<string | null>(null);
   const [blueprint, setBlueprint] = useState<SocraticStudioBlueprint | null>(null);
   const [session, setSession] = useState<SocraticStudioSession | null>(null);
+  const [readOnly, setReadOnly] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
   const [newNoteDraft, setNewNoteDraft] = useState('');
-  const [newSourceTitle, setNewSourceTitle] = useState('');
-  const [newSourceSummary, setNewSourceSummary] = useState('');
+  const [studentPdfSummary, setStudentPdfSummary] = useState('');
+  const [studentPdfFile, setStudentPdfFile] = useState<File | null>(null);
+  const [uploadingStudentPdf, setUploadingStudentPdf] = useState(false);
+
+  const hydratedRef = useRef(false);
+  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const existingBlueprint = loadStudioBlueprint(seed.assignmentId);
-    const nextBlueprint = existingBlueprint || createDefaultStudioBlueprint({
-      assignmentId: seed.assignmentId,
-      courseId: seed.courseId,
-      courseCode: seed.courseCode,
-      courseTitle: seed.courseTitle,
-      assignmentTitle: seed.assignmentTitle,
-      assignmentBrief: seed.assignmentBrief,
-      dueAt: seed.dueAt,
-      pointsPossible: seed.pointsPossible,
-    });
+    void loadWorkspace();
 
-    saveStudioBlueprint(seed.assignmentId, nextBlueprint);
-    setBlueprint(nextBlueprint);
-
-    const existingSession = loadStudioSession(seed.assignmentId, studentId);
-    const nextSession = recomputeStageStatuses(
-      existingSession || {
-        ...createInitialStudioSession(),
-        resourceProgress: createResourceProgressMap(nextBlueprint.resources),
-      },
-      nextBlueprint,
-    );
-    setSelectedResourceId(nextBlueprint.resources[0]?.id || null);
-    setSession(nextSession);
-  }, [seed, studentId]);
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+      }
+    };
+  }, [assignmentId]);
 
   useEffect(() => {
-    if (!blueprint || !session) return;
-    saveStudioBlueprint(seed.assignmentId, blueprint);
-    saveStudioSession(seed.assignmentId, studentId, session);
-  }, [blueprint, seed.assignmentId, session, studentId]);
+    const handleVisibilityRefresh = async () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!workspaceId || !hydratedRef.current) return;
+
+      try {
+        const payload = await fetchStudentSocraticWorkspace(assignmentId);
+        setBlueprint(payload.blueprint);
+        setReadOnly(payload.readOnly);
+        setSession((current) => {
+          if (!current) {
+            return recomputeStageStatuses(payload.session, payload.blueprint);
+          }
+          return recomputeStageStatuses(
+            {
+              ...current,
+              resourceProgress: payload.session.resourceProgress,
+              stageStatuses: payload.session.stageStatuses,
+              submittedAt: payload.session.submittedAt,
+            },
+            payload.blueprint,
+          );
+        });
+      } catch (error) {
+        console.error('Error refreshing Socratic resource state:', error);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityRefresh);
+    window.addEventListener('focus', handleVisibilityRefresh);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityRefresh);
+      window.removeEventListener('focus', handleVisibilityRefresh);
+    };
+  }, [assignmentId, workspaceId]);
+
+  const loadWorkspace = async () => {
+    setLoading(true);
+    hydratedRef.current = false;
+
+    try {
+      const payload = await fetchStudentSocraticWorkspace(assignmentId);
+      const nextBlueprint = payload.blueprint;
+      const nextSession = recomputeStageStatuses(payload.session, nextBlueprint);
+
+      setBlueprint(nextBlueprint);
+      setSession(nextSession);
+      setWorkspaceId(payload.workspaceId);
+      setCourseStudentId(payload.courseStudentId);
+      setReadOnly(payload.readOnly);
+      setSelectedResourceId((current) => current || nextBlueprint.resources[0]?.id || null);
+      hydratedRef.current = true;
+    } catch (error) {
+      console.error('Error loading Socratic workspace:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to load Socratic Writing Studio.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const studentAddedSources = useMemo<StudentAddedSource[]>(() => {
+    if (!session) return [];
+
+    return session.ledger
+      .filter((entry) => entry.entryType === 'resource_added')
+      .map((entry) => ({
+        id: entry.id,
+        type: 'reading' as const,
+        title:
+          typeof entry.metadata?.sourceTitle === 'string' && entry.metadata.sourceTitle.trim()
+            ? entry.metadata.sourceTitle
+            : entry.title,
+        summary:
+          typeof entry.metadata?.sourceSummary === 'string' ? entry.metadata.sourceSummary : entry.content,
+        required: false,
+        createdFrom:
+          entry.metadata?.sourceKind === 'upload' ? ('upload' as const) : ('new' as const),
+        url: typeof entry.metadata?.resourceUrl === 'string' ? entry.metadata.resourceUrl : null,
+        storageBucket:
+          typeof entry.metadata?.storageBucket === 'string' ? entry.metadata.storageBucket : null,
+        storagePath:
+          typeof entry.metadata?.storagePath === 'string' ? entry.metadata.storagePath : null,
+        sourceCreatedAt: entry.createdAt,
+      }));
+  }, [session]);
+
+  const allResources = useMemo(() => {
+    if (!blueprint) return [] as SocraticResource[];
+    return [...blueprint.resources, ...studentAddedSources];
+  }, [blueprint, studentAddedSources]);
+
+  useEffect(() => {
+    if (!selectedResourceId && allResources.length > 0) {
+      setSelectedResourceId(allResources[0].id);
+      return;
+    }
+
+    if (selectedResourceId && !allResources.some((resource) => resource.id === selectedResourceId)) {
+      setSelectedResourceId(allResources[0]?.id || null);
+    }
+  }, [allResources, selectedResourceId]);
+
+  useEffect(() => {
+    if (!workspaceId || !session || !blueprint || !hydratedRef.current) return;
+
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+    }
+
+    autosaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        setSaving(true);
+        await saveStudentSocraticWorkspace(workspaceId, session);
+      } catch (error) {
+        console.error('Error autosaving Socratic workspace:', error);
+        toast.error(error instanceof Error ? error.message : 'Failed to save Socratic progress.');
+      } finally {
+        setSaving(false);
+      }
+    }, 900);
+
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+      }
+    };
+  }, [blueprint, session, workspaceId]);
 
   const selectedStage = session?.activeStage || 'clarify';
   const recommendedStage = session ? getRecommendedStage(session) : 'clarify';
-
-  const setStage = (stage: SocraticStageKey) => {
-    if (!session || !blueprint) return;
-    if (!isStageUnlocked(stage, session, blueprint)) return;
-    setSession({
-      ...session,
-      activeStage: stage,
-    });
-  };
 
   const stageSummary = useMemo(() => {
     if (!blueprint || !session) return null;
     return {
       stageConfig: blueprint.stages[selectedStage],
-      readOnly: new Date(blueprint.dueAt).getTime() < Date.now(),
+      readOnly,
     };
-  }, [blueprint, selectedStage, session]);
+  }, [blueprint, readOnly, selectedStage, session]);
+
+  const selectedResource = useMemo(
+    () => allResources.find((resource) => resource.id === selectedResourceId) || null,
+    [allResources, selectedResourceId],
+  );
 
   const updateSession = (updater: (current: SocraticStudioSession) => SocraticStudioSession) => {
     setSession((current) => {
@@ -139,10 +253,15 @@ export default function SocraticStudioWorkspace({
     });
   };
 
-  const selectedResource = useMemo(
-    () => blueprint?.resources.find((resource) => resource.id === selectedResourceId) || null,
-    [blueprint, selectedResourceId],
-  );
+  const setStage = (stage: SocraticStageKey) => {
+    if (!session || !blueprint) return;
+    if (!isStageUnlocked(stage, session, blueprint)) return;
+
+    updateSession((current) => ({
+      ...current,
+      activeStage: stage,
+    }));
+  };
 
   const getCoachDraft = () => {
     if (!session) return '';
@@ -162,99 +281,182 @@ export default function SocraticStudioWorkspace({
   };
 
   const handleAddNote = () => {
-    if (!newNoteDraft.trim()) return;
+    if (readOnly || !newNoteDraft.trim() || !blueprint) return;
+
     updateSession((current) => ({
       ...current,
       notes: [...current.notes, createStudioNote(current.activeStage, newNoteDraft.trim())],
       ledger: [
         ...current.ledger,
-        createStudioLedgerEntry(current.activeStage, 'system', 'Note added', `Added a note in ${blueprint?.stages[current.activeStage].label}.`),
+        createStudioLedgerEntry(
+          current.activeStage,
+          'system',
+          'Note added',
+          `Added a note in ${blueprint.stages[current.activeStage].label}.`,
+        ),
       ],
     }));
     setNewNoteDraft('');
   };
 
-  const handleCoachMessage = () => {
-    if (!blueprint || !session) return;
+  const handleCoachMessage = async () => {
+    if (!blueprint || !session || !workspaceId || sendingMessage) return;
+
     const draft = getCoachDraft().trim();
     if (!draft) return;
-    if (!blueprint.stages[selectedStage].aiAllowed) {
-      toast.error(`AI coach is disabled for ${blueprint.stages[selectedStage].label}.`);
+
+    const stageConfig = blueprint.stages[selectedStage];
+    if (!stageConfig.aiAllowed) {
+      toast.error(`Claude chat is disabled for ${stageConfig.label}.`);
       return;
     }
 
-    const reply = getMockCoachReply(selectedStage, draft, blueprint, session);
-    updateSession((current) => {
-      const clearDraft = current.activeStage === 'clarify'
-        ? { clarifyDraft: '' }
-        : current.activeStage === 'research'
-        ? { researchCoachDraft: '' }
-        : current.activeStage === 'build'
-        ? { buildCoachDraft: '' }
-        : { writeCoachDraft: '' };
+    const draftExcerpt =
+      selectedStage === 'write'
+        ? session.essayHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+        : undefined;
 
-      return {
-        ...current,
-        ...clearDraft,
-        ledger: [
-          ...current.ledger,
-          createStudioLedgerEntry(current.activeStage, 'student', 'Student prompt', draft),
-          createStudioLedgerEntry(current.activeStage, 'ai', 'AI coach', reply),
-        ],
-      };
-    });
-  };
+    const promptClientId = createClientId('student');
+    const replyClientId = createClientId('ai');
+    const now = new Date().toISOString();
 
-  const handleResourceProgress = (resource: SocraticResource, action: 'open' | 'complete' | 'review') => {
-    updateSession((current) => {
-      const existingProgress = current.resourceProgress[resource.id] || {
-        resourceId: resource.id,
-        opened: false,
-        completed: false,
-        manuallyReviewed: false,
-      };
+    try {
+      setSendingMessage(true);
+      updateSession((current) => {
+        const clearDraft =
+          current.activeStage === 'clarify'
+            ? { clarifyDraft: '' }
+            : current.activeStage === 'research'
+              ? { researchCoachDraft: '' }
+              : current.activeStage === 'build'
+                ? { buildCoachDraft: '' }
+                : { writeCoachDraft: '' };
 
-      return {
-        ...current,
-        resourceProgress: {
-          ...current.resourceProgress,
-          [resource.id]: {
-            ...existingProgress,
-            opened: action === 'open' ? true : existingProgress.opened,
-            completed: action === 'complete' ? true : existingProgress.completed,
-            manuallyReviewed: action === 'review' ? true : existingProgress.manuallyReviewed,
+        return {
+          ...current,
+          ...clearDraft,
+          ledger: [
+            ...current.ledger,
+            {
+              id: promptClientId,
+              stage: selectedStage,
+              actor: 'student',
+              title: 'You',
+              content: draft,
+              createdAt: now,
+              entryType: 'chat_prompt',
+              metadata: { draftExcerptIncluded: Boolean(draftExcerpt) },
+            },
+            {
+              id: replyClientId,
+              stage: selectedStage,
+              actor: 'ai',
+              title: 'Claude',
+              content: '',
+              createdAt: now,
+              entryType: 'chat_reply',
+              metadata: { model: 'claude-sonnet-4.5' },
+            },
+          ],
+        };
+      });
+
+      await streamSocraticCoachMessage(
+        workspaceId,
+        selectedStage,
+        draft,
+        draftExcerpt || undefined,
+        promptClientId,
+        replyClientId,
+        {
+          onDelta: (chunk) => {
+            updateSession((current) => ({
+              ...current,
+              ledger: current.ledger.map((entry) =>
+                entry.id === replyClientId
+                  ? { ...entry, content: `${entry.content}${chunk}` }
+                  : entry,
+              ),
+            }));
+          },
+          onDone: (response) => {
+            updateSession((current) => {
+              const byId = new Map(current.ledger.map((entry) => [entry.id, entry]));
+              for (const entry of response.entries) {
+                byId.set(entry.id, entry);
+              }
+              return {
+                ...current,
+                ledger: Array.from(byId.values()),
+              };
+            });
+          },
+          onError: (message) => {
+            throw new Error(message);
           },
         },
-        ledger: [
-          ...current.ledger,
-          createStudioLedgerEntry('research', 'system', 'Resource updated', `${resource.title}: ${action}`),
-        ],
-      };
-    });
+      );
+    } catch (error) {
+      console.error('Error sending Socratic coach message:', error);
+      updateSession((current) => ({
+        ...current,
+        ledger: current.ledger.filter((entry) => entry.id !== replyClientId),
+      }));
+      toast.error(error instanceof Error ? error.message : 'Failed to reach Claude.');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const handleResourceProgress = (resource: SocraticResource, action: 'open' | 'complete') => {
+    if (readOnly) return;
+
+    updateSession((current) => ({
+      ...current,
+      resourceProgress: {
+        ...current.resourceProgress,
+        [resource.id]: {
+          resourceId: resource.id,
+          opened:
+            action === 'open' ? true : current.resourceProgress[resource.id]?.opened || false,
+          completed:
+            action === 'complete'
+              ? true
+              : current.resourceProgress[resource.id]?.completed || false,
+          manuallyReviewed: current.resourceProgress[resource.id]?.manuallyReviewed || false,
+        },
+      },
+      ledger: [
+        ...current.ledger,
+        createStudioLedgerEntry('research', 'system', 'Resource updated', `${resource.title}: ${action}`),
+      ],
+    }));
   };
 
   const runBuildTool = (tool: 'thesis' | 'structure' | 'stress') => {
+    if (readOnly) return;
+
     updateSession((current) => {
       const nextArtifacts = { ...current.buildArtifacts };
 
       if (tool === 'thesis') {
         nextArtifacts.thesisOptions = [
-          'Claim one precise relationship instead of explaining the whole topic.',
-          'Define the contested term before stating the thesis.',
-          'Build the essay around one objection that your thesis can survive.',
+          'Claim one precise relationship instead of trying to explain the whole topic.',
+          'Define the contested term before committing to the thesis.',
+          'Build the essay around one objection your position can survive.',
         ];
       } else if (tool === 'structure') {
         nextArtifacts.structurePlan = [
-          'Clarify the term and narrow the debate.',
-          'State the working thesis and explain the standard of judgment.',
+          'Clarify the key term and narrow the debate.',
+          'State the working thesis and name the standard of judgment.',
           'Develop two body moves with evidence.',
-          'Address one objection and show why the thesis still holds.',
+          'Address one strong objection and explain why the thesis still holds.',
         ];
       } else {
         nextArtifacts.stressTestQuestions = [
           'What would a skeptical reader say your strongest evidence does not prove?',
           'Where is the thesis still broader than the evidence supports?',
-          'What happens if the key objection is partly true?',
+          'What changes if the strongest objection is partly right?',
         ];
       }
 
@@ -270,6 +472,8 @@ export default function SocraticStudioWorkspace({
   };
 
   const handleEssayChange = (nextHtml: string) => {
+    if (readOnly) return;
+
     updateSession((current) => ({
       ...current,
       essayHtml: nextHtml,
@@ -278,51 +482,80 @@ export default function SocraticStudioWorkspace({
   };
 
   const handleInsertNote = (noteContent: string) => {
-    if (selectedStage !== 'write') return;
+    if (selectedStage !== 'write' || readOnly) return;
     handleEssayChange(`${session?.essayHtml || ''}<p>${noteContent}</p>`);
   };
 
-  const addAdditionalSource = () => {
-    if (!blueprint || !newSourceTitle.trim()) return;
+  const handleUploadStudentPdf = async () => {
+    if (readOnly || !studentPdfFile || !workspaceId || !courseStudentId) return;
+    if (studentPdfFile.type !== 'application/pdf' && !studentPdfFile.name.toLowerCase().endsWith('.pdf')) {
+      toast.error('Please upload a PDF file.');
+      return;
+    }
 
-    const nextResource: SocraticResource = {
-      id: `source-${Math.random().toString(36).slice(2, 8)}`,
-      type: 'source',
-      title: newSourceTitle.trim(),
-      summary: newSourceSummary.trim() || 'Student-added source captured during research.',
-      required: false,
-      createdFrom: 'new',
-    };
+    try {
+      setUploadingStudentPdf(true);
+      const safeName = studentPdfFile.name.replace(/[^a-zA-Z0-9._-]+/g, '-');
+      const storagePath = `${assignmentId}/${courseStudentId}/student-research/${Date.now()}-${safeName}`;
+      const { error: uploadError } = await supabase.storage
+        .from('socratic-writing')
+        .upload(storagePath, studentPdfFile, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: 'application/pdf',
+        });
 
-    setBlueprint({
-      ...blueprint,
-      resources: [...blueprint.resources, nextResource],
-    });
-    updateSession((current) => ({
-      ...current,
-      resourceProgress: {
-        ...current.resourceProgress,
-        [nextResource.id]: {
-          resourceId: nextResource.id,
-          opened: true,
-          completed: false,
-          manuallyReviewed: false,
-        },
-      },
-      ledger: [
-        ...current.ledger,
-        createStudioLedgerEntry('research', 'system', 'Additional source added', nextResource.title),
-      ],
-    }));
-    setSelectedResourceId(nextResource.id);
-    setNewSourceTitle('');
-    setNewSourceSummary('');
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('socratic-writing').getPublicUrl(storagePath);
+
+      const sourceId = `upload-${Math.random().toString(36).slice(2, 10)}`;
+      const title = studentPdfFile.name;
+      const summary =
+        studentPdfSummary.trim() || 'Student-uploaded research PDF attached inside Socratic Writing.';
+
+      updateSession((current) => ({
+        ...current,
+        ledger: [
+          ...current.ledger,
+          {
+            ...createStudioLedgerEntry('research', 'system', title, summary),
+            id: sourceId,
+            entryType: 'resource_added',
+            metadata: {
+              sourceTitle: title,
+              sourceSummary: summary,
+              sourceKind: 'upload',
+              resourceType: 'reading',
+              resourceUrl: publicUrl,
+              storageBucket: 'socratic-writing',
+              storagePath,
+            },
+          },
+        ],
+      }));
+      setSelectedResourceId(sourceId);
+      setStudentPdfFile(null);
+      setStudentPdfSummary('');
+      toast.success('PDF attached to Research.');
+    } catch (error) {
+      console.error('Error uploading student research PDF:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to upload PDF.');
+    } finally {
+      setUploadingStudentPdf(false);
+    }
   };
 
   const handleExportPdf = () => {
     if (!blueprint || !session) return;
+
     const exportWindow = window.open('', '_blank', 'noopener,noreferrer');
     if (!exportWindow) return;
+
     exportWindow.document.open();
     exportWindow.document.write(buildPdfHtml(blueprint, session));
     exportWindow.document.close();
@@ -330,19 +563,25 @@ export default function SocraticStudioWorkspace({
     exportWindow.print();
   };
 
-  const handleSubmit = () => {
-    updateSession((current) => ({
-      ...current,
-      submittedAt: new Date().toISOString(),
-      ledger: [
-        ...current.ledger,
-        createStudioLedgerEntry('write', 'system', 'Assignment submitted', 'Submitted final essay, notebook, and ledger package.'),
-      ],
-    }));
-    toast.success('Studio submission saved in the frontend prototype.');
+  const handleSubmit = async () => {
+    if (!workspaceId) return;
+
+    try {
+      setSubmitting(true);
+      const payload = await submitSocraticWorkspace(workspaceId);
+      setBlueprint(payload.blueprint);
+      setSession(recomputeStageStatuses(payload.session, payload.blueprint));
+      setReadOnly(payload.readOnly);
+      toast.success('Socratic submission saved.');
+    } catch (error) {
+      console.error('Error submitting Socratic workspace:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to submit the Socratic assignment.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  if (!blueprint || !session || !stageSummary) {
+  if (loading || !blueprint || !session || !stageSummary) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-lg">Loading Socratic Writing Studio...</div>
@@ -364,22 +603,31 @@ export default function SocraticStudioWorkspace({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-brand-maroon mb-2">
-              {blueprint.courseCode} · Coaching: Claude
+              {blueprint.courseCode} | Coaching: Claude
             </p>
             <h1 className="text-4xl font-bold text-gray-950">{blueprint.assignmentTitle}</h1>
             <p className="text-gray-600 mt-3 max-w-3xl">{blueprint.assignmentBrief}</p>
           </div>
           <div className="rounded-2xl border border-orange-200 bg-orange-50 px-5 py-4 min-w-[220px]">
             <div className="text-sm font-medium text-orange-700">Due</div>
-            <div className="text-lg font-semibold text-orange-900">{new Date(blueprint.dueAt).toLocaleString()}</div>
-            <div className="text-sm text-orange-700 mt-1">{blueprint.wordCount} words · {blueprint.pointsPossible} points</div>
+            <div className="text-lg font-semibold text-orange-900">
+              {blueprint.dueAt ? new Date(blueprint.dueAt).toLocaleString() : 'No due date'}
+            </div>
+            <div className="text-sm text-orange-700 mt-1">
+              {blueprint.wordCount} words | {blueprint.pointsPossible} points
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-blue-900">
-        <span className="font-semibold">Recommended:</span> {blueprint.stages[recommendedStage].label}
-        {' '}— {blueprint.stages[recommendedStage].description}
+      <div className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-blue-900 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <span className="font-semibold">Recommended:</span> {blueprint.stages[recommendedStage].label}
+          {' '}| {blueprint.stages[recommendedStage].description}
+        </div>
+        <div className="text-sm text-blue-800">
+          {saving ? 'Saving...' : readOnly ? 'Read-only' : session.submittedAt ? 'Submitted - editable until due date' : 'Autosave on'}
+        </div>
       </div>
 
       <div className="grid xl:grid-cols-[1fr_360px] gap-6 items-start">
@@ -402,55 +650,62 @@ export default function SocraticStudioWorkspace({
                       active
                         ? 'bg-brand-maroon text-white'
                         : unlocked
-                        ? 'bg-gray-100 text-gray-900 hover:bg-gray-200'
-                        : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                          ? 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                          : 'bg-gray-50 text-gray-400 cursor-not-allowed'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
                     {blueprint.stages[stage].label}
-                    {status === 'completed' ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4 opacity-60" />}
+                    {status === 'completed' ? (
+                      <CheckCircle2 className="w-4 h-4" />
+                    ) : (
+                      <Circle className="w-4 h-4 opacity-60" />
+                    )}
                   </button>
                 );
               })}
             </div>
             <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-900">
-              <span className="font-semibold">Mode:</span> {stageSummary.stageConfig.label} — {stageSummary.stageConfig.description}
+              <span className="font-semibold">Mode:</span> {stageSummary.stageConfig.label} | {stageSummary.stageConfig.description}
             </div>
           </div>
 
           <WorkspaceStageContent
+            allResources={allResources}
             blueprint={blueprint}
             getCoachDraft={getCoachDraft}
             handleCoachMessage={handleCoachMessage}
             handleEssayChange={handleEssayChange}
             handleExportPdf={handleExportPdf}
-            handleInsertNote={handleInsertNote}
             handleResourceProgress={handleResourceProgress}
             handleSubmit={handleSubmit}
             readOnly={stageSummary.readOnly}
             runBuildTool={runBuildTool}
+            selectedResource={selectedResource}
+            selectedStage={selectedStage}
             session={session}
             setCoachDraft={setCoachDraft}
             setSelectedResourceId={setSelectedResourceId}
-            selectedStage={selectedStage}
-            selectedResource={selectedResource}
+            sendingMessage={sendingMessage}
+            submitting={submitting}
           />
         </div>
 
         <WorkspaceSidebar
-          addAdditionalSource={addAdditionalSource}
           blueprint={blueprint}
           handleAddNote={handleAddNote}
-          newNoteDraft={newNoteDraft}
-          newSourceSummary={newSourceSummary}
-          newSourceTitle={newSourceTitle}
-          readOnly={stageSummary.readOnly}
-          session={session}
-          selectedStage={selectedStage}
-          setNewNoteDraft={setNewNoteDraft}
-          setNewSourceSummary={setNewSourceSummary}
-          setNewSourceTitle={setNewSourceTitle}
           handleInsertNote={handleInsertNote}
+          handleUploadStudentPdf={handleUploadStudentPdf}
+          newNoteDraft={newNoteDraft}
+          readOnly={stageSummary.readOnly}
+          selectedStage={selectedStage}
+          session={session}
+          setNewNoteDraft={setNewNoteDraft}
+          setStudentPdfFile={setStudentPdfFile}
+          setStudentPdfSummary={setStudentPdfSummary}
+          studentPdfFile={studentPdfFile}
+          studentPdfSummary={studentPdfSummary}
+          uploadingStudentPdf={uploadingStudentPdf}
         />
       </div>
     </div>
@@ -458,6 +713,7 @@ export default function SocraticStudioWorkspace({
 }
 
 type WorkspaceStageContentProps = {
+  allResources: SocraticResource[];
   blueprint: SocraticStudioBlueprint;
   session: SocraticStudioSession;
   selectedStage: SocraticStageKey;
@@ -467,12 +723,13 @@ type WorkspaceStageContentProps = {
   getCoachDraft: () => string;
   setCoachDraft: (value: string) => void;
   handleCoachMessage: () => void;
-  handleResourceProgress: (resource: SocraticResource, action: 'open' | 'complete' | 'review') => void;
+  handleResourceProgress: (resource: SocraticResource, action: 'open' | 'complete') => void;
   runBuildTool: (tool: 'thesis' | 'structure' | 'stress') => void;
   handleEssayChange: (nextHtml: string) => void;
   handleExportPdf: () => void;
   handleSubmit: () => void;
-  handleInsertNote: (noteContent: string) => void;
+  submitting: boolean;
+  sendingMessage: boolean;
 };
 
 type WorkspaceSidebarProps = {
@@ -483,15 +740,17 @@ type WorkspaceSidebarProps = {
   newNoteDraft: string;
   setNewNoteDraft: (value: string) => void;
   handleAddNote: () => void;
-  newSourceTitle: string;
-  setNewSourceTitle: (value: string) => void;
-  newSourceSummary: string;
-  setNewSourceSummary: (value: string) => void;
-  addAdditionalSource: () => void;
+  studentPdfSummary: string;
+  setStudentPdfSummary: (value: string) => void;
+  studentPdfFile: File | null;
+  setStudentPdfFile: (value: File | null) => void;
+  handleUploadStudentPdf: () => void;
+  uploadingStudentPdf: boolean;
   handleInsertNote: (noteContent: string) => void;
 };
 
 function WorkspaceStageContent({
+  allResources,
   blueprint,
   session,
   selectedStage,
@@ -506,9 +765,28 @@ function WorkspaceStageContent({
   handleEssayChange,
   handleExportPdf,
   handleSubmit,
+  submitting,
+  sendingMessage,
 }: WorkspaceStageContentProps) {
   const stageConfig = blueprint.stages[selectedStage];
-  const stageConversation = session.ledger.filter((entry) => entry.stage === selectedStage);
+  const stageConversation = session.ledger.filter(
+    (entry) =>
+      entry.stage === selectedStage &&
+      (entry.entryType === 'chat_prompt' || entry.entryType === 'chat_reply'),
+  );
+  const [readingReachedEnd, setReadingReachedEnd] = useState<Record<string, boolean>>({});
+
+  const getResourceProgress = (resource: SocraticResource) => session.resourceProgress[resource.id];
+  const isResourceCompleted = (resource: SocraticResource) => {
+    if (!resource.required) return true;
+    return Boolean(getResourceProgress(resource)?.completed);
+  };
+  const isReadingResource = selectedResource?.type === 'reading';
+  const isQuizResource = selectedResource?.type === 'quiz';
+  const isLectureResource =
+    selectedResource?.type === 'avatar_lecture' || selectedResource?.type === 'lecture';
+  const selectedResourceProgress = selectedResource ? getResourceProgress(selectedResource) : undefined;
+  const selectedReadingIsPdf = selectedResource && isReadingResource ? isPdfLikeResource(selectedResource) : false;
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 space-y-5">
@@ -519,13 +797,19 @@ function WorkspaceStageContent({
         </div>
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <Clock3 className="w-4 h-4" />
-          Status: <span className="font-semibold capitalize text-gray-900">{session.stageStatuses[selectedStage].replace('_', ' ')}</span>
+          Status:{' '}
+          <span className="font-semibold capitalize text-gray-900">
+            {session.stageStatuses[selectedStage].replace('_', ' ')}
+          </span>
         </div>
       </div>
 
-      {selectedStage === 'clarify' && (
+      {stageConversation.length === 0 && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-          <h3 className="text-lg font-semibold text-amber-900 mb-3">Your Move</h3>
+          <div className="flex items-center gap-2 text-amber-900 font-semibold mb-3">
+            <Sparkles className="w-4 h-4" />
+            Starter prompts
+          </div>
           <div className="space-y-3">
             {stageConfig.starterQuestions.map((question, index) => (
               <button
@@ -534,7 +818,7 @@ function WorkspaceStageContent({
                 onClick={() => setCoachDraft(question)}
                 className="w-full text-left rounded-xl border border-amber-200 bg-white px-4 py-3 text-amber-950 hover:border-amber-300 transition-colors"
               >
-                {index + 1}. {question}
+                {question}
               </button>
             ))}
           </div>
@@ -545,11 +829,9 @@ function WorkspaceStageContent({
         <div className="grid lg:grid-cols-[320px_1fr] gap-5">
           <div className="space-y-3">
             <h3 className="text-lg font-semibold text-gray-900">Sources & Materials</h3>
-            {blueprint.resources.map((resource) => {
-              const progress = session.resourceProgress[resource.id];
-              const completed = resource.type === 'reading'
-                ? Boolean(progress?.opened && (progress?.manuallyReviewed || session.notes.some((note) => note.stage === 'research')))
-                : Boolean(progress?.completed);
+            {allResources.map((resource) => {
+              const progress = getResourceProgress(resource);
+              const completed = isResourceCompleted(resource);
 
               return (
                 <button
@@ -563,7 +845,9 @@ function WorkspaceStageContent({
                   }`}
                 >
                   <div className="flex items-center justify-between gap-3 mb-2">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">{resource.type.replace('_', ' ')}</span>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      {resource.type.replace('_', ' ')}
+                    </span>
                     {resource.required && (
                       <span className="rounded-full bg-yellow-100 px-2 py-1 text-[11px] font-medium text-yellow-800">
                         Required
@@ -585,7 +869,9 @@ function WorkspaceStageContent({
               <>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{selectedResource.type.replace('_', ' ')}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      {selectedResource.type.replace('_', ' ')}
+                    </p>
                     <h3 className="text-xl font-semibold text-gray-900">{selectedResource.title}</h3>
                   </div>
                   {selectedResource.required && (
@@ -595,31 +881,141 @@ function WorkspaceStageContent({
                   )}
                 </div>
                 <p className="text-sm text-gray-600">{selectedResource.summary}</p>
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleResourceProgress(selectedResource, 'open')}
-                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    Open Resource
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleResourceProgress(selectedResource, 'complete')}
-                    className="rounded-lg border border-brand-maroon px-4 py-2 text-sm font-medium text-brand-maroon hover:bg-brand-maroon hover:text-white"
-                  >
-                    Mark Completed
-                  </button>
-                  {selectedResource.type === 'reading' && (
+
+                {isReadingResource && selectedReadingIsPdf && (
+                  <>
+                    {selectedResource.url ? (
+                      <SocraticPdfReader
+                        key={selectedResource.id}
+                        url={selectedResource.url}
+                        title={selectedResource.title}
+                        onOpened={() => {
+                          if (!selectedResourceProgress?.opened) {
+                            handleResourceProgress(selectedResource, 'open');
+                          }
+                        }}
+                        onReachedEnd={() =>
+                          setReadingReachedEnd((current) => ({
+                            ...current,
+                            [selectedResource.id]: true,
+                          }))
+                        }
+                      />
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-600">
+                        This reading does not have a PDF attached yet.
+                      </div>
+                    )}
+
+                    {selectedResource.required && !isResourceCompleted(selectedResource) && (
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-amber-50 px-4 py-4 border border-amber-200">
+                        <p className="text-sm text-amber-900">
+                          {readingReachedEnd[selectedResource.id]
+                            ? 'You reached the end of the PDF. Mark it complete to unlock the next step.'
+                            : 'Scroll to the end of the PDF to unlock completion.'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleResourceProgress(selectedResource, 'complete')}
+                          className="rounded-lg bg-brand-maroon px-4 py-2 text-sm font-semibold text-white hover:bg-brand-maroon-hover disabled:opacity-50"
+                          disabled={readOnly || !readingReachedEnd[selectedResource.id]}
+                        >
+                          Mark Completed
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {isReadingResource && !selectedReadingIsPdf && (
+                  <div className="space-y-3">
+                    <div className="rounded-xl bg-gray-50 px-4 py-4 text-sm text-gray-700">
+                      This reading is linked as a course resource rather than a PDF file, so open it in a new tab to review it.
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      {selectedResource.url ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleResourceProgress(selectedResource, 'open');
+                            window.open(selectedResource.url || '', '_blank', 'noopener,noreferrer');
+                          }}
+                          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                          disabled={readOnly}
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          Open Reading
+                        </button>
+                      ) : (
+                        <div className="text-sm text-gray-500">No reading link attached.</div>
+                      )}
+                      {selectedResource.required && !isResourceCompleted(selectedResource) && (
+                        <button
+                          type="button"
+                          onClick={() => handleResourceProgress(selectedResource, 'complete')}
+                          className="rounded-lg bg-brand-maroon px-4 py-2 text-sm font-semibold text-white hover:bg-brand-maroon-hover disabled:opacity-50"
+                          disabled={readOnly || !selectedResourceProgress?.opened}
+                        >
+                          Mark Completed
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {isQuizResource && (
+                  <div className="space-y-3">
+                    <div className="rounded-xl bg-gray-50 px-4 py-4 text-sm text-gray-700">
+                      Open the quiz in a new tab and submit it there. Required quizzes become complete as soon as the attempt is submitted.
+                    </div>
                     <button
                       type="button"
-                      onClick={() => handleResourceProgress(selectedResource, 'review')}
-                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      onClick={() => window.open(`/student/course/${blueprint.courseId}/quiz/${selectedResource.resourceRefId}`, '_blank', 'noopener,noreferrer')}
+                      className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                     >
-                      Mark Reviewed
+                      <ExternalLink className="w-4 h-4" />
+                      Open Quiz
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
+
+                {isLectureResource && (
+                  <div className="space-y-3">
+                    <div className="rounded-xl bg-gray-50 px-4 py-4 text-sm text-gray-700">
+                      Open the lecture in a new tab, review it, then come back here to mark it complete if it is required.
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleResourceProgress(selectedResource, 'open');
+                          window.open(`/student/course/${blueprint.courseId}/lecture/${selectedResource.resourceRefId}`, '_blank', 'noopener,noreferrer');
+                        }}
+                        className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                        disabled={readOnly}
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Open Lecture
+                      </button>
+                      {selectedResource.required && !isResourceCompleted(selectedResource) && (
+                        <button
+                          type="button"
+                          onClick={() => handleResourceProgress(selectedResource, 'complete')}
+                          className="rounded-lg bg-brand-maroon px-4 py-2 text-sm font-semibold text-white hover:bg-brand-maroon-hover disabled:opacity-50"
+                          disabled={readOnly || !selectedResourceProgress?.opened}
+                        >
+                          Mark Completed
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {!isReadingResource && !isQuizResource && !isLectureResource && (
+                  <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-600">
+                    This research item is attached, but its preview flow is not available here yet.
+                  </div>
+                )}
               </>
             ) : (
               <div className="min-h-[220px] grid place-items-center text-gray-500">
@@ -636,26 +1032,35 @@ function WorkspaceStageContent({
             <button
               type="button"
               onClick={() => runBuildTool('thesis')}
-              className="rounded-2xl border border-orange-200 bg-orange-50 p-5 text-left hover:border-orange-300 transition-colors"
+              disabled={readOnly}
+              className="rounded-2xl border border-orange-200 bg-orange-50 p-5 text-left hover:border-orange-300 transition-colors disabled:opacity-50"
             >
               <h3 className="text-lg font-semibold text-orange-900 mb-2">Generate Thesis</h3>
-              <p className="text-sm text-orange-900/80">Create several thesis directions without writing the essay.</p>
+              <p className="text-sm text-orange-900/80">
+                Create several thesis directions without writing the essay.
+              </p>
             </button>
             <button
               type="button"
               onClick={() => runBuildTool('structure')}
-              className="rounded-2xl border border-yellow-200 bg-yellow-50 p-5 text-left hover:border-yellow-300 transition-colors"
+              disabled={readOnly}
+              className="rounded-2xl border border-yellow-200 bg-yellow-50 p-5 text-left hover:border-yellow-300 transition-colors disabled:opacity-50"
             >
               <h3 className="text-lg font-semibold text-yellow-900 mb-2">Structure Argument</h3>
-              <p className="text-sm text-yellow-900/80">Map the 2–4 moves the essay needs and align evidence to each move.</p>
+              <p className="text-sm text-yellow-900/80">
+                Map the 2 to 4 moves the essay needs and align evidence to each move.
+              </p>
             </button>
             <button
               type="button"
               onClick={() => runBuildTool('stress')}
-              className="rounded-2xl border border-red-200 bg-red-50 p-5 text-left hover:border-red-300 transition-colors"
+              disabled={readOnly}
+              className="rounded-2xl border border-red-200 bg-red-50 p-5 text-left hover:border-red-300 transition-colors disabled:opacity-50"
             >
               <h3 className="text-lg font-semibold text-red-900 mb-2">Stress-Test</h3>
-              <p className="text-sm text-red-900/80">Surface the strongest objections before the student starts drafting.</p>
+              <p className="text-sm text-red-900/80">
+                Surface the strongest objections before the draft is finalized.
+              </p>
             </button>
           </div>
 
@@ -665,7 +1070,9 @@ function WorkspaceStageContent({
               <ul className="space-y-2 text-sm text-gray-700">
                 {session.buildArtifacts.thesisOptions.length > 0
                   ? session.buildArtifacts.thesisOptions.map((item, index) => (
-                    <li key={`thesis-${index}`} className="rounded-lg bg-gray-50 px-3 py-2">{item}</li>
+                    <li key={`thesis-${index}`} className="rounded-lg bg-gray-50 px-3 py-2">
+                      {item}
+                    </li>
                   ))
                   : <li className="text-gray-500">Run “Generate Thesis” to seed options.</li>}
               </ul>
@@ -675,7 +1082,9 @@ function WorkspaceStageContent({
               <ul className="space-y-2 text-sm text-gray-700">
                 {session.buildArtifacts.structurePlan.length > 0
                   ? session.buildArtifacts.structurePlan.map((item, index) => (
-                    <li key={`structure-${index}`} className="rounded-lg bg-gray-50 px-3 py-2">{item}</li>
+                    <li key={`structure-${index}`} className="rounded-lg bg-gray-50 px-3 py-2">
+                      {item}
+                    </li>
                   ))
                   : <li className="text-gray-500">Run “Structure Argument” to map the essay.</li>}
               </ul>
@@ -685,7 +1094,9 @@ function WorkspaceStageContent({
               <ul className="space-y-2 text-sm text-gray-700">
                 {session.buildArtifacts.stressTestQuestions.length > 0
                   ? session.buildArtifacts.stressTestQuestions.map((item, index) => (
-                    <li key={`stress-${index}`} className="rounded-lg bg-gray-50 px-3 py-2">{item}</li>
+                    <li key={`stress-${index}`} className="rounded-lg bg-gray-50 px-3 py-2">
+                      {item}
+                    </li>
                   ))
                   : <li className="text-gray-500">Run “Stress-Test” to pressure the argument.</li>}
               </ul>
@@ -709,47 +1120,61 @@ function WorkspaceStageContent({
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={readOnly}
+                disabled={readOnly || submitting}
                 className="rounded-lg bg-brand-maroon px-4 py-2 text-sm font-semibold text-white hover:bg-brand-maroon-hover disabled:opacity-50"
               >
-                {session.submittedAt ? 'Save Resubmission' : 'Submit Assignment'}
+                {submitting
+                  ? 'Submitting...'
+                  : session.submittedAt
+                    ? 'Save Resubmission'
+                    : 'Submit Assignment'}
               </button>
             </div>
           </div>
-          <SocraticRichTextEditor value={session.essayHtml} onChange={handleEssayChange} readOnly={readOnly} />
+          <SocraticRichTextEditor
+            value={session.essayHtml}
+            onChange={handleEssayChange}
+            readOnly={readOnly}
+          />
         </div>
       )}
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-4">
         <div className="flex items-center gap-2 text-amber-900 font-semibold">
           <Sparkles className="w-4 h-4" />
-          AI Coach
+          Claude Chat
         </div>
         {!stageConfig.aiAllowed ? (
           <div className="text-sm text-amber-900">
-            AI coaching is disabled for {stageConfig.label}. Continue with notes and the stage tools instead.
+            Claude chat is disabled for {stageConfig.label}. Continue with notes and the stage tools instead.
           </div>
         ) : (
           <>
             <div className="space-y-3">
               {stageConversation.length === 0 ? (
                 <div className="rounded-xl bg-white px-4 py-3 text-sm text-gray-600">
-                  Start the conversation for {stageConfig.label.toLowerCase()}.
+                  Start the conversation with Claude for {stageConfig.label.toLowerCase()}.
                 </div>
               ) : (
                 stageConversation.map((entry) => (
                   <div
                     key={entry.id}
-                    className={`rounded-xl px-4 py-3 text-sm ${
-                      entry.actor === 'student'
-                        ? 'bg-white border border-gray-200 text-gray-900'
-                        : entry.actor === 'ai'
-                        ? 'bg-brand-maroon/5 border border-brand-maroon/10 text-gray-900'
-                        : 'bg-gray-50 border border-gray-200 text-gray-700'
-                    }`}
+                    className={`flex ${entry.actor === 'student' ? 'justify-end' : 'justify-start'}`}
                   >
-                    <div className="text-xs font-semibold uppercase tracking-wide mb-1">{entry.title}</div>
-                    <div>{entry.content}</div>
+                    <div
+                      className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
+                        entry.actor === 'student'
+                          ? 'bg-brand-maroon text-white'
+                          : 'bg-white border border-gray-200 text-gray-900'
+                      }`}
+                    >
+                      <div className={`mb-1 text-[11px] font-semibold uppercase tracking-wide ${
+                        entry.actor === 'student' ? 'text-white/70' : 'text-gray-500'
+                      }`}>
+                        {entry.actor === 'student' ? 'You' : 'Claude'}
+                      </div>
+                      <div className="whitespace-pre-wrap">{entry.content || (sendingMessage && entry.actor === 'ai' ? '...' : '')}</div>
+                    </div>
                   </div>
                 ))
               )}
@@ -761,23 +1186,25 @@ function WorkspaceStageContent({
                   onClick={() => setCoachDraft('Review the current draft and ask me one revision question at a time.')}
                   className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
-                  Let the coach read the current draft
+                  Let Claude read the current draft
                 </button>
               )}
               <Textarea
                 rows={4}
                 value={getCoachDraft()}
                 onChange={(event) => setCoachDraft(event.target.value)}
-                placeholder={`Message the ${stageConfig.label.toLowerCase()} coach...`}
+                placeholder={`Chat with Claude in ${stageConfig.label.toLowerCase()}...`}
+                disabled={readOnly}
               />
               <div className="flex justify-end">
                 <button
                   type="button"
                   onClick={handleCoachMessage}
-                  className="inline-flex items-center gap-2 rounded-lg bg-brand-maroon px-4 py-2 text-sm font-semibold text-white hover:bg-brand-maroon-hover"
+                  disabled={readOnly || sendingMessage || !getCoachDraft().trim()}
+                  className="inline-flex items-center gap-2 rounded-lg bg-brand-maroon px-4 py-2 text-sm font-semibold text-white hover:bg-brand-maroon-hover disabled:opacity-50"
                 >
                   <Send className="w-4 h-4" />
-                  Send
+                  {sendingMessage ? 'Sending...' : 'Send'}
                 </button>
               </div>
             </div>
@@ -796,11 +1223,12 @@ function WorkspaceSidebar({
   newNoteDraft,
   setNewNoteDraft,
   handleAddNote,
-  newSourceTitle,
-  setNewSourceTitle,
-  newSourceSummary,
-  setNewSourceSummary,
-  addAdditionalSource,
+  studentPdfSummary,
+  setStudentPdfSummary,
+  studentPdfFile,
+  setStudentPdfFile,
+  handleUploadStudentPdf,
+  uploadingStudentPdf,
   handleInsertNote,
 }: WorkspaceSidebarProps) {
   return (
@@ -815,7 +1243,9 @@ function WorkspaceSidebar({
           <div className="rounded-2xl border border-gray-200 bg-white p-5 space-y-4">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Shared Notebook</h3>
-              <p className="text-sm text-gray-600 mt-1">One notebook across all stages. Each note keeps its origin badge.</p>
+              <p className="text-sm text-gray-600 mt-1">
+                One notebook across all stages. Each note keeps its origin badge.
+              </p>
             </div>
             <Textarea
               rows={4}
@@ -836,10 +1266,14 @@ function WorkspaceSidebar({
               {session.notes.map((note) => (
                 <div key={note.id} className="rounded-xl border border-gray-200 p-4">
                   <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-medium ${getStageBadgeClasses(note.stage)}`}>
+                    <span
+                      className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-medium ${getStageBadgeClasses(note.stage)}`}
+                    >
                       {blueprint.stages[note.stage].label}
                     </span>
-                    <span className="text-xs text-gray-500">{new Date(note.createdAt).toLocaleString()}</span>
+                    <span className="text-xs text-gray-500">
+                      {new Date(note.createdAt).toLocaleString()}
+                    </span>
                   </div>
                   <p className="text-sm text-gray-800 whitespace-pre-wrap">{note.content}</p>
                   {selectedStage === 'write' && (
@@ -866,18 +1300,26 @@ function WorkspaceSidebar({
           <div className="rounded-2xl border border-gray-200 bg-white p-5 space-y-4">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Ledger</h3>
-              <p className="text-sm text-gray-600 mt-1">Append-only log of prompts, AI replies, and workflow events.</p>
+              <p className="text-sm text-gray-600 mt-1">
+                Append-only log of prompts, AI replies, and workflow events.
+              </p>
             </div>
             <div className="space-y-3 max-h-[640px] overflow-y-auto pr-1">
               {session.ledger.map((entry) => (
                 <div key={entry.id} className="rounded-xl border border-gray-200 p-4">
                   <div className="flex items-center justify-between gap-3 mb-2">
-                    <span className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-medium ${getStageBadgeClasses(entry.stage)}`}>
+                    <span
+                      className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-medium ${getStageBadgeClasses(entry.stage)}`}
+                    >
                       {blueprint.stages[entry.stage].label}
                     </span>
-                    <span className="text-xs text-gray-500">{new Date(entry.createdAt).toLocaleString()}</span>
+                    <span className="text-xs text-gray-500">
+                      {new Date(entry.createdAt).toLocaleString()}
+                    </span>
                   </div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">{entry.actor}</div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
+                    {entry.actor}
+                  </div>
                   <div className="font-medium text-gray-900">{entry.title}</div>
                   <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{entry.content}</p>
                 </div>
@@ -897,11 +1339,12 @@ function WorkspaceSidebar({
         <div className="space-y-3 text-sm">
           {blueprint.resources.filter((resource) => resource.required).map((resource) => {
             const progress = session.resourceProgress[resource.id];
-            const done = resource.type === 'reading'
-              ? Boolean(progress?.opened && (progress?.manuallyReviewed || session.notes.some((note) => note.stage === 'research')))
-              : Boolean(progress?.completed);
+            const done = Boolean(progress?.completed);
             return (
-              <div key={resource.id} className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-4 py-3">
+              <div
+                key={resource.id}
+                className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-4 py-3"
+              >
                 <div className="font-medium text-gray-900">{resource.title}</div>
                 <div className={`text-xs font-semibold ${done ? 'text-green-600' : 'text-gray-500'}`}>
                   {done ? 'Complete' : 'Pending'}
@@ -915,27 +1358,32 @@ function WorkspaceSidebar({
       {selectedStage === 'research' && (
         <div className="rounded-2xl border border-gray-200 bg-white p-5 space-y-4">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">Add Additional Source</h3>
-            <p className="text-sm text-gray-600 mt-1">Student-added sources are tracked in the ledger and notebook flow.</p>
+            <h3 className="text-lg font-semibold text-gray-900">Upload Your Own PDF</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Student-uploaded PDFs are tracked in the ledger and stay attached to this studio for educator review.
+            </p>
           </div>
-          <Input
-            value={newSourceTitle}
-            onChange={(event) => setNewSourceTitle(event.target.value)}
-            placeholder="Source title"
-          />
+          <Input type="file" accept="application/pdf" onChange={(event) => setStudentPdfFile(event.target.files?.[0] || null)} disabled={readOnly || uploadingStudentPdf} />
+          {studentPdfFile && (
+            <div className="text-sm text-gray-600">
+              Selected PDF: <span className="font-medium text-gray-900">{studentPdfFile.name}</span>
+            </div>
+          )}
           <Textarea
             rows={3}
-            value={newSourceSummary}
-            onChange={(event) => setNewSourceSummary(event.target.value)}
-            placeholder="What does this source add?"
+            value={studentPdfSummary}
+            onChange={(event) => setStudentPdfSummary(event.target.value)}
+            placeholder="What should this PDF help with?"
+            disabled={readOnly || uploadingStudentPdf}
           />
           <button
             type="button"
-            onClick={addAdditionalSource}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            onClick={handleUploadStudentPdf}
+            disabled={readOnly || uploadingStudentPdf || !studentPdfFile}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
-            <Plus className="w-4 h-4" />
-            Add Source
+            <Upload className="w-4 h-4" />
+            {uploadingStudentPdf ? 'Uploading PDF...' : 'Attach PDF'}
           </button>
         </div>
       )}

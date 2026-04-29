@@ -57,7 +57,7 @@
     "mammoth": "^1.11.0",
     "next": "13.5.1",
     "next-themes": "^0.3.0",
-    "pdfjs-dist": "^5.4.530",
+    "pdfjs-dist": "^4.8.69",
     "postcss": "8.4.30",
     "react": "18.2.0",
     "react-day-picker": "^8.10.1",
