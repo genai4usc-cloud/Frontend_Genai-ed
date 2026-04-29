@@ -77,7 +77,11 @@ export default function AuthCard({ role }: AuthCardProps) {
 
       console.log('Login successful, redirecting to dashboard...');
       setLoadingMessage('Preparing AI models...');
-      await warmAllModels(true);
+      try {
+        await warmAllModels(true);
+      } catch (warmupError) {
+        console.warn('Model warmup failed during login; continuing anyway.', warmupError);
+      }
       router.push(`/${role}/dashboard`);
     } catch (err) {
       console.error('Unexpected error:', err);
