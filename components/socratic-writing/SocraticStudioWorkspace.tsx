@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   BookOpen,
@@ -87,6 +87,8 @@ export default function SocraticStudioWorkspace({
   const [studentPdfSummary, setStudentPdfSummary] = useState('');
   const [studentPdfFile, setStudentPdfFile] = useState<File | null>(null);
   const [uploadingStudentPdf, setUploadingStudentPdf] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sourcesCollapsed, setSourcesCollapsed] = useState(false);
 
   const hydratedRef = useRef(false);
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -630,8 +632,14 @@ export default function SocraticStudioWorkspace({
         </div>
       </div>
 
-      <div className="grid xl:grid-cols-[1fr_360px] gap-6 items-start">
-        <div className="space-y-6">
+      <div
+        className={`grid gap-6 items-start ${
+          sidebarCollapsed
+            ? 'xl:grid-cols-[minmax(0,1fr)_72px]'
+            : 'xl:grid-cols-[minmax(0,1fr)_360px]'
+        }`}
+      >
+        <div className="space-y-6 min-w-0">
           <div className="rounded-2xl border border-gray-200 bg-white p-5">
             <div className="flex flex-wrap gap-3">
               {SOCRATIC_STAGE_ORDER.map((stage) => {
@@ -686,13 +694,18 @@ export default function SocraticStudioWorkspace({
             session={session}
             setCoachDraft={setCoachDraft}
             setSelectedResourceId={setSelectedResourceId}
+            setSidebarCollapsed={setSidebarCollapsed}
+            setSourcesCollapsed={setSourcesCollapsed}
             sendingMessage={sendingMessage}
+            sidebarCollapsed={sidebarCollapsed}
+            sourcesCollapsed={sourcesCollapsed}
             submitting={submitting}
           />
         </div>
 
         <WorkspaceSidebar
           blueprint={blueprint}
+          collapsed={sidebarCollapsed}
           handleAddNote={handleAddNote}
           handleInsertNote={handleInsertNote}
           handleUploadStudentPdf={handleUploadStudentPdf}
@@ -703,6 +716,7 @@ export default function SocraticStudioWorkspace({
           setNewNoteDraft={setNewNoteDraft}
           setStudentPdfFile={setStudentPdfFile}
           setStudentPdfSummary={setStudentPdfSummary}
+          setCollapsed={setSidebarCollapsed}
           studentPdfFile={studentPdfFile}
           studentPdfSummary={studentPdfSummary}
           uploadingStudentPdf={uploadingStudentPdf}
@@ -728,12 +742,17 @@ type WorkspaceStageContentProps = {
   handleEssayChange: (nextHtml: string) => void;
   handleExportPdf: () => void;
   handleSubmit: () => void;
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: Dispatch<SetStateAction<boolean>>;
+  sourcesCollapsed: boolean;
+  setSourcesCollapsed: Dispatch<SetStateAction<boolean>>;
   submitting: boolean;
   sendingMessage: boolean;
 };
 
 type WorkspaceSidebarProps = {
   blueprint: SocraticStudioBlueprint;
+  collapsed: boolean;
   session: SocraticStudioSession;
   readOnly: boolean;
   selectedStage: SocraticStageKey;
@@ -747,6 +766,7 @@ type WorkspaceSidebarProps = {
   handleUploadStudentPdf: () => void;
   uploadingStudentPdf: boolean;
   handleInsertNote: (noteContent: string) => void;
+  setCollapsed: Dispatch<SetStateAction<boolean>>;
 };
 
 function WorkspaceStageContent({
@@ -765,6 +785,10 @@ function WorkspaceStageContent({
   handleEssayChange,
   handleExportPdf,
   handleSubmit,
+  sidebarCollapsed,
+  setSidebarCollapsed,
+  sourcesCollapsed,
+  setSourcesCollapsed,
   submitting,
   sendingMessage,
 }: WorkspaceStageContentProps) {
@@ -787,6 +811,7 @@ function WorkspaceStageContent({
     selectedResource?.type === 'avatar_lecture' || selectedResource?.type === 'lecture';
   const selectedResourceProgress = selectedResource ? getResourceProgress(selectedResource) : undefined;
   const selectedReadingIsPdf = selectedResource && isReadingResource ? isPdfLikeResource(selectedResource) : false;
+  const readingFocusMode = sourcesCollapsed && sidebarCollapsed;
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-6 space-y-5">
@@ -826,45 +851,56 @@ function WorkspaceStageContent({
       )}
 
       {selectedStage === 'research' && (
-        <div className="grid lg:grid-cols-[320px_1fr] gap-5">
-          <div className="space-y-3">
-            <h3 className="text-lg font-semibold text-gray-900">Sources & Materials</h3>
-            {allResources.map((resource) => {
-              const progress = getResourceProgress(resource);
-              const completed = isResourceCompleted(resource);
-
-              return (
+        <div className={`grid gap-5 min-w-0 ${sourcesCollapsed ? 'lg:grid-cols-[minmax(0,1fr)]' : 'lg:grid-cols-[280px_minmax(0,1fr)]'}`}>
+          {!sourcesCollapsed && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-lg font-semibold text-gray-900">Sources & Materials</h3>
                 <button
-                  key={resource.id}
                   type="button"
-                  onClick={() => setSelectedResourceId(resource.id)}
-                  className={`w-full rounded-2xl border px-4 py-4 text-left transition-colors ${
-                    selectedResource?.id === resource.id
-                      ? 'border-brand-maroon bg-brand-maroon/5'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
+                  onClick={() => setSourcesCollapsed(true)}
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
                 >
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      {resource.type.replace('_', ' ')}
-                    </span>
-                    {resource.required && (
-                      <span className="rounded-full bg-yellow-100 px-2 py-1 text-[11px] font-medium text-yellow-800">
-                        Required
-                      </span>
-                    )}
-                  </div>
-                  <div className="font-semibold text-gray-900">{resource.title}</div>
-                  <p className="text-sm text-gray-600 mt-1">{resource.summary}</p>
-                  <div className="mt-3 text-xs font-medium text-gray-500">
-                    {completed ? 'Completed' : progress?.opened ? 'In progress' : 'Not started'}
-                  </div>
+                  Hide Sources
                 </button>
-              );
-            })}
-          </div>
+              </div>
+              {allResources.map((resource) => {
+                const progress = getResourceProgress(resource);
+                const completed = isResourceCompleted(resource);
 
-          <div className="rounded-2xl border border-gray-200 p-5 space-y-4">
+                return (
+                  <button
+                    key={resource.id}
+                    type="button"
+                    onClick={() => setSelectedResourceId(resource.id)}
+                    className={`w-full rounded-2xl border px-4 py-4 text-left transition-colors ${
+                      selectedResource?.id === resource.id
+                        ? 'border-brand-maroon bg-brand-maroon/5'
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        {resource.type.replace('_', ' ')}
+                      </span>
+                      {resource.required && (
+                        <span className="rounded-full bg-yellow-100 px-2 py-1 text-[11px] font-medium text-yellow-800">
+                          Required
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-semibold text-gray-900">{resource.title}</div>
+                    <p className="text-sm text-gray-600 mt-1">{resource.summary}</p>
+                    <div className="mt-3 text-xs font-medium text-gray-500">
+                      {completed ? 'Completed' : progress?.opened ? 'In progress' : 'Not started'}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-gray-200 p-5 space-y-4 min-w-0">
             {selectedResource ? (
               <>
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -874,11 +910,38 @@ function WorkspaceStageContent({
                     </p>
                     <h3 className="text-xl font-semibold text-gray-900">{selectedResource.title}</h3>
                   </div>
-                  {selectedResource.required && (
-                    <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-800">
-                      Required to unlock Build
-                    </span>
-                  )}
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {selectedResource.required && (
+                      <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-800">
+                        Required to unlock Build
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setSourcesCollapsed((current) => !current)}
+                      className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      {sourcesCollapsed ? 'Show Sources' : 'Hide Sources'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSidebarCollapsed((current) => !current)}
+                      className="hidden xl:inline-flex rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      {sidebarCollapsed ? 'Show Notebook' : 'Hide Notebook'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextFocused = !readingFocusMode;
+                        setSourcesCollapsed(nextFocused);
+                        setSidebarCollapsed(nextFocused);
+                      }}
+                      className="hidden xl:inline-flex rounded-lg border border-brand-maroon px-3 py-2 text-xs font-semibold text-brand-maroon hover:bg-brand-maroon hover:text-white"
+                    >
+                      {readingFocusMode ? 'Exit Focus' : 'Focus Reading'}
+                    </button>
+                  </div>
                 </div>
                 <p className="text-sm text-gray-600">{selectedResource.summary}</p>
 
@@ -1217,6 +1280,7 @@ function WorkspaceStageContent({
 
 function WorkspaceSidebar({
   blueprint,
+  collapsed,
   session,
   readOnly,
   selectedStage,
@@ -1230,9 +1294,46 @@ function WorkspaceSidebar({
   handleUploadStudentPdf,
   uploadingStudentPdf,
   handleInsertNote,
+  setCollapsed,
 }: WorkspaceSidebarProps) {
+  if (collapsed) {
+    return (
+      <aside className="hidden xl:block xl:sticky xl:top-8">
+        <div className="flex h-[calc(100vh-8rem)] min-h-[420px] flex-col items-center justify-between rounded-2xl border border-gray-200 bg-white px-3 py-4">
+          <button
+            type="button"
+            onClick={() => setCollapsed(false)}
+            className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+          >
+            Open
+          </button>
+          <div className="[writing-mode:vertical-rl] rotate-180 text-xs font-semibold uppercase tracking-[0.3em] text-gray-400">
+            Notebook
+          </div>
+          <button
+            type="button"
+            onClick={() => setCollapsed(false)}
+            className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+            aria-label="Expand notebook and ledger panel"
+          >
+            Open
+          </button>
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <aside className="space-y-6 xl:sticky xl:top-8">
+      <div className="hidden xl:flex justify-end">
+        <button
+          type="button"
+          onClick={() => setCollapsed(true)}
+          className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+        >
+          Minimize panel
+        </button>
+      </div>
       <Tabs defaultValue="notebook" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="notebook">Notebook</TabsTrigger>
