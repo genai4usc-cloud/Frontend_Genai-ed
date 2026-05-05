@@ -418,14 +418,10 @@ export const isStageUnlocked = (
   session: SocraticStudioSession,
   blueprint: SocraticStudioBlueprint,
 ) => {
-  if (stage === 'clarify') return true;
-  if (stage === 'research') {
-    return session.stageStatuses.clarify === 'completed';
-  }
-  if (stage === 'build') {
-    return session.stageStatuses.research === 'completed';
-  }
-  return session.stageStatuses.build === 'completed';
+  void stage;
+  void session;
+  void blueprint;
+  return true;
 };
 
 export const getRecommendedStage = (session: SocraticStudioSession) => {
@@ -531,6 +527,11 @@ export const loadStudioDraft = (courseId: string) => {
   return safeJsonParse<SocraticStudioBlueprint>(
     window.localStorage.getItem(storageKey('draft', courseId)),
   );
+};
+
+export const clearStudioDraft = (courseId: string) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(storageKey('draft', courseId));
 };
 
 export const saveStudioSession = (

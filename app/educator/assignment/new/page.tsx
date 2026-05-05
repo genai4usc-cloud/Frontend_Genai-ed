@@ -20,6 +20,7 @@ import {
   sanitizeFileName,
 } from '@/lib/assignments';
 import {
+  clearStudioDraft,
   clearPendingSocraticCreatedResource,
   createDefaultStudioBlueprint,
   loadPendingSocraticCreatedResource,
@@ -78,6 +79,7 @@ export default function NewAssignmentPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const presetCourseId = searchParams.get('courseId');
+  const shouldResumeSocraticDraft = searchParams.get('resumeSocraticDraft') === '1';
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -149,7 +151,16 @@ export default function NewAssignmentPage() {
       pointsPossible: Number(pointsPossible) || 100,
     });
 
-    const savedDraft = selectedCourseId ? loadStudioDraft(selectedCourseId) : null;
+    const pendingResource = loadPendingSocraticCreatedResource();
+    const canRestoreDraft =
+      Boolean(selectedCourseId)
+      && (shouldResumeSocraticDraft || pendingResource?.courseId === selectedCourseId);
+
+    if (selectedCourseId && !canRestoreDraft) {
+      clearStudioDraft(selectedCourseId);
+    }
+
+    const savedDraft = canRestoreDraft && selectedCourseId ? loadStudioDraft(selectedCourseId) : null;
     const nextBlueprint = savedDraft
       ? {
           ...savedDraft,
@@ -174,7 +185,7 @@ export default function NewAssignmentPage() {
       : seed;
 
     setStudioBlueprint(nextBlueprint);
-  }, [assignmentTitle, description, dueAt, pointsPossible, selectedCourse, selectedCourseId]);
+  }, [assignmentTitle, description, dueAt, pointsPossible, selectedCourse, selectedCourseId, shouldResumeSocraticDraft]);
 
   useEffect(() => {
     if (assignmentExperience !== 'socratic' || !selectedCourseId || !studioBlueprint) return;
@@ -485,14 +496,14 @@ export default function NewAssignmentPage() {
   };
 
   const navigateToCreateQuiz = () => {
-    const returnTo = `/educator/assignment/new?courseId=${selectedCourseId}&mode=socratic`;
+    const returnTo = `/educator/assignment/new?courseId=${selectedCourseId}&mode=socratic&resumeSocraticDraft=1`;
     router.push(
       `/educator/quiz/new?courseId=${selectedCourseId}&socraticMode=online&socraticAttach=quiz&returnTo=${encodeURIComponent(returnTo)}`,
     );
   };
 
   const navigateToCreateAvatarLecture = () => {
-    const returnTo = `/educator/assignment/new?courseId=${selectedCourseId}&mode=socratic`;
+    const returnTo = `/educator/assignment/new?courseId=${selectedCourseId}&mode=socratic&resumeSocraticDraft=1`;
     router.push(
       `/educator/lecture/new?courseId=${selectedCourseId}&socraticAttach=avatar_lecture&returnTo=${encodeURIComponent(returnTo)}`,
     );

@@ -159,6 +159,11 @@ export default function SocraticPdfReader({
       <style jsx global>{`
         .socratic-pdf-viewer {
           --page-bg-color: #ffffff;
+          overflow-x: hidden;
+        }
+
+        .socratic-pdf-viewer > div:first-child {
+          overflow-x: hidden;
         }
 
         .socratic-pdf-viewer .page {
@@ -167,6 +172,7 @@ export default function SocraticPdfReader({
           background: var(--page-bg-color);
           box-shadow: 0 4px 18px rgba(15, 23, 42, 0.08);
           overflow: hidden;
+          max-width: 100%;
         }
 
         .socratic-pdf-viewer .canvasWrapper {
@@ -221,7 +227,7 @@ export default function SocraticPdfReader({
             Scroll to the end of the PDF to unlock completion.
           </p>
         </div>
-        <div ref={scrollRef} className="relative max-h-[78vh] overflow-y-auto bg-gray-100">
+        <div ref={scrollRef} className="relative max-h-[78vh] overflow-y-auto overflow-x-hidden bg-gray-100">
           <div className="socratic-pdf-viewer p-5">
             <div ref={pagesHostRef} />
             {!loading && !error && (

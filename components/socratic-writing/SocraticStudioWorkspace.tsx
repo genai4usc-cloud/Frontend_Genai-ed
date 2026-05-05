@@ -21,6 +21,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import SocraticRichTextEditor from '@/components/socratic-writing/SocraticRichTextEditor';
 import SocraticPdfReader from '@/components/socratic-writing/SocraticPdfReader';
+import EmbeddedOnlineQuiz from '@/components/socratic-writing/EmbeddedOnlineQuiz';
+import EmbeddedLectureViewer from '@/components/socratic-writing/EmbeddedLectureViewer';
 import {
   buildPdfHtml,
   createStudioLedgerEntry,
@@ -435,6 +437,19 @@ export default function SocraticStudioWorkspace({
     }));
   };
 
+  const syncResourceProgress = (
+    resource: SocraticResource,
+    nextState: { opened?: boolean; completed?: boolean },
+  ) => {
+    const currentProgress = session?.resourceProgress[resource.id];
+    if (nextState.opened && !currentProgress?.opened) {
+      handleResourceProgress(resource, 'open');
+    }
+    if (nextState.completed && !currentProgress?.completed) {
+      handleResourceProgress(resource, 'complete');
+    }
+  };
+
   const runBuildTool = (tool: 'thesis' | 'structure' | 'stress') => {
     if (readOnly) return;
 
@@ -698,6 +713,7 @@ export default function SocraticStudioWorkspace({
             setSourcesCollapsed={setSourcesCollapsed}
             sendingMessage={sendingMessage}
             sidebarCollapsed={sidebarCollapsed}
+            syncResourceProgress={syncResourceProgress}
             sourcesCollapsed={sourcesCollapsed}
             submitting={submitting}
           />
@@ -738,6 +754,10 @@ type WorkspaceStageContentProps = {
   setCoachDraft: (value: string) => void;
   handleCoachMessage: () => void;
   handleResourceProgress: (resource: SocraticResource, action: 'open' | 'complete') => void;
+  syncResourceProgress: (
+    resource: SocraticResource,
+    nextState: { opened?: boolean; completed?: boolean },
+  ) => void;
   runBuildTool: (tool: 'thesis' | 'structure' | 'stress') => void;
   handleEssayChange: (nextHtml: string) => void;
   handleExportPdf: () => void;
@@ -781,6 +801,7 @@ function WorkspaceStageContent({
   setCoachDraft,
   handleCoachMessage,
   handleResourceProgress,
+  syncResourceProgress,
   runBuildTool,
   handleEssayChange,
   handleExportPdf,
@@ -913,7 +934,7 @@ function WorkspaceStageContent({
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     {selectedResource.required && (
                       <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-medium text-yellow-800">
-                        Required to unlock Build
+                        Required resource
                       </span>
                     )}
                     <button
@@ -974,8 +995,8 @@ function WorkspaceStageContent({
                       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-amber-50 px-4 py-4 border border-amber-200">
                         <p className="text-sm text-amber-900">
                           {readingReachedEnd[selectedResource.id]
-                            ? 'You reached the end of the PDF. Mark it complete to unlock the next step.'
-                            : 'Scroll to the end of the PDF to unlock completion.'}
+                            ? 'You reached the end of the PDF. Mark it complete to record the reading.'
+                            : 'Scroll to the end of the PDF to enable completion.'}
                         </p>
                         <button
                           type="button"
@@ -1027,51 +1048,31 @@ function WorkspaceStageContent({
                 )}
 
                 {isQuizResource && (
-                  <div className="space-y-3">
-                    <div className="rounded-xl bg-gray-50 px-4 py-4 text-sm text-gray-700">
-                      Open the quiz in a new tab and submit it there. Required quizzes become complete as soon as the attempt is submitted.
+                  selectedResource.resourceRefId ? (
+                    <EmbeddedOnlineQuiz
+                      courseId={blueprint.courseId}
+                      quizBatchId={selectedResource.resourceRefId}
+                      onProgressChange={(nextState) => syncResourceProgress(selectedResource, nextState)}
+                    />
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-600">
+                      This quiz is attached, but its quiz reference is missing.
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => window.open(`/student/course/${blueprint.courseId}/quiz/${selectedResource.resourceRefId}`, '_blank', 'noopener,noreferrer')}
-                      className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      Open Quiz
-                    </button>
-                  </div>
+                  )
                 )}
 
                 {isLectureResource && (
-                  <div className="space-y-3">
-                    <div className="rounded-xl bg-gray-50 px-4 py-4 text-sm text-gray-700">
-                      Open the lecture in a new tab, review it, then come back here to mark it complete if it is required.
+                  selectedResource.resourceRefId ? (
+                    <EmbeddedLectureViewer
+                      courseId={blueprint.courseId}
+                      lectureId={selectedResource.resourceRefId}
+                      onProgressChange={(nextState) => syncResourceProgress(selectedResource, nextState)}
+                    />
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-600">
+                      This lecture is attached, but its lecture reference is missing.
                     </div>
-                    <div className="flex flex-wrap gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleResourceProgress(selectedResource, 'open');
-                          window.open(`/student/course/${blueprint.courseId}/lecture/${selectedResource.resourceRefId}`, '_blank', 'noopener,noreferrer');
-                        }}
-                        className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                        disabled={readOnly}
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                        Open Lecture
-                      </button>
-                      {selectedResource.required && !isResourceCompleted(selectedResource) && (
-                        <button
-                          type="button"
-                          onClick={() => handleResourceProgress(selectedResource, 'complete')}
-                          className="rounded-lg bg-brand-maroon px-4 py-2 text-sm font-semibold text-white hover:bg-brand-maroon-hover disabled:opacity-50"
-                          disabled={readOnly || !selectedResourceProgress?.opened}
-                        >
-                          Mark Completed
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                  )
                 )}
 
                 {!isReadingResource && !isQuizResource && !isLectureResource && (
@@ -1434,7 +1435,7 @@ function WorkspaceSidebar({
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Research Gate</h3>
           <p className="text-sm text-gray-600 mt-1">
-            Build unlocks after Clarify completes. Write unlocks after required research and Build are done.
+            All four stages are open. Required resources still help track progress and readiness.
           </p>
         </div>
         <div className="space-y-3 text-sm">
