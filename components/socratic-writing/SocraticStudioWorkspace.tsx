@@ -33,6 +33,7 @@ import {
   isStageUnlocked,
   recomputeStageStatuses,
   SOCRATIC_STAGE_ORDER,
+  SocraticPreviewPayload,
   SocraticResource,
   SocraticStageKey,
   SocraticStudioBlueprint,
@@ -43,12 +44,16 @@ import {
   fetchStudentSocraticWorkspace,
   saveStudentSocraticWorkspace,
   streamSocraticCoachMessage,
+  streamSocraticPreviewCoachMessage,
   submitSocraticWorkspace,
 } from '@/lib/socraticWritingApi';
 
 type SocraticStudioWorkspaceProps = {
   assignmentId: string;
   onBack: () => void;
+  previewMode?: boolean;
+  previewPayload?: SocraticPreviewPayload;
+  onSavePreviewSession?: (session: SocraticStudioSession) => void;
 };
 
 type StudentAddedSource = SocraticResource & {
@@ -75,6 +80,9 @@ const createClientId = (prefix: string) =>
 export default function SocraticStudioWorkspace({
   assignmentId,
   onBack,
+  previewMode = false,
+  previewPayload,
+  onSavePreviewSession,
 }: SocraticStudioWorkspaceProps) {
   const [loading, setLoading] = useState(true);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
@@ -108,6 +116,7 @@ export default function SocraticStudioWorkspace({
 
   useEffect(() => {
     const handleVisibilityRefresh = async () => {
+      if (previewMode) return;
       if (document.visibilityState !== 'visible') return;
       if (!workspaceId || !hydratedRef.current) return;
 
@@ -141,13 +150,30 @@ export default function SocraticStudioWorkspace({
       document.removeEventListener('visibilitychange', handleVisibilityRefresh);
       window.removeEventListener('focus', handleVisibilityRefresh);
     };
-  }, [assignmentId, workspaceId]);
+  }, [assignmentId, previewMode, workspaceId]);
 
   const loadWorkspace = async () => {
     setLoading(true);
     hydratedRef.current = false;
 
     try {
+      if (previewMode) {
+        if (!previewPayload) {
+          throw new Error('Preview setup was not found. Return to assignment setup and launch Preview as Student again.');
+        }
+        const nextBlueprint = previewPayload.blueprint;
+        const nextSession = recomputeStageStatuses(previewPayload.session, nextBlueprint);
+
+        setBlueprint(nextBlueprint);
+        setSession(nextSession);
+        setWorkspaceId('educator-preview');
+        setCourseStudentId('educator-preview');
+        setReadOnly(false);
+        setSelectedResourceId((current) => current || nextBlueprint.resources[0]?.id || null);
+        hydratedRef.current = true;
+        return;
+      }
+
       const payload = await fetchStudentSocraticWorkspace(assignmentId);
       const nextBlueprint = payload.blueprint;
       const nextSession = recomputeStageStatuses(payload.session, nextBlueprint);
@@ -219,7 +245,11 @@ export default function SocraticStudioWorkspace({
     autosaveTimeoutRef.current = setTimeout(async () => {
       try {
         setSaving(true);
-        await saveStudentSocraticWorkspace(workspaceId, session);
+        if (previewMode) {
+          onSavePreviewSession?.(session);
+        } else {
+          await saveStudentSocraticWorkspace(workspaceId, session);
+        }
       } catch (error) {
         console.error('Error autosaving Socratic workspace:', error);
         toast.error(error instanceof Error ? error.message : 'Failed to save Socratic progress.');
@@ -233,7 +263,7 @@ export default function SocraticStudioWorkspace({
         clearTimeout(autosaveTimeoutRef.current);
       }
     };
-  }, [blueprint, session, workspaceId]);
+  }, [blueprint, onSavePreviewSession, previewMode, session, workspaceId]);
 
   const selectedStage = session?.activeStage || 'clarify';
   const recommendedStage = session ? getRecommendedStage(session) : 'clarify';
@@ -366,41 +396,56 @@ export default function SocraticStudioWorkspace({
         };
       });
 
-      await streamSocraticCoachMessage(
-        workspaceId,
-        selectedStage,
-        draft,
-        draftExcerpt || undefined,
-        promptClientId,
-        replyClientId,
-        {
-          onDelta: (chunk) => {
-            updateSession((current) => ({
-              ...current,
-              ledger: current.ledger.map((entry) =>
-                entry.id === replyClientId
-                  ? { ...entry, content: `${entry.content}${chunk}` }
-                  : entry,
-              ),
-            }));
-          },
-          onDone: (response) => {
-            updateSession((current) => {
-              const byId = new Map(current.ledger.map((entry) => [entry.id, entry]));
-              for (const entry of response.entries) {
-                byId.set(entry.id, entry);
-              }
-              return {
-                ...current,
-                ledger: Array.from(byId.values()),
-              };
-            });
-          },
-          onError: (message) => {
-            throw new Error(message);
-          },
+      const streamHandlers = {
+        onDelta: (chunk: string) => {
+          updateSession((current) => ({
+            ...current,
+            ledger: current.ledger.map((entry) =>
+              entry.id === replyClientId
+                ? { ...entry, content: `${entry.content}${chunk}` }
+                : entry,
+            ),
+          }));
         },
-      );
+        onDone: (response: { reply: string; entries: SocraticStudioSession['ledger'] }) => {
+          updateSession((current) => {
+            const byId = new Map(current.ledger.map((entry) => [entry.id, entry]));
+            for (const entry of response.entries) {
+              byId.set(entry.id, entry);
+            }
+            return {
+              ...current,
+              ledger: Array.from(byId.values()),
+            };
+          });
+        },
+        onError: (message: string) => {
+          throw new Error(message);
+        },
+      };
+
+      if (previewMode) {
+        await streamSocraticPreviewCoachMessage(
+          blueprint,
+          session,
+          selectedStage,
+          draft,
+          draftExcerpt || undefined,
+          promptClientId,
+          replyClientId,
+          streamHandlers,
+        );
+      } else {
+        await streamSocraticCoachMessage(
+          workspaceId,
+          selectedStage,
+          draft,
+          draftExcerpt || undefined,
+          promptClientId,
+          replyClientId,
+          streamHandlers,
+        );
+      }
     } catch (error) {
       console.error('Error sending Socratic coach message:', error);
       updateSession((current) => ({
@@ -583,6 +628,10 @@ export default function SocraticStudioWorkspace({
 
   const handleSubmit = async () => {
     if (!workspaceId) return;
+    if (previewMode) {
+      toast.info('Preview mode does not submit. Return to assignment setup to publish when ready.');
+      return;
+    }
 
     try {
       setSubmitting(true);
@@ -615,13 +664,13 @@ export default function SocraticStudioWorkspace({
           className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-5"
         >
           <ArrowLeft className="w-5 h-5" />
-          Back to Assignment
+          {previewMode ? 'Back to Assignment Setup' : 'Back to Assignment'}
         </button>
 
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-brand-maroon mb-2">
-              {blueprint.courseCode} | Coaching: Claude
+              {blueprint.courseCode} | Coaching: Claude{previewMode ? ' | Educator Preview' : ''}
             </p>
             <h1 className="text-4xl font-bold text-gray-950">{blueprint.assignmentTitle}</h1>
             <p className="text-gray-600 mt-3 max-w-3xl">{blueprint.assignmentBrief}</p>
@@ -638,13 +687,20 @@ export default function SocraticStudioWorkspace({
         </div>
       </div>
 
+      {previewMode && (
+        <div className="rounded-2xl border border-brand-maroon/20 bg-brand-maroon/5 px-5 py-4 text-brand-maroon">
+          <span className="font-semibold">Preview as Student:</span> this uses real Claude and your current draft setup,
+          but it does not create real student submissions or workspace records.
+        </div>
+      )}
+
       <div className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-blue-900 flex flex-wrap items-center justify-between gap-3">
         <div>
           <span className="font-semibold">Recommended:</span> {blueprint.stages[recommendedStage].label}
           {' '}| {blueprint.stages[recommendedStage].description}
         </div>
         <div className="text-sm text-blue-800">
-          {saving ? 'Saving...' : readOnly ? 'Read-only' : session.submittedAt ? 'Submitted - editable until due date' : 'Autosave on'}
+          {saving ? 'Saving...' : previewMode ? 'Preview autosave on' : readOnly ? 'Read-only' : session.submittedAt ? 'Submitted - editable until due date' : 'Autosave on'}
         </div>
       </div>
 

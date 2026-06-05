@@ -21,6 +21,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import {
   DEFAULT_SOCRATIC_PROMPT_CONTROLS,
+  DEFAULT_STAGE_READINESS_PROMPTS,
   DEFAULT_STAGE_RUNTIME_PROMPTS,
   DEFAULT_STAGE_STARTER_PROMPTS,
   SOCRATIC_STAGE_ORDER,
@@ -55,7 +56,7 @@ interface SocraticStudioConfiguratorProps {
   onUploadReading: (file: File) => Promise<void>;
   onCreateQuiz: () => void;
   onCreateAvatarLecture: () => void;
-  onGenerateReadinessQuestions: () => Promise<void>;
+  onGenerateReadinessQuestions: (stage?: SocraticStageKey) => Promise<void>;
   onGenerateStarterResponse: (stage: SocraticStageKey) => Promise<void>;
 }
 
@@ -89,6 +90,8 @@ const promptHelp = {
     'Used during live student chat for this stage. This is the main behavior contract for what Claude should and should not do in the stage.',
   stageStarterPrompt:
     'Used only when generating the first visible Claude message for this stage. It does not run on every chat reply.',
+  stageReadinessPrompt:
+    'Used when regenerating hidden readiness goals for this stage. It tells Claude what understanding signals to create for the hidden goals. Students never see this prompt.',
 };
 
 const PromptHelp = ({ text }: { text: string }) => (
@@ -113,7 +116,24 @@ export default function SocraticStudioConfigurator({
   const [activePicker, setActivePicker] = useState<'reading' | 'quiz' | 'avatar_lecture' | null>(null);
   const [uploadingReading, setUploadingReading] = useState(false);
   const [generatingReadinessQuestions, setGeneratingReadinessQuestions] = useState(false);
+  const [generatingReadinessStage, setGeneratingReadinessStage] = useState<SocraticStageKey | null>(null);
   const [generatingStage, setGeneratingStage] = useState<SocraticStageKey | null>(null);
+  const [readinessSourceSignatures, setReadinessSourceSignatures] = useState<Partial<Record<SocraticStageKey, string>>>(
+    () =>
+      SOCRATIC_STAGE_ORDER.reduce((signatures, stage) => {
+        if ((blueprint.stages[stage].readinessQuestions || []).some((question) => question.trim())) {
+          signatures[stage] = JSON.stringify({
+            promptControls: blueprint.promptControls || DEFAULT_SOCRATIC_PROMPT_CONTROLS,
+            readinessPrompt: blueprint.stages[stage].readinessPrompt || DEFAULT_STAGE_READINESS_PROMPTS[stage],
+            customInstructions: blueprint.stages[stage].customInstructions || '',
+            assignmentTitle: blueprint.assignmentTitle || '',
+            assignmentBrief: blueprint.assignmentBrief || '',
+            resources: blueprint.resources || [],
+          });
+        }
+        return signatures;
+      }, {} as Partial<Record<SocraticStageKey, string>>),
+  );
   const [starterSourceSignatures, setStarterSourceSignatures] = useState<Partial<Record<SocraticStageKey, string>>>(
     () =>
       SOCRATIC_STAGE_ORDER.reduce((signatures, stage) => {
@@ -281,12 +301,38 @@ export default function SocraticStudioConfigurator({
     }
   };
 
-  const handleGenerateReadinessQuestions = async () => {
+  const getReadinessSignature = (stage: SocraticStageKey) =>
+    JSON.stringify({
+      promptControls: blueprint.promptControls || DEFAULT_SOCRATIC_PROMPT_CONTROLS,
+      readinessPrompt: blueprint.stages[stage].readinessPrompt || DEFAULT_STAGE_READINESS_PROMPTS[stage],
+      customInstructions: blueprint.stages[stage].customInstructions || '',
+      assignmentTitle: blueprint.assignmentTitle || '',
+      assignmentBrief: blueprint.assignmentBrief || '',
+      resources: blueprint.resources || [],
+    });
+
+  const handleGenerateReadinessQuestions = async (stage?: SocraticStageKey) => {
     try {
       setGeneratingReadinessQuestions(true);
-      await onGenerateReadinessQuestions();
+      if (stage) {
+        setGeneratingReadinessStage(stage);
+      }
+      await onGenerateReadinessQuestions(stage);
+      setReadinessSourceSignatures((current) => {
+        if (stage) {
+          return {
+            ...current,
+            [stage]: getReadinessSignature(stage),
+          };
+        }
+        return SOCRATIC_STAGE_ORDER.reduce((signatures, stageKey) => {
+          signatures[stageKey] = getReadinessSignature(stageKey);
+          return signatures;
+        }, { ...current } as Partial<Record<SocraticStageKey, string>>);
+      });
     } finally {
       setGeneratingReadinessQuestions(false);
+      setGeneratingReadinessStage(null);
     }
   };
 
@@ -783,12 +829,19 @@ export default function SocraticStudioConfigurator({
           const hasStarterResponse = Boolean(stageConfig.starterResponse?.trim());
           const hasReadinessQuestions = (stageConfig.readinessQuestions || []).some((question) => question.trim());
           const sourceSignature = getStageSignature(stage);
+          const readinessSignature = getReadinessSignature(stage);
           const starterMayBeStale = Boolean(
             hasStarterResponse &&
               starterSourceSignatures[stage] &&
               starterSourceSignatures[stage] !== sourceSignature,
           );
+          const readinessMayBeStale = Boolean(
+            hasReadinessQuestions &&
+              readinessSourceSignatures[stage] &&
+              readinessSourceSignatures[stage] !== readinessSignature,
+          );
           const isGenerating = generatingStage === stage;
+          const isGeneratingReadiness = generatingReadinessStage === stage;
 
           return (
             <div key={stage} className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
@@ -805,12 +858,14 @@ export default function SocraticStudioConfigurator({
                 <div className="flex flex-wrap items-center gap-2 p-5">
                   <span
                     className={`rounded-full px-3 py-1 text-xs font-medium ${
-                      hasReadinessQuestions
+                      readinessMayBeStale
+                        ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                        : hasReadinessQuestions
                         ? 'bg-blue-50 text-blue-700 border border-blue-200'
                         : 'bg-gray-50 text-gray-600 border border-gray-200'
                     }`}
                   >
-                    {hasReadinessQuestions ? 'Goals ready' : 'Needs goals'}
+                    {readinessMayBeStale ? 'Goals may be stale' : hasReadinessQuestions ? 'Goals ready' : 'Needs goals'}
                   </span>
                   <span
                     className={`rounded-full px-3 py-1 text-xs font-medium ${
@@ -905,6 +960,29 @@ export default function SocraticStudioConfigurator({
                               className="resize-y bg-white text-xs leading-relaxed"
                             />
                           </div>
+
+                          <div>
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                              <label className="flex items-center gap-2 text-xs font-semibold text-gray-800">
+                                Hidden Readiness Goal Generation Prompt
+                                <PromptHelp text={promptHelp.stageReadinessPrompt} />
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => updateStage(stage, { readinessPrompt: DEFAULT_STAGE_READINESS_PROMPTS[stage] })}
+                                className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                Reset
+                              </button>
+                            </div>
+                            <Textarea
+                              value={stageConfig.readinessPrompt || DEFAULT_STAGE_READINESS_PROMPTS[stage]}
+                              onChange={(event) => updateStage(stage, { readinessPrompt: event.target.value })}
+                              rows={8}
+                              className="resize-y bg-white text-xs leading-relaxed"
+                            />
+                          </div>
                         </div>
                       </details>
                     </div>
@@ -929,6 +1007,15 @@ export default function SocraticStudioConfigurator({
                         >
                           <Plus className="w-3.5 h-3.5" />
                           Add Goal
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleGenerateReadinessQuestions(stage)}
+                          disabled={generatingReadinessQuestions}
+                          className="inline-flex items-center gap-2 rounded-lg border border-brand-maroon bg-white px-3 py-2 text-xs font-medium text-brand-maroon hover:bg-brand-maroon hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          {isGeneratingReadiness ? 'Regenerating...' : readinessMayBeStale ? 'Regenerate Stale Goals' : 'Regenerate Goals'}
                         </button>
                       </div>
 

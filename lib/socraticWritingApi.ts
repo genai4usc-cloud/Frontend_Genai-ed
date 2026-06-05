@@ -184,11 +184,15 @@ export const generateSocraticStarterResponse = async (
 export const generateSocraticReadinessQuestions = async (
   blueprint: SocraticStudioBlueprint,
   questionFile?: File | null,
+  stage?: SocraticStageKey,
 ) => {
   const token = await getAccessToken();
   const base = requireBackendBase();
   const formData = new FormData();
   formData.append('blueprint', JSON.stringify(blueprint));
+  if (stage) {
+    formData.append('stage', stage);
+  }
   if (questionFile) {
     formData.append('question_pdf', questionFile);
   }
@@ -244,30 +248,14 @@ export const sendSocraticCoachMessage = async (
     body: JSON.stringify({ stage, input, draftExcerpt, promptClientId, replyClientId }),
   });
 
-export const streamSocraticCoachMessage = async (
-  workspaceId: string,
-  stage: string,
-  input: string,
-  draftExcerpt: string | undefined,
-  promptClientId: string,
-  replyClientId: string,
+const readSocraticCoachStream = async (
+  response: Response,
   handlers: {
     onDelta: (chunk: string) => void;
     onDone: (payload: { reply: string; entries: SocraticStudioSession['ledger'] }) => void;
     onError: (message: string) => void;
   },
 ) => {
-  const token = await getAccessToken();
-  const base = requireBackendBase();
-  const response = await fetch(`${base}/api/socratic/student/workspace/${workspaceId}/coach/stream`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ stage, input, draftExcerpt, promptClientId, replyClientId }),
-  });
-
   if (!response.ok || !response.body) {
     const raw = await response.text();
     let detail = raw;
@@ -327,6 +315,69 @@ export const streamSocraticCoachMessage = async (
       splitIndex = buffer.indexOf('\n\n');
     }
   }
+};
+
+export const streamSocraticCoachMessage = async (
+  workspaceId: string,
+  stage: string,
+  input: string,
+  draftExcerpt: string | undefined,
+  promptClientId: string,
+  replyClientId: string,
+  handlers: {
+    onDelta: (chunk: string) => void;
+    onDone: (payload: { reply: string; entries: SocraticStudioSession['ledger'] }) => void;
+    onError: (message: string) => void;
+  },
+) => {
+  const token = await getAccessToken();
+  const base = requireBackendBase();
+  const response = await fetch(`${base}/api/socratic/student/workspace/${workspaceId}/coach/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ stage, input, draftExcerpt, promptClientId, replyClientId }),
+  });
+
+  await readSocraticCoachStream(response, handlers);
+};
+
+export const streamSocraticPreviewCoachMessage = async (
+  blueprint: SocraticStudioBlueprint,
+  session: SocraticStudioSession,
+  stage: string,
+  input: string,
+  draftExcerpt: string | undefined,
+  promptClientId: string,
+  replyClientId: string,
+  handlers: {
+    onDelta: (chunk: string) => void;
+    onDone: (payload: { reply: string; entries: SocraticStudioSession['ledger'] }) => void;
+    onError: (message: string) => void;
+  },
+) => {
+  const token = await getAccessToken();
+  const base = requireBackendBase();
+  const response = await fetch(`${base}/api/socratic/educator/preview/coach/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      blueprint,
+      session,
+      stage,
+      input,
+      draftExcerpt,
+      promptClientId,
+      replyClientId,
+    }),
+  });
+
+  await readSocraticCoachStream(response, handlers);
 };
 
 export const submitSocraticWorkspace = async (workspaceId: string) =>

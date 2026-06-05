@@ -2,7 +2,7 @@
 
 import { ChangeEvent, MouseEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, BookOpen, Brain, Calendar, FileText, Save, Send, Upload, Users } from 'lucide-react';
+import { ArrowLeft, BookOpen, Brain, Calendar, Eye, FileText, Save, Send, Upload, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import EducatorLayout from '@/components/EducatorLayout';
 import SocraticStudioConfigurator from '@/components/socratic-writing/SocraticStudioConfigurator';
@@ -22,10 +22,12 @@ import {
 import {
   clearStudioDraft,
   clearPendingSocraticCreatedResource,
+  createPreviewStudioSession,
   createDefaultStudioBlueprint,
   DEFAULT_SOCRATIC_PROMPT_CONTROLS,
   loadPendingSocraticCreatedResource,
   loadStudioDraft,
+  saveSocraticPreviewPayload,
   saveStudioDraft,
   SOCRATIC_STAGE_ORDER,
   SocraticResource,
@@ -92,6 +94,7 @@ const mergeSocraticStageDefaults = (
       ...(draft.stages?.[stage] || {}),
       systemPrompt: draft.stages?.[stage]?.systemPrompt || seed.stages[stage].systemPrompt,
       starterPrompt: draft.stages?.[stage]?.starterPrompt || seed.stages[stage].starterPrompt,
+      readinessPrompt: draft.stages?.[stage]?.readinessPrompt || seed.stages[stage].readinessPrompt,
       starterQuestions: [],
       customInstructions: draft.stages?.[stage]?.customInstructions || '',
       readinessQuestions: draft.stages?.[stage]?.readinessQuestions || [],
@@ -564,7 +567,7 @@ export default function NewAssignmentPage() {
     pointsPossible: Number(pointsPossible) || blueprint.pointsPossible,
   });
 
-  const handleGenerateSocraticReadinessQuestions = async () => {
+  const handleGenerateSocraticReadinessQuestions = async (stageToGenerate?: SocraticStageKey) => {
     if (!studioBlueprint) return;
     if (!selectedCourseId) {
       toast.error('Select a course before generating readiness questions.');
@@ -580,12 +583,20 @@ export default function NewAssignmentPage() {
     }
 
     const currentBlueprint = buildCurrentSocraticBlueprint(studioBlueprint);
-    const { stages } = await generateSocraticReadinessQuestions(currentBlueprint, questionFile);
+    const { stages } = await generateSocraticReadinessQuestions(
+      currentBlueprint,
+      questionFile,
+      stageToGenerate,
+    );
     setStudioBlueprint((current) => {
       if (!current) return current;
       return {
         ...current,
         stages: SOCRATIC_STAGE_ORDER.reduce((nextStages, stage) => {
+          if (stageToGenerate && stage !== stageToGenerate) {
+            nextStages[stage] = current.stages[stage];
+            return nextStages;
+          }
           nextStages[stage] = {
             ...current.stages[stage],
             readinessQuestions: stages[stage] || current.stages[stage].readinessQuestions || [],
@@ -594,7 +605,11 @@ export default function NewAssignmentPage() {
         }, { ...current.stages }),
       };
     });
-    toast.success('Readiness questions generated for all Socratic stages.');
+    toast.success(
+      stageToGenerate
+        ? `${currentBlueprint.stages[stageToGenerate].label} readiness goals regenerated.`
+        : 'Readiness questions generated for all Socratic stages.',
+    );
   };
 
   const handleGenerateSocraticStarterResponse = async (stage: SocraticStageKey) => {
@@ -632,6 +647,41 @@ export default function NewAssignmentPage() {
       };
     });
     toast.success(`${currentBlueprint.stages[stage].label} starter response generated.`);
+  };
+
+  const handlePreviewAsStudent = () => {
+    if (assignmentExperience !== 'socratic') return;
+    if (!studioBlueprint) {
+      toast.error('Socratic setup is not ready yet.');
+      return;
+    }
+    if (!selectedCourseId) {
+      toast.error('Select a course before launching preview.');
+      return;
+    }
+    if (!assignmentTitle.trim()) {
+      toast.error('Add an assignment title before launching preview.');
+      return;
+    }
+
+    const currentBlueprint = buildCurrentSocraticBlueprint(studioBlueprint);
+    const returnParams = new URLSearchParams(window.location.search);
+    returnParams.set('mode', 'socratic');
+    returnParams.set('resumeSocraticDraft', '1');
+    if (selectedCourseId) {
+      returnParams.set('courseId', selectedCourseId);
+    }
+    saveStudioDraft(selectedCourseId, currentBlueprint);
+    saveSocraticPreviewPayload({
+      blueprint: {
+        ...currentBlueprint,
+        assignmentId: currentBlueprint.assignmentId || `preview-${selectedCourseId}`,
+      },
+      session: createPreviewStudioSession(currentBlueprint),
+      returnUrl: `${window.location.pathname}?${returnParams.toString()}`,
+      createdAt: new Date().toISOString(),
+    });
+    router.push('/educator/assignment/socratic-preview');
   };
 
   const navigateToCreateQuiz = () => {
@@ -1210,6 +1260,17 @@ export default function NewAssignmentPage() {
           </section>
 
           <div className="flex flex-wrap items-center justify-end gap-3">
+            {assignmentExperience === 'socratic' && (
+              <button
+                type="button"
+                disabled={savingStatus !== null}
+                onClick={handlePreviewAsStudent}
+                className="border border-brand-maroon text-brand-maroon font-semibold py-3 px-5 rounded-lg hover:bg-brand-maroon hover:text-white transition-colors disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                <Eye className="w-4 h-4" />
+                Preview as Student
+              </button>
+            )}
             <button
               type="button"
               disabled={savingStatus !== null}
