@@ -1,3 +1,8 @@
+import clarifyRuntimePrompt from './socratic-stage-prompts/clarify-system-prompt.md';
+import researchRuntimePrompt from './socratic-stage-prompts/research-system-prompt.md';
+import buildRuntimePrompt from './socratic-stage-prompts/build-system-prompt.md';
+import writeRuntimePrompt from './socratic-stage-prompts/write-system-prompt.md';
+
 export const SOCRATIC_STAGE_ORDER = ['clarify', 'research', 'build', 'write'] as const;
 
 export type SocraticStageKey = (typeof SOCRATIC_STAGE_ORDER)[number];
@@ -466,6 +471,11 @@ What you must NOT do, restated because it will be asked many ways:
 - You may suggest revisions at the level of strategy, bullet points, sentence goals, and what a paragraph needs to do.
 - Do not rewrite the whole paper or provide polished paste-ready essay prose.`,
 };
+
+DEFAULT_STAGE_RUNTIME_PROMPTS.clarify = clarifyRuntimePrompt.trim() || DEFAULT_STAGE_RUNTIME_PROMPTS.clarify;
+DEFAULT_STAGE_RUNTIME_PROMPTS.research = researchRuntimePrompt.trim() || DEFAULT_STAGE_RUNTIME_PROMPTS.research;
+DEFAULT_STAGE_RUNTIME_PROMPTS.build = buildRuntimePrompt.trim() || DEFAULT_STAGE_RUNTIME_PROMPTS.build;
+DEFAULT_STAGE_RUNTIME_PROMPTS.write = writeRuntimePrompt.trim() || DEFAULT_STAGE_RUNTIME_PROMPTS.write;
 
 export const DEFAULT_STAGE_READINESS_PROMPTS: Record<SocraticStageKey, string> = {
   clarify: `Generate hidden readiness goals for the Clarify stage.
