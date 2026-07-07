@@ -874,7 +874,7 @@ export default function LLMPlayground() {
         orchestrationPrompt: orchestrationPrompt || undefined,
         config: {
           temperature,
-          maxTokens: 300,
+          maxTokens: Math.max(maxTokens, 1200),
           includeSystemInstruction,
           systemPrompt,
         },
@@ -1390,7 +1390,7 @@ export default function LLMPlayground() {
                               <div
                                 className={`max-w-2xl rounded-2xl px-4 py-3 ${
                                   message.role === 'user'
-                                    ? 'bg-brand-maroon text-white'
+                                    ? 'bg-gradient-to-br from-brand-maroon to-red-800 text-white shadow-sm [&_.markdown-content]:text-white [&_.markdown-content_*]:text-white [&_.markdown-content_p]:mb-0'
                                     : 'bg-white text-gray-900 border border-gray-200'
                                 }`}
                               >
@@ -2395,7 +2395,7 @@ export default function LLMPlayground() {
                         <div
                           className={`max-w-2xl rounded-2xl px-4 py-3 ${
                             message.role === 'user'
-                              ? 'bg-brand-maroon text-white'
+                              ? 'bg-gradient-to-br from-brand-maroon to-red-800 text-white shadow-sm [&_.markdown-content]:text-white [&_.markdown-content_*]:text-white [&_.markdown-content_p]:mb-0'
                               : 'bg-white text-gray-900 border border-gray-200'
                           }`}
                         >

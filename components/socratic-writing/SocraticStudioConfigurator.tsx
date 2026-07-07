@@ -81,7 +81,7 @@ const promptHelp = {
   chatResponseInstructions:
     'Added to normal student chat turns after the student message. Use this to control answer style, length, formatting, and whether Claude must end with a question.',
   readinessGenerationSystemPrompt:
-    'Used when the educator clicks Generate Readiness Questions. It tells Claude what kind of hidden goals to create for each stage.',
+    'Used when the educator clicks Generate Readiness Goals. It tells Claude what kind of hidden goals to create for each stage.',
   readinessGenerationUserPrompt:
     'The exact task sent to Claude for readiness generation. Keep the JSON shape if you want the app to parse the response reliably.',
   starterResponseInstructions:
@@ -798,7 +798,7 @@ export default function SocraticStudioConfigurator({
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">Stage Policies & Starter Responses</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Stage Policies & Student Messages</h3>
             <p className="text-sm text-gray-600">
               Default prompts are locked. Generate editable hidden readiness goals, add assignment-specific
               guidance, then generate the first Claude message students will see in each stage.
@@ -812,7 +812,7 @@ export default function SocraticStudioConfigurator({
               className="inline-flex items-center gap-2 rounded-lg border border-brand-maroon px-3 py-2 text-sm font-medium text-brand-maroon hover:bg-brand-maroon hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Sparkles className="w-4 h-4" />
-              {generatingReadinessQuestions ? 'Generating...' : 'Generate Readiness Questions'}
+              {generatingReadinessQuestions ? 'Generating...' : 'Generate Readiness Goals'}
             </button>
             <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
               <Sparkles className="w-3.5 h-3.5" />
@@ -820,7 +820,7 @@ export default function SocraticStudioConfigurator({
             </div>
             <div className="inline-flex items-center gap-2 rounded-full border border-purple-200 bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700">
               <Sparkles className="w-3.5 h-3.5" />
-              {starterResponsesReady}/4 starter responses ready
+              {starterResponsesReady}/4 student messages ready
             </div>
           </div>
         </div>
@@ -878,7 +878,7 @@ export default function SocraticStudioConfigurator({
                         : 'bg-yellow-50 text-yellow-800 border border-yellow-200'
                     }`}
                   >
-                    {starterMayBeStale ? 'Starter may be stale' : hasStarterResponse ? 'Starter ready' : 'Starter required'}
+                    {starterMayBeStale ? 'Student message may be stale' : hasStarterResponse ? 'Student message ready' : 'Student message required'}
                   </span>
                   <label className="inline-flex items-center gap-3 rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700">
                     AI Chat
@@ -943,7 +943,7 @@ export default function SocraticStudioConfigurator({
                           <div>
                             <div className="mb-2 flex items-center justify-between gap-3">
                               <label className="flex items-center gap-2 text-xs font-semibold text-gray-800">
-                                Stage Starter Generation Prompt
+                                Stage Student Message Generation Prompt
                                 <PromptHelp text={promptHelp.stageStarterPrompt} />
                               </label>
                               <button
@@ -1023,7 +1023,7 @@ export default function SocraticStudioConfigurator({
 
                       {(stageConfig.readinessQuestions || []).length === 0 ? (
                         <div className="rounded-lg border border-dashed border-blue-200 bg-white p-4 text-sm text-gray-500">
-                          Generate readiness questions above, or add your own goals for this stage.
+                          Generate readiness goals above, or add your own goals for this stage.
                         </div>
                       ) : (
                         <div className="space-y-3">
@@ -1061,7 +1061,7 @@ export default function SocraticStudioConfigurator({
                           3
                         </div>
                         <div>
-                          <h5 className="text-sm font-semibold text-gray-900">Student opening message</h5>
+                          <h5 className="text-sm font-semibold text-gray-900">Opening Message - {stageConfig.label}</h5>
                           <p className="text-xs text-gray-500">
                             This exact message appears first when the student opens {stageConfig.label}.
                           </p>
@@ -1084,7 +1084,7 @@ export default function SocraticStudioConfigurator({
 
                     {starterMayBeStale && (
                       <div className="mb-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-800">
-                        Goals or instructions changed after this starter was generated. Regenerate if the opening message should reflect the latest edits.
+                        Goals or instructions changed after this student message was generated. Regenerate if the opening message should reflect the latest edits.
                       </div>
                     )}
 
@@ -1102,7 +1102,7 @@ export default function SocraticStudioConfigurator({
                       className="min-h-[420px] resize-y text-sm leading-relaxed"
                     />
                     <p className="mt-3 text-xs text-gray-500">
-                      Uses assignment context, resources, educator guidance, and hidden readiness goals. Publish is blocked until every stage has goals and a starter message.
+                      Uses assignment context, resources, educator guidance, and hidden readiness goals. Publish is blocked until every stage has goals and a student message.
                     </p>
                   </div>
                 </div>

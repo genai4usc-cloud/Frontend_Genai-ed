@@ -184,7 +184,7 @@ html {
 
 /* Markdown content styles */
 .markdown-content {
-  @apply whitespace-pre-wrap;
+  @apply whitespace-normal;
 }
 
 .markdown-content h1 {
@@ -211,7 +211,7 @@ html {
 
 .markdown-content ul,
 .markdown-content ol {
-  @apply mb-2 ml-4;
+  @apply mb-2 ml-5 space-y-1;
 }
 
 .markdown-content ul {
@@ -223,7 +223,15 @@ html {
 }
 
 .markdown-content li {
+  @apply mb-0;
+}
+
+.markdown-content li > p {
   @apply mb-1;
+}
+
+.markdown-content li > p:last-child {
+  @apply mb-0;
 }
 
 .markdown-content code {

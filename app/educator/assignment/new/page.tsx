@@ -740,15 +740,15 @@ export default function NewAssignmentPage() {
   const handleGenerateSocraticReadinessQuestions = async (stageToGenerate?: SocraticStageKey) => {
     if (!studioBlueprint) return;
     if (!selectedCourseId) {
-      toast.error('Select a course before generating readiness questions.');
+      toast.error('Select a course before generating readiness goals.');
       return;
     }
     if (!assignmentTitle.trim()) {
-      toast.error('Add an assignment title before generating readiness questions.');
+      toast.error('Add an assignment title before generating readiness goals.');
       return;
     }
     if (!description.trim() && !questionFile && studioBlueprint.resources.length === 0) {
-      toast.error('Add a description, question PDF, or research resource before generating readiness questions.');
+      toast.error('Add a description, question PDF, or research resource before generating readiness goals.');
       return;
     }
 
@@ -785,19 +785,19 @@ export default function NewAssignmentPage() {
   const handleGenerateSocraticStarterResponse = async (stage: SocraticStageKey) => {
     if (!studioBlueprint) return;
     if (!selectedCourseId) {
-      toast.error('Select a course before generating starter responses.');
+      toast.error('Select a course before generating student messages.');
       return;
     }
     if (!assignmentTitle.trim()) {
-      toast.error('Add an assignment title before generating starter responses.');
+      toast.error('Add an assignment title before generating student messages.');
       return;
     }
     if (!description.trim() && !questionFile && studioBlueprint.resources.length === 0) {
-      toast.error('Add a description, question PDF, or research resource before generating starter responses.');
+      toast.error('Add a description, question PDF, or research resource before generating student messages.');
       return;
     }
     if (!(studioBlueprint.stages[stage].readinessQuestions || []).some((question) => question.trim())) {
-      toast.error(`Generate or add ${studioBlueprint.stages[stage].label} readiness questions first.`);
+      toast.error(`Generate or add ${studioBlueprint.stages[stage].label} readiness goals first.`);
       return;
     }
 
@@ -816,7 +816,7 @@ export default function NewAssignmentPage() {
         },
       };
     });
-    toast.success(`${currentBlueprint.stages[stage].label} starter response generated.`);
+    toast.success(`${currentBlueprint.stages[stage].label} student message generated.`);
   };
 
   const handlePreviewAsStudent = () => {
@@ -954,7 +954,7 @@ export default function NewAssignmentPage() {
         );
         if (missingReadinessStages.length > 0) {
           toast.error(
-            `Generate readiness questions before publishing: ${missingReadinessStages
+            `Generate readiness goals before publishing: ${missingReadinessStages
               .map((stage) => studioBlueprint.stages[stage].label)
               .join(', ')}.`,
           );
@@ -966,7 +966,7 @@ export default function NewAssignmentPage() {
         );
         if (missingStarterStages.length > 0) {
           toast.error(
-            `Generate starter responses before publishing: ${missingStarterStages
+            `Generate student messages before publishing: ${missingStarterStages
               .map((stage) => studioBlueprint.stages[stage].label)
               .join(', ')}.`,
           );
@@ -1467,15 +1467,17 @@ export default function NewAssignmentPage() {
                 Preview as Student
               </button>
             )}
-            <button
-              type="button"
-              disabled={savingStatus !== null}
-              onClick={(event) => void handleCreateAssignment(event, 'draft')}
-              className="border border-gray-300 text-gray-700 font-semibold py-3 px-5 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 inline-flex items-center gap-2"
-            >
-              <Save className="w-4 h-4" />
-              {savingStatus === 'draft' ? 'Saving Draft...' : 'Save Draft'}
-            </button>
+            {assignmentExperience !== 'socratic' && (
+              <button
+                type="button"
+                disabled={savingStatus !== null}
+                onClick={(event) => void handleCreateAssignment(event, 'draft')}
+                className="border border-gray-300 text-gray-700 font-semibold py-3 px-5 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                {savingStatus === 'draft' ? 'Saving Draft...' : 'Save Draft'}
+              </button>
+            )}
             <button
               type="button"
               disabled={savingStatus !== null}

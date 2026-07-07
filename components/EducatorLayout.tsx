@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Chrome as Home, ClipboardCheck, FileText, GraduationCap, Library, BookOpen, LogOut, User, Bot } from 'lucide-react';
+import { Chrome as Home, ClipboardCheck, FileText, GraduationCap, Library, BookOpen, LogOut, User, Bot, PenLine } from 'lucide-react';
 import { supabase, Profile, Course } from '@/lib/supabase';
 import CollapsibleSidebar, { NavItem, NavSection, AddButtonItem } from './CollapsibleSidebar';
 
@@ -44,6 +44,7 @@ export default function EducatorLayout({ children, profile }: EducatorLayoutProp
   const mainNavItems: NavItem[] = [
     { icon: Home, label: 'Dashboard', path: '/educator/dashboard' },
     { icon: Bot, label: 'Multi-Model Playground', path: '/educator/llm-playground' },
+    { icon: PenLine, label: 'Socratic Writing Studio', path: '/educator/socratic-writing' },
     { icon: FileText, label: 'Avatar Lecture Studio', path: '/educator/lecture/new' },
     { icon: GraduationCap, label: 'Personalized Quiz Generator', path: '/educator/quiz/new' },
     { icon: ClipboardCheck, label: 'AI Policy Builder', path: '/educator/policy-suggestor' },
