@@ -53,18 +53,67 @@ interface OnlineQuizDetail {
   questions: OnlineQuizQuestion[];
 }
 
+interface EducatorQuizReviewQuestion {
+  question_index: number;
+  question: string;
+  options: Record<string, string>;
+  ai_correct_option?: string | null;
+  final_points_awarded?: number;
+  final_feedback?: string | null;
+}
+
+interface EducatorQuizReviewAttempt {
+  questions: EducatorQuizReviewQuestion[];
+}
+
+interface EducatorQuizReviewPayload {
+  quiz_batch_id: string;
+  quiz_name: string;
+  status: string;
+  course_id: string | null;
+  course_number: string | null;
+  course_title: string | null;
+  instructor_name: string | null;
+  available_at: string | null;
+  due_at: string | null;
+  time_limit_minutes: number;
+  grades_published_at: string | null;
+  attempts: EducatorQuizReviewAttempt[];
+}
+
 type EmbeddedOnlineQuizProps = {
   courseId: string;
   quizBatchId: string;
+  previewMode?: boolean;
   onProgressChange?: (state: { opened: boolean; completed: boolean }) => void;
+};
+
+const normalizeQuizLoadError = (error: unknown) => {
+  const fallback = 'Unable to load the quiz right now.';
+  const rawMessage = error instanceof Error ? error.message : String(error || '');
+  if (!rawMessage) return fallback;
+
+  try {
+    const parsed = JSON.parse(rawMessage);
+    const parsedMessage = parsed.detail || parsed.message || parsed.error || rawMessage;
+    if (String(parsedMessage).includes('not an online quiz')) {
+      return 'This attached quiz is not an online quiz. Remove it, then attach or create an online quiz for Socratic Writing.';
+    }
+    return parsedMessage;
+  } catch {
+    if (rawMessage.includes('not an online quiz')) {
+      return 'This attached quiz is not an online quiz. Remove it, then attach or create an online quiz for Socratic Writing.';
+    }
+    return rawMessage;
+  }
 };
 
 export default function EmbeddedOnlineQuiz({
   courseId,
   quizBatchId,
+  previewMode = false,
   onProgressChange,
 }: EmbeddedOnlineQuizProps) {
-  void courseId;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [detail, setDetail] = useState<OnlineQuizDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -125,11 +174,12 @@ export default function EmbeddedOnlineQuiz({
 
   useEffect(() => {
     if (!detail) return;
+    if (previewMode) return;
     onProgressChange?.({
       opened: Boolean(detail.attempt),
       completed: Boolean(detail.attempt),
     });
-  }, [detail?.attempt?.id, detail?.status, onProgressChange]);
+  }, [detail?.attempt?.id, detail?.status, onProgressChange, previewMode]);
 
   useEffect(() => {
     if (!isQuizInProgress || !profile) return;
@@ -256,7 +306,18 @@ export default function EmbeddedOnlineQuiz({
         .eq('id', user.id)
         .maybeSingle();
 
-      if (!profileData || profileData.role !== 'student') {
+      if (!profileData) {
+        setIntegrityError('Unable to confirm your profile for this quiz.');
+        return;
+      }
+
+      if (profileData.role === 'educator' && previewMode) {
+        setProfile(profileData);
+        await fetchEducatorPreview(profileData.id);
+        return;
+      }
+
+      if (profileData.role !== 'student') {
         setIntegrityError('Student access is required to view this quiz.');
         return;
       }
@@ -265,14 +326,66 @@ export default function EmbeddedOnlineQuiz({
       await fetchDetail(user.id);
     } catch (error) {
       console.error('Error loading online quiz:', error);
-      setIntegrityError('Unable to load the quiz right now.');
+      setIntegrityError(normalizeQuizLoadError(error));
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchEducatorPreview = async (educatorId: string) => {
+    if (!backendBase) {
+      setIntegrityError('Backend is not configured for quiz preview.');
+      return;
+    }
+
+    const response = await fetch(`${backendBase}/api/educator/quiz/online/${quizBatchId}?educatorId=${educatorId}`);
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    const payload = (await response.json()) as EducatorQuizReviewPayload;
+    const previewAttempt = (payload.attempts || []).find((attempt) => attempt.questions?.length);
+
+    if (!previewAttempt?.questions?.length) {
+      setIntegrityError('This quiz exists, but no generated question set is available to preview yet.');
+      return;
+    }
+
+    const questions = previewAttempt.questions.map((question) => ({
+      question_index: question.question_index,
+      question: question.question,
+      options: question.options || {},
+      selected_option: null,
+      correct_option: question.ai_correct_option || null,
+      final_points_awarded: question.final_points_awarded,
+      final_feedback: question.final_feedback,
+    }));
+
+    setDetail({
+      quiz_batch_id: payload.quiz_batch_id,
+      course_id: payload.course_id || courseId,
+      quiz_name: payload.quiz_name || 'Online Quiz',
+      course_number: payload.course_number,
+      course_title: payload.course_title,
+      instructor_name: payload.instructor_name,
+      available_at: payload.available_at,
+      due_at: payload.due_at,
+      time_limit_minutes: payload.time_limit_minutes || 30,
+      status: 'available',
+      question_count: questions.length,
+      total_marks: questions.length,
+      grades_published_at: payload.grades_published_at,
+      policy_notice: 'Educator preview is read-only. Real students still use the fullscreen, refresh, and integrity-controlled quiz attempt flow.',
+      attempt: null,
+      questions,
+    });
+  };
+
   const fetchDetail = async (studentId: string) => {
-    if (!backendBase) return;
+    if (!backendBase) {
+      setIntegrityError('Backend is not configured for quiz loading.');
+      return;
+    }
     const response = await fetch(`${backendBase}/api/student/quiz/online/${quizBatchId}?studentId=${studentId}`);
     if (!response.ok) {
       throw new Error(await response.text());
@@ -469,10 +582,12 @@ export default function EmbeddedOnlineQuiz({
   if (!detail) {
     return (
       <div className="rounded-2xl border border-gray-200 bg-white p-8 text-sm text-gray-600">
-        Unable to load the quiz in Socratic right now.
+        {integrityError || 'Unable to load the quiz in Socratic right now.'}
       </div>
     );
   }
+
+  const statusLabel = previewMode ? 'Educator preview' : detail.status.replace('_', ' ');
 
   return (
     <div
@@ -517,7 +632,7 @@ export default function EmbeddedOnlineQuiz({
         <div className="mt-6 rounded-xl border border-gray-200 p-5">
           <div className="space-y-2 text-sm text-gray-700">
             <p>
-              Status: <span className="font-medium capitalize text-gray-900">{detail.status.replace('_', ' ')}</span>
+              Status: <span className="font-medium capitalize text-gray-900">{statusLabel}</span>
             </p>
             {detail.available_at && <p>Available From: {new Date(detail.available_at).toLocaleString()}</p>}
             {detail.due_at && <p>Due Date: {new Date(detail.due_at).toLocaleString()}</p>}
@@ -569,7 +684,13 @@ export default function EmbeddedOnlineQuiz({
             </div>
           )}
 
-          {detail.status === 'available' && (
+          {previewMode && (
+            <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-800">
+              {detail.policy_notice}
+            </div>
+          )}
+
+          {!previewMode && detail.status === 'available' && (
             <div className="mt-4">
               <p className="mb-4 text-gray-600">
                 This quiz allows one attempt only. Enter fullscreen first, then start the quiz. After the quiz starts,
@@ -610,6 +731,37 @@ export default function EmbeddedOnlineQuiz({
           )}
         </div>
       </div>
+
+      {previewMode && (
+        <div className="space-y-8 p-6">
+          {detail.questions.map((question) => (
+            <div key={question.question_index} className="border-b border-gray-200 pb-6 last:border-b-0 last:pb-0">
+              <div className="mb-4 font-semibold text-gray-900">
+                {question.question_index + 1}. {question.question}
+              </div>
+              <div className="space-y-3">
+                {Object.entries(question.options || {}).map(([optionKey, optionValue]) => (
+                  <label
+                    key={optionKey}
+                    className="flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-gray-700"
+                  >
+                    <input
+                      type="radio"
+                      name={`preview-question-${question.question_index}`}
+                      disabled
+                      className="mt-1"
+                    />
+                    <div>
+                      <div className="font-medium text-gray-900">{optionKey}</div>
+                      <div>{optionValue}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {detail.status === 'in_progress' && (
         <div className="relative space-y-8 p-6">

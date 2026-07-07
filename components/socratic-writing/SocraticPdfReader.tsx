@@ -222,7 +222,7 @@ export default function SocraticPdfReader({
 
       <div className="rounded-2xl border border-gray-200 overflow-hidden bg-white">
         <div className="border-b border-gray-200 px-4 py-3 bg-gray-50">
-          <h4 className="text-sm font-semibold text-gray-900">{title}</h4>
+          <h4 className="text-sm font-semibold text-gray-900 [overflow-wrap:anywhere]">{title}</h4>
           <p className="text-xs text-gray-600 mt-1">
             Scroll to the end of the PDF to unlock completion.
           </p>

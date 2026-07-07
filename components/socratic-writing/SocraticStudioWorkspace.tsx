@@ -103,6 +103,7 @@ export default function SocraticStudioWorkspace({
 
   const hydratedRef = useRef(false);
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSelectedResourceIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     void loadWorkspace();
@@ -216,15 +217,23 @@ export default function SocraticStudioWorkspace({
         storagePath:
           typeof entry.metadata?.storagePath === 'string' ? entry.metadata.storagePath : null,
         sourceCreatedAt: entry.createdAt,
-      }));
+      }))
+      .reverse();
   }, [session]);
 
   const allResources = useMemo(() => {
     if (!blueprint) return [] as SocraticResource[];
-    return [...blueprint.resources, ...studentAddedSources];
+    return [...studentAddedSources, ...blueprint.resources];
   }, [blueprint, studentAddedSources]);
 
   useEffect(() => {
+    const pendingResourceId = pendingSelectedResourceIdRef.current;
+    if (pendingResourceId && allResources.some((resource) => resource.id === pendingResourceId)) {
+      setSelectedResourceId(pendingResourceId);
+      pendingSelectedResourceIdRef.current = null;
+      return;
+    }
+
     if (!selectedResourceId && allResources.length > 0) {
       setSelectedResourceId(allResources[0].id);
       return;
@@ -550,7 +559,7 @@ export default function SocraticStudioWorkspace({
   };
 
   const handleUploadStudentPdf = async () => {
-    if (readOnly || !studentPdfFile || !workspaceId || !courseStudentId) return;
+    if (readOnly || !studentPdfFile || !workspaceId || !courseStudentId || !blueprint) return;
     if (studentPdfFile.type !== 'application/pdf' && !studentPdfFile.name.toLowerCase().endsWith('.pdf')) {
       toast.error('Please upload a PDF file.');
       return;
@@ -559,28 +568,52 @@ export default function SocraticStudioWorkspace({
     try {
       setUploadingStudentPdf(true);
       const safeName = studentPdfFile.name.replace(/[^a-zA-Z0-9._-]+/g, '-');
-      const storagePath = `${assignmentId}/${courseStudentId}/student-research/${Date.now()}-${safeName}`;
-      const { error: uploadError } = await supabase.storage
-        .from('socratic-writing')
-        .upload(storagePath, studentPdfFile, {
-          cacheControl: '3600',
-          upsert: true,
-          contentType: 'application/pdf',
-        });
+      let storageBucket: string | null = previewMode ? 'course-files' : 'socratic-writing';
+      let storagePath: string | null = previewMode
+        ? `${blueprint.courseId}/socratic-preview/${Date.now()}-${safeName}`
+        : `${assignmentId}/${courseStudentId}/student-research/${Date.now()}-${safeName}`;
+      let publicUrl: string;
+      let previewOnlyLocal = false;
 
-      if (uploadError) {
-        throw uploadError;
+      const uploadToStorage = async (bucket: string, path: string) => {
+        const { error: uploadError } = await supabase.storage
+          .from(bucket)
+          .upload(path, studentPdfFile, {
+            cacheControl: '3600',
+            upsert: true,
+            contentType: 'application/pdf',
+          });
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        const {
+          data: { publicUrl: uploadedUrl },
+        } = supabase.storage.from(bucket).getPublicUrl(path);
+        return uploadedUrl;
+      };
+
+      try {
+        publicUrl = await uploadToStorage(storageBucket, storagePath);
+      } catch (uploadError) {
+        if (!previewMode) {
+          throw uploadError;
+        }
+
+        console.warn('Preview PDF upload failed; attaching a local preview URL instead.', uploadError);
+        publicUrl = URL.createObjectURL(studentPdfFile);
+        storageBucket = null;
+        storagePath = null;
+        previewOnlyLocal = true;
       }
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from('socratic-writing').getPublicUrl(storagePath);
 
       const sourceId = `upload-${Math.random().toString(36).slice(2, 10)}`;
       const title = studentPdfFile.name;
       const summary =
         studentPdfSummary.trim() || 'Student-uploaded research PDF attached inside Socratic Writing.';
 
+      pendingSelectedResourceIdRef.current = sourceId;
       updateSession((current) => ({
         ...current,
         ledger: [
@@ -595,16 +628,19 @@ export default function SocraticStudioWorkspace({
               sourceKind: 'upload',
               resourceType: 'reading',
               resourceUrl: publicUrl,
-              storageBucket: 'socratic-writing',
+              storageBucket,
               storagePath,
+              previewOnlyLocal,
             },
           },
         ],
       }));
-      setSelectedResourceId(sourceId);
       setStudentPdfFile(null);
       setStudentPdfSummary('');
-      toast.success('PDF attached to Research.');
+      toast.success('PDF attached to Sources & Materials.');
+      if (previewOnlyLocal) {
+        toast.warning('Preview attached locally. Claude can read it only after it is uploaded by a real student.');
+      }
     } catch (error) {
       console.error('Error uploading student research PDF:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to upload PDF.');
@@ -760,6 +796,7 @@ export default function SocraticStudioWorkspace({
             handleResourceProgress={handleResourceProgress}
             handleSubmit={handleSubmit}
             readOnly={stageSummary.readOnly}
+            previewMode={previewMode}
             runBuildTool={runBuildTool}
             selectedResource={selectedResource}
             selectedStage={selectedStage}
@@ -805,6 +842,7 @@ type WorkspaceStageContentProps = {
   session: SocraticStudioSession;
   selectedStage: SocraticStageKey;
   readOnly: boolean;
+  previewMode: boolean;
   selectedResource: SocraticResource | null;
   setSelectedResourceId: (id: string) => void;
   getCoachDraft: () => string;
@@ -852,6 +890,7 @@ function WorkspaceStageContent({
   session,
   selectedStage,
   readOnly,
+  previewMode,
   selectedResource,
   setSelectedResourceId,
   getCoachDraft,
@@ -930,7 +969,7 @@ function WorkspaceStageContent({
                     key={resource.id}
                     type="button"
                     onClick={() => setSelectedResourceId(resource.id)}
-                    className={`w-full rounded-2xl border px-4 py-4 text-left transition-colors ${
+                    className={`w-full min-w-0 rounded-2xl border px-4 py-4 text-left transition-colors ${
                       selectedResource?.id === resource.id
                         ? 'border-brand-maroon bg-brand-maroon/5'
                         : 'border-gray-200 bg-white hover:border-gray-300'
@@ -946,8 +985,8 @@ function WorkspaceStageContent({
                         </span>
                       )}
                     </div>
-                    <div className="font-semibold text-gray-900">{resource.title}</div>
-                    <p className="text-sm text-gray-600 mt-1">{resource.summary}</p>
+                    <div className="font-semibold text-gray-900 [overflow-wrap:anywhere]">{resource.title}</div>
+                    <p className="text-sm text-gray-600 mt-1 [overflow-wrap:anywhere]">{resource.summary}</p>
                     <div className="mt-3 text-xs font-medium text-gray-500">
                       {completed ? 'Completed' : progress?.opened ? 'In progress' : 'Not started'}
                     </div>
@@ -960,12 +999,12 @@ function WorkspaceStageContent({
           <div className="rounded-2xl border border-gray-200 p-5 space-y-4 min-w-0">
             {selectedResource ? (
               <>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                       {selectedResource.type.replace('_', ' ')}
                     </p>
-                    <h3 className="text-xl font-semibold text-gray-900">{selectedResource.title}</h3>
+                    <h3 className="text-xl font-semibold text-gray-900 [overflow-wrap:anywhere]">{selectedResource.title}</h3>
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     {selectedResource.required && (
@@ -1000,7 +1039,7 @@ function WorkspaceStageContent({
                     </button>
                   </div>
                 </div>
-                <p className="text-sm text-gray-600">{selectedResource.summary}</p>
+                <p className="text-sm text-gray-600 [overflow-wrap:anywhere]">{selectedResource.summary}</p>
 
                 {isReadingResource && selectedReadingIsPdf && (
                   <>
@@ -1088,7 +1127,12 @@ function WorkspaceStageContent({
                     <EmbeddedOnlineQuiz
                       courseId={blueprint.courseId}
                       quizBatchId={selectedResource.resourceRefId}
-                      onProgressChange={(nextState) => syncResourceProgress(selectedResource, nextState)}
+                      previewMode={previewMode}
+                      onProgressChange={
+                        previewMode
+                          ? undefined
+                          : (nextState) => syncResourceProgress(selectedResource, nextState)
+                      }
                     />
                   ) : (
                     <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-600">
@@ -1102,7 +1146,12 @@ function WorkspaceStageContent({
                     <EmbeddedLectureViewer
                       courseId={blueprint.courseId}
                       lectureId={selectedResource.resourceRefId}
-                      onProgressChange={(nextState) => syncResourceProgress(selectedResource, nextState)}
+                      previewMode={previewMode}
+                      onProgressChange={
+                        previewMode
+                          ? undefined
+                          : (nextState) => syncResourceProgress(selectedResource, nextState)
+                      }
                     />
                   ) : (
                     <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-600">
@@ -1489,7 +1538,7 @@ function WorkspaceSidebar({
                 key={resource.id}
                 className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-4 py-3"
               >
-                <div className="font-medium text-gray-900">{resource.title}</div>
+                <div className="min-w-0 flex-1 font-medium text-gray-900 [overflow-wrap:anywhere]">{resource.title}</div>
                 <div className={`text-xs font-semibold ${done ? 'text-green-600' : 'text-gray-500'}`}>
                   {done ? 'Complete' : 'Pending'}
                 </div>
@@ -1509,8 +1558,11 @@ function WorkspaceSidebar({
           </div>
           <Input type="file" accept="application/pdf" onChange={(event) => setStudentPdfFile(event.target.files?.[0] || null)} disabled={readOnly || uploadingStudentPdf} />
           {studentPdfFile && (
-            <div className="text-sm text-gray-600">
-              Selected PDF: <span className="font-medium text-gray-900">{studentPdfFile.name}</span>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Selected PDF: <span className="font-medium [overflow-wrap:anywhere]">{studentPdfFile.name}</span>
+              <span className="block text-xs mt-1">
+                Click Attach PDF to add it to Sources & Materials and open it in the reader.
+              </span>
             </div>
           )}
           <Textarea

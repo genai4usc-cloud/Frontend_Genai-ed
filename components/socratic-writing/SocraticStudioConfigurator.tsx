@@ -651,7 +651,9 @@ export default function SocraticStudioConfigurator({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h4 className="text-base font-semibold text-gray-900">Attach Quiz</h4>
-                <p className="text-sm text-gray-600">Attach an existing course quiz or create a new online quiz.</p>
+                <p className="text-sm text-gray-600">
+                  Attach an existing published online quiz or create a new online quiz.
+                </p>
               </div>
               <button
                 type="button"
@@ -681,7 +683,7 @@ export default function SocraticStudioConfigurator({
               ))}
               {availableResources.quizzes.length === 0 && (
                 <div className="rounded-xl border border-dashed border-gray-300 bg-white px-4 py-6 text-sm text-gray-500 text-center">
-                  No existing course quizzes yet.
+                  No existing published online course quizzes yet.
                 </div>
               )}
             </div>

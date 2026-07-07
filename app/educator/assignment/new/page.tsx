@@ -62,6 +62,23 @@ type ExistingLinkedOption = {
   id: string;
   title: string;
   summary: string;
+  mode?: string | null;
+  status?: string | null;
+};
+
+type AssignmentSetupDraft = {
+  assignmentExperience: 'standard' | 'socratic';
+  assignmentTitle: string;
+  description: string;
+  pointsPossible: string;
+  submissionMode: AssignmentSubmissionMode;
+  maxFiles: string;
+  maxFileSizeMb: string;
+  allowedMimeTypes: string[];
+  availableAt: string;
+  dueAt: string;
+  lateUntil: string;
+  savedAt: string;
 };
 
 const LEGACY_SOCRATIC_RESOURCE_TITLES = new Set([
@@ -70,6 +87,62 @@ const LEGACY_SOCRATIC_RESOURCE_TITLES = new Set([
   'Personalized Knowledge Check',
   'Optional Lecture: Counterarguments in Philosophy Essays',
 ]);
+
+const decodePathSegment = (value: string) => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
+const stripUploadTimestamp = (fileName: string) =>
+  fileName.replace(/^\d{10,}[-_]/, '').trim();
+
+const fileNameFromPathOrUrl = (value: string | null | undefined) => {
+  if (!value) return '';
+  const cleanValue = value.split('?')[0].split('#')[0];
+  const lastSegment = cleanValue.split('/').filter(Boolean).pop() || '';
+  return stripUploadTimestamp(decodePathSegment(lastSegment));
+};
+
+const stringField = (item: Record<string, unknown>, keys: string[]) => {
+  for (const key of keys) {
+    const value = item[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return '';
+};
+
+const materialTitleFromRecord = (
+  item: Record<string, unknown>,
+  url: string | null,
+  storagePath: string | null,
+  fallback: string,
+) => {
+  const explicitFileName = stringField(item, [
+    'fileName',
+    'file_name',
+    'originalFileName',
+    'original_file_name',
+    'filename',
+  ]);
+  if (explicitFileName) {
+    return stripUploadTimestamp(explicitFileName);
+  }
+
+  const pathFileName = fileNameFromPathOrUrl(storagePath || url);
+  if (pathFileName) {
+    return pathFileName;
+  }
+
+  return (
+    stringField(item, ['displayName', 'display_name', 'name', 'title', 'material_name'])
+    || fallback
+  );
+};
 
 const toDateTimeLocalValue = (value: string | null) => {
   if (!value) return '';
@@ -82,6 +155,35 @@ const toDateTimeLocalValue = (value: string | null) => {
 const fromDateTimeLocalValue = (value: string) => {
   if (!value) return null;
   return new Date(value).toISOString();
+};
+
+const assignmentSetupDraftKey = (courseId: string) =>
+  `socratic-writing:assignment-setup-draft:${courseId}`;
+
+const safeJsonParse = <T,>(value: string | null) => {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+};
+
+const loadAssignmentSetupDraft = (courseId: string) => {
+  if (typeof window === 'undefined') return null;
+  return safeJsonParse<AssignmentSetupDraft>(
+    window.localStorage.getItem(assignmentSetupDraftKey(courseId)),
+  );
+};
+
+const saveAssignmentSetupDraft = (courseId: string, draft: AssignmentSetupDraft) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(assignmentSetupDraftKey(courseId), JSON.stringify(draft));
+};
+
+const clearAssignmentSetupDraft = (courseId: string) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(assignmentSetupDraftKey(courseId));
 };
 
 const mergeSocraticStageDefaults = (
@@ -145,6 +247,7 @@ export default function NewAssignmentPage() {
   const [availableAt, setAvailableAt] = useState('');
   const [dueAt, setDueAt] = useState('');
   const [lateUntil, setLateUntil] = useState('');
+  const restoredSetupDraftForCourseRef = useRef<string | null>(null);
 
   const selectedCourse = useMemo(
     () => courses.find((course) => course.id === selectedCourseId) ?? null,
@@ -177,27 +280,67 @@ export default function NewAssignmentPage() {
   }, [selectedCourseId]);
 
   useEffect(() => {
-    const seed = createDefaultStudioBlueprint({
-      assignmentId: `draft-${selectedCourseId || 'course'}`,
-      courseId: selectedCourseId || 'course',
-      courseCode: selectedCourse?.course_number || 'COURSE',
-      courseTitle: selectedCourse?.title || 'Course',
-      assignmentTitle: assignmentTitle.trim() || 'Socratic Writing Assignment',
-      assignmentBrief: description.trim() || 'Use Clarify, Research, Build, and Write to produce the final essay.',
-      dueAt: fromDateTimeLocalValue(dueAt) || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      pointsPossible: Number(pointsPossible) || 100,
-    });
-
     const pendingResource = loadPendingSocraticCreatedResource();
     const canRestoreDraft =
       Boolean(selectedCourseId)
       && (shouldResumeSocraticDraft || pendingResource?.courseId === selectedCourseId);
 
+    const savedSetupDraft = canRestoreDraft && selectedCourseId
+      ? loadAssignmentSetupDraft(selectedCourseId)
+      : null;
+
     const savedDraft = canRestoreDraft && selectedCourseId ? loadStudioDraft(selectedCourseId) : null;
 
     if (selectedCourseId && !canRestoreDraft) {
       clearStudioDraft(selectedCourseId);
+      clearAssignmentSetupDraft(selectedCourseId);
+      restoredSetupDraftForCourseRef.current = null;
     }
+
+    if (savedSetupDraft && restoredSetupDraftForCourseRef.current !== selectedCourseId) {
+      restoredSetupDraftForCourseRef.current = selectedCourseId;
+      setAssignmentExperience(savedSetupDraft.assignmentExperience || 'socratic');
+      setAssignmentTitle(savedSetupDraft.assignmentTitle || '');
+      setDescription(savedSetupDraft.description || '');
+      setPointsPossible(savedSetupDraft.pointsPossible || '100');
+      setSubmissionMode(savedSetupDraft.submissionMode || 'file_upload');
+      setMaxFiles(savedSetupDraft.maxFiles || '1');
+      setMaxFileSizeMb(savedSetupDraft.maxFileSizeMb || '25');
+      setAllowedMimeTypes(
+        savedSetupDraft.allowedMimeTypes?.length
+          ? savedSetupDraft.allowedMimeTypes
+          : DEFAULT_ASSIGNMENT_ALLOWED_MIME_TYPES,
+      );
+      setAvailableAt(savedSetupDraft.availableAt || '');
+      setDueAt(savedSetupDraft.dueAt || '');
+      setLateUntil(savedSetupDraft.lateUntil || '');
+    }
+
+    const effectiveAssignmentTitle =
+      savedSetupDraft?.assignmentTitle ?? assignmentTitle;
+    const effectiveDescription =
+      savedSetupDraft?.description ?? description;
+    const effectiveDueAt =
+      savedSetupDraft?.dueAt ?? dueAt;
+    const effectivePointsPossible =
+      savedSetupDraft?.pointsPossible ?? pointsPossible;
+
+    const seed = createDefaultStudioBlueprint({
+      assignmentId: `draft-${selectedCourseId || 'course'}`,
+      courseId: selectedCourseId || 'course',
+      courseCode: selectedCourse?.course_number || 'COURSE',
+      courseTitle: selectedCourse?.title || 'Course',
+      assignmentTitle: effectiveAssignmentTitle.trim() || savedDraft?.assignmentTitle || 'Socratic Writing Assignment',
+      assignmentBrief:
+        effectiveDescription.trim()
+        || savedDraft?.assignmentBrief
+        || 'Use Clarify, Research, Build, and Write to produce the final essay.',
+      dueAt:
+        fromDateTimeLocalValue(effectiveDueAt)
+        || savedDraft?.dueAt
+        || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      pointsPossible: Number(effectivePointsPossible) || savedDraft?.pointsPossible || 100,
+    });
 
     const nextBlueprint = savedDraft
       ? {
@@ -252,6 +395,26 @@ export default function NewAssignmentPage() {
     if (assignmentExperience !== 'socratic' || !selectedCourseId || !studioBlueprint) return;
     saveStudioDraft(selectedCourseId, studioBlueprint);
   }, [assignmentExperience, selectedCourseId, studioBlueprint]);
+
+  const buildAssignmentSetupDraft = (): AssignmentSetupDraft => ({
+    assignmentExperience,
+    assignmentTitle,
+    description,
+    pointsPossible,
+    submissionMode,
+    maxFiles,
+    maxFileSizeMb,
+    allowedMimeTypes,
+    availableAt,
+    dueAt,
+    lateUntil,
+    savedAt: new Date().toISOString(),
+  });
+
+  const persistAssignmentSetupDraft = () => {
+    if (!selectedCourseId) return;
+    saveAssignmentSetupDraft(selectedCourseId, buildAssignmentSetupDraft());
+  };
 
   useEffect(() => {
     if (assignmentExperience !== 'socratic' || !selectedCourseId || !studioBlueprint) return;
@@ -396,10 +559,10 @@ export default function NewAssignmentPage() {
       ) => {
         items?.forEach((item, index) => {
           if (!item || typeof item !== 'object') return;
-          const title = String(item.name || item.title || `${fallbackLabel} ${index + 1}`);
           const summary = String(item.description || item.summary || '');
           const url = typeof item.url === 'string' ? item.url : typeof item.file_url === 'string' ? item.file_url : null;
           const storagePath = typeof item.storage_path === 'string' ? item.storage_path : null;
+          const title = materialTitleFromRecord(item, url, storagePath, `${fallbackLabel} ${index + 1}`);
           appendReading({
             id: `${prefix}:${storagePath || url || index}`,
             title,
@@ -417,7 +580,7 @@ export default function NewAssignmentPage() {
       (courseRecord?.course_materials_urls || []).forEach((url, index) => {
         appendReading({
           id: `course-url:${url}`,
-          title: `Course material ${index + 1}`,
+          title: fileNameFromPathOrUrl(url) || `Course material ${index + 1}`,
           summary: '',
           url,
         });
@@ -426,7 +589,7 @@ export default function NewAssignmentPage() {
       (courseRecord?.background_materials_urls || []).forEach((url, index) => {
         appendReading({
           id: `background-url:${url}`,
-          title: `Background material ${index + 1}`,
+          title: fileNameFromPathOrUrl(url) || `Background material ${index + 1}`,
           summary: '',
           url,
         });
@@ -439,7 +602,7 @@ export default function NewAssignmentPage() {
           .eq('course_id', courseId),
         supabase
           .from('quiz_batch_courses')
-          .select('quiz_batch_id, quiz_batches(id, quiz_name, status)')
+          .select('quiz_batch_id, quiz_batches(id, quiz_name, status, mode)')
           .eq('course_id', courseId),
         supabase
           .from('student_uploads')
@@ -510,11 +673,17 @@ export default function NewAssignmentPage() {
       setAvailableReadings(readingOptions);
       setAvailableAvatarLectures(avatarLectureOptions);
       setAvailableQuizzes(
-        (quizRows || []).map((row: any) => ({
-          id: row.quiz_batch_id,
-          title: row.quiz_batches?.quiz_name || 'Untitled quiz',
-          summary: row.quiz_batches?.status || '',
-        })),
+        (quizRows || [])
+          .filter((row: any) =>
+            row.quiz_batches?.mode === 'online' && row.quiz_batches?.status === 'published',
+          )
+          .map((row: any) => ({
+            id: row.quiz_batch_id,
+            title: row.quiz_batches?.quiz_name || 'Untitled quiz',
+            summary: 'Published online quiz',
+            mode: row.quiz_batches?.mode || null,
+            status: row.quiz_batches?.status || null,
+          })),
       );
     } catch (error) {
       console.error('Error loading Socratic resource library:', error);
@@ -672,6 +841,7 @@ export default function NewAssignmentPage() {
     if (selectedCourseId) {
       returnParams.set('courseId', selectedCourseId);
     }
+    persistAssignmentSetupDraft();
     saveStudioDraft(selectedCourseId, currentBlueprint);
     saveSocraticPreviewPayload({
       blueprint: {
@@ -686,6 +856,7 @@ export default function NewAssignmentPage() {
   };
 
   const navigateToCreateQuiz = () => {
+    persistAssignmentSetupDraft();
     const returnTo = `/educator/assignment/new?courseId=${selectedCourseId}&mode=socratic&resumeSocraticDraft=1`;
     router.push(
       `/educator/quiz/new?courseId=${selectedCourseId}&socraticMode=online&socraticAttach=quiz&returnTo=${encodeURIComponent(returnTo)}`,
@@ -693,6 +864,7 @@ export default function NewAssignmentPage() {
   };
 
   const navigateToCreateAvatarLecture = () => {
+    persistAssignmentSetupDraft();
     const returnTo = `/educator/assignment/new?courseId=${selectedCourseId}&mode=socratic&resumeSocraticDraft=1`;
     router.push(
       `/educator/lecture/new?courseId=${selectedCourseId}&socraticAttach=avatar_lecture&returnTo=${encodeURIComponent(returnTo)}`,

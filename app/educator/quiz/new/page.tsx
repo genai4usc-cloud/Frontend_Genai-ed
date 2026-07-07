@@ -1119,6 +1119,10 @@ export default function CreateQuiz() {
       alert('Enter a quiz name before saving.');
       return;
     }
+    if (returnTo && socraticAttach === 'quiz' && courseMode !== 'online') {
+      alert('Socratic Writing can only attach online quizzes. Choose Online Quiz before publishing.');
+      return;
+    }
 
     setSaving(true);
     try {

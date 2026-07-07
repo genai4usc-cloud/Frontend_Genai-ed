@@ -32,12 +32,14 @@ interface Artifact {
 type EmbeddedLectureViewerProps = {
   courseId: string;
   lectureId: string;
+  previewMode?: boolean;
   onProgressChange?: (state: { opened: boolean; completed: boolean }) => void;
 };
 
 export default function EmbeddedLectureViewer({
   courseId,
   lectureId,
+  previewMode = false,
   onProgressChange,
 }: EmbeddedLectureViewerProps) {
   const [loading, setLoading] = useState(true);
@@ -60,11 +62,12 @@ export default function EmbeddedLectureViewer({
   }, [lectureId]);
 
   useEffect(() => {
+    if (previewMode) return;
     onProgressChange?.({
       opened: Boolean(lecture),
       completed: viewCompleted,
     });
-  }, [lecture?.id, onProgressChange, viewCompleted]);
+  }, [lecture?.id, onProgressChange, previewMode, viewCompleted]);
 
   const videoArtifact = useMemo(
     () => artifacts.find((a) => a.artifact_type === 'video_avatar_mp4' || a.artifact_type === 'video_static_mp4' || a.artifact_type === 'video_avatar') || null,
@@ -123,23 +126,31 @@ export default function EmbeddedLectureViewer({
         .eq('id', user.id)
         .maybeSingle();
 
-      if (!profileData || profileData.role !== 'student') {
+      if (!profileData) {
+        setError('Unable to confirm your profile for this lecture.');
+        return;
+      }
+
+      const isEducatorPreview = previewMode && profileData.role === 'educator';
+      if (!isEducatorPreview && profileData.role !== 'student') {
         setError('Student access is required to view this lecture.');
         return;
       }
 
       setProfile(profileData);
 
-      const { data: enrollmentCheck } = await supabase
-        .from('course_students')
-        .select('course_id')
-        .eq('email', user.email!)
-        .eq('course_id', courseId)
-        .maybeSingle();
+      if (!isEducatorPreview) {
+        const { data: enrollmentCheck } = await supabase
+          .from('course_students')
+          .select('course_id')
+          .eq('email', user.email!)
+          .eq('course_id', courseId)
+          .maybeSingle();
 
-      if (!enrollmentCheck) {
-        setError('You are not enrolled in this course.');
-        return;
+        if (!enrollmentCheck) {
+          setError('You are not enrolled in this course.');
+          return;
+        }
       }
 
       const { data: lectureCourseCheck } = await supabase
@@ -217,6 +228,10 @@ export default function EmbeddedLectureViewer({
         }
       }
 
+      if (isEducatorPreview) {
+        return;
+      }
+
       const { data: viewData } = await supabase
         .from('student_lecture_views')
         .select('id, completed, duration_watched')
@@ -257,6 +272,7 @@ export default function EmbeddedLectureViewer({
   };
 
   const persistLectureView = async (patch: { duration_watched?: number; completed?: boolean }) => {
+    if (previewMode) return;
     if (!profile?.id) return;
     const payload = {
       ...(patch.duration_watched !== undefined ? { duration_watched: Math.max(0, Math.floor(patch.duration_watched)) } : {}),
@@ -306,6 +322,7 @@ export default function EmbeddedLectureViewer({
   };
 
   const handleMediaPlay = () => {
+    if (previewMode) return;
     onProgressChange?.({
       opened: true,
       completed: viewCompleted,
@@ -324,10 +341,12 @@ export default function EmbeddedLectureViewer({
 
   const handleMediaEnded = () => {
     setViewCompleted(true);
-    void persistLectureView({
-      duration_watched: currentTimeRef.current,
-      completed: true,
-    });
+    if (!previewMode) {
+      void persistLectureView({
+        duration_watched: currentTimeRef.current,
+        completed: true,
+      });
+    }
   };
 
   if (loading) {
