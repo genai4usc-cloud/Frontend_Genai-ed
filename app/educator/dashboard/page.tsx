@@ -29,7 +29,7 @@ const tutorials = {
   multiModel: {
     title: 'Multi-Model Playground Tutorial',
     description: 'Learn how to compare and orchestrate model responses.',
-    url: 'https://scribehow.com/embed/Tutorial_Mastering_the_Cogitatis_AI_Multi-Model_Playground__CTLgID8RRquUjC4WAQYjMQ',
+    url: 'https://scribehow.com/embed/Tutorial_Comparing_AI_Model_Responses_in_the_Multi-Model_Playground__bZfAPTi3QIStxAzfRDIHdQ',
   },
   socratic: {
     title: 'Socratic Writing Tutorial',
