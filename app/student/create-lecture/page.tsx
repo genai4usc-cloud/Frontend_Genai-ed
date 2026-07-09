@@ -891,13 +891,11 @@ export default function CreateLecture() {
                             onChange={(e) => setVideoLength(Number(e.target.value))}
                             className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-maroon focus:border-transparent"
                           >
+                            <option value={1}>1 minutes</option>
+                            <option value={2}>2 minutes</option>
+                            <option value={3}>3 minutes</option>
+                            <option value={4}>4 minutes</option>
                             <option value={5}>5 minutes</option>
-                            <option value={10}>10 minutes</option>
-                            <option value={15}>15 minutes</option>
-                            <option value={20}>20 minutes</option>
-                            <option value={30}>30 minutes</option>
-                            <option value={45}>45 minutes</option>
-                            <option value={60}>60 minutes</option>
                           </select>
                         </div>
 
