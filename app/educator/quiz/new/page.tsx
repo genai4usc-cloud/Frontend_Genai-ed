@@ -1146,7 +1146,7 @@ export default function CreateQuiz() {
       const nextStatus = courseMode === 'online' ? 'published' : 'saved';
       const nowIso = new Date().toISOString();
 
-      await supabase
+      const { error: saveError } = await supabase
         .from('quiz_batches')
         .update({
           quiz_name: quizName.trim(),
@@ -1155,6 +1155,8 @@ export default function CreateQuiz() {
           published_at: courseMode === 'online' ? nowIso : null,
         })
         .eq('id', quizBatchId);
+
+      if (saveError) throw saveError;
 
       setQuizBatch((current) => current
         ? {
@@ -1363,7 +1365,7 @@ export default function CreateQuiz() {
                       <Info className="w-5 h-5 text-gray-400" />
                     </div>
                     <p className="text-sm text-gray-600">
-                      Test students' knowledge in the classroom with printable quizzes and answer keys
+                      Test students&apos; knowledge in the classroom with printable quizzes and answer keys
                     </p>
                   </button>
 
@@ -1539,7 +1541,7 @@ export default function CreateQuiz() {
                         <div>
                           <h4 className="font-semibold text-gray-900">Autofill From Assignment</h4>
                           <p className="text-sm text-gray-600">
-                            Pull the latest uploaded file from each student's submission for one selected assignment.
+                            Pull the latest uploaded file from each student&apos;s submission for one selected assignment.
                           </p>
                         </div>
                         <button
@@ -2144,7 +2146,7 @@ export default function CreateQuiz() {
                       <div>
                         <h5 className="font-semibold text-gray-900 mb-1">In-Class Mode Selected</h5>
                         <p className="text-sm text-gray-700">
-                          Clicking "Save Quiz" will save this quiz to your Personal Library for future reference.
+                          Clicking &quot;Save Quiz&quot; will save this quiz to your Personal Library for future reference.
                           You can access and reprint these quizzes anytime from your library.
                         </p>
                       </div>

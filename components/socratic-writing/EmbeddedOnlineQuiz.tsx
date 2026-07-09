@@ -81,6 +81,42 @@ interface EducatorQuizReviewPayload {
   attempts: EducatorQuizReviewAttempt[];
 }
 
+const FULLSCREEN_TOLERANCE_PX = 8;
+
+const hasFullscreenElement = () => {
+  if (typeof document === 'undefined') return false;
+  const fullscreenDocument = document as Document & {
+    webkitFullscreenElement?: Element | null;
+    mozFullScreenElement?: Element | null;
+    msFullscreenElement?: Element | null;
+  };
+
+  return Boolean(
+    fullscreenDocument.fullscreenElement
+      || fullscreenDocument.webkitFullscreenElement
+      || fullscreenDocument.mozFullScreenElement
+      || fullscreenDocument.msFullscreenElement,
+  );
+};
+
+const isEffectivelyFullscreen = () => {
+  if (hasFullscreenElement()) return true;
+  if (typeof window === 'undefined') return false;
+
+  const screenWidth = window.screen?.width || 0;
+  const screenHeight = window.screen?.height || 0;
+  const availableWidth = window.screen?.availWidth || screenWidth;
+  const availableHeight = window.screen?.availHeight || screenHeight;
+  const widthMatches =
+    Math.abs(window.innerWidth - screenWidth) <= FULLSCREEN_TOLERANCE_PX
+    || Math.abs(window.innerWidth - availableWidth) <= FULLSCREEN_TOLERANCE_PX;
+  const heightMatches =
+    Math.abs(window.innerHeight - screenHeight) <= FULLSCREEN_TOLERANCE_PX
+    || Math.abs(window.innerHeight - availableHeight) <= FULLSCREEN_TOLERANCE_PX;
+
+  return widthMatches && heightMatches;
+};
+
 type EmbeddedOnlineQuizProps = {
   courseId: string;
   quizBatchId: string;
@@ -160,7 +196,7 @@ export default function EmbeddedOnlineQuiz({
 
   useEffect(() => {
     const syncFullscreenState = () => {
-      const active = !!document.fullscreenElement;
+      const active = isEffectivelyFullscreen();
       setIsFullscreenReady(active);
       if (isQuizInProgress && !active) {
         setNeedsFullscreenResume(true);
@@ -169,7 +205,11 @@ export default function EmbeddedOnlineQuiz({
 
     syncFullscreenState();
     document.addEventListener('fullscreenchange', syncFullscreenState);
-    return () => document.removeEventListener('fullscreenchange', syncFullscreenState);
+    window.addEventListener('resize', syncFullscreenState);
+    return () => {
+      document.removeEventListener('fullscreenchange', syncFullscreenState);
+      window.removeEventListener('resize', syncFullscreenState);
+    };
   }, [isQuizInProgress]);
 
   useEffect(() => {
@@ -204,7 +244,7 @@ export default function EmbeddedOnlineQuiz({
 
     const handleFullscreenChange = () => {
       if (shouldIgnoreIntegrityEvent()) {
-        const fullscreenActive = !!document.fullscreenElement;
+        const fullscreenActive = isEffectivelyFullscreen();
         setIsFullscreenReady(fullscreenActive);
         if (fullscreenActive) {
           setNeedsFullscreenResume(false);
@@ -212,7 +252,7 @@ export default function EmbeddedOnlineQuiz({
         return;
       }
 
-      const fullscreenActive = !!document.fullscreenElement;
+      const fullscreenActive = isEffectivelyFullscreen();
       if (fullscreenActive) {
         setIsFullscreenReady(true);
         setNeedsFullscreenResume(false);
@@ -236,12 +276,14 @@ export default function EmbeddedOnlineQuiz({
     window.addEventListener('blur', handleWindowBlur);
     window.addEventListener('focus', handleWindowFocus);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
+    window.addEventListener('resize', handleFullscreenChange);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleWindowBlur);
       window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      window.removeEventListener('resize', handleFullscreenChange);
     };
   }, [isQuizInProgress, profile?.id, submitting]);
 
@@ -268,7 +310,7 @@ export default function EmbeddedOnlineQuiz({
 
   const enterFullscreen = async () => {
     if (typeof document === 'undefined') return false;
-    if (document.fullscreenElement) return true;
+    if (isEffectivelyFullscreen()) return true;
 
     ignoreIntegrityUntilRef.current = Date.now() + 2000;
 
@@ -446,7 +488,7 @@ export default function EmbeddedOnlineQuiz({
 
       const payload = await response.json();
       setDetail(payload.detail as OnlineQuizDetail);
-      setNeedsFullscreenResume(Boolean(payload.require_fullscreen) && !document.fullscreenElement);
+      setNeedsFullscreenResume(Boolean(payload.require_fullscreen) && !isEffectivelyFullscreen());
 
       if (payload.message) {
         setPolicyMessage(payload.message);

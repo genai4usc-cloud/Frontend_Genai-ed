@@ -245,7 +245,10 @@ export default function CourseLectures() {
           due_at: quiz.due_at,
           mcq_count: quiz.mcq_count,
           short_answer_count: quiz.short_answer_count,
-        }));
+        }))
+        .sort((left, right) => (
+          new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+        ));
 
       setQuizzes(normalizedQuizzes);
     } catch (error) {

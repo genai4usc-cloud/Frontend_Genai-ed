@@ -123,6 +123,7 @@ export default function StudentCourse() {
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [inClassQuizzes, setInClassQuizzes] = useState<InClassQuiz[]>([]);
   const [onlineQuizzes, setOnlineQuizzes] = useState<OnlineQuizSummary[]>([]);
+  const [onlineQuizError, setOnlineQuizError] = useState<string | null>(null);
   const [studentAssignments, setStudentAssignments] = useState<StudentCourseAssignment[]>([]);
   const [assignmentSystemMissing, setAssignmentSystemMissing] = useState(false);
   const [quizView, setQuizView] = useState<'in-class' | 'online'>('in-class');
@@ -176,10 +177,10 @@ export default function StudentCourse() {
   }, [courseId]);
 
   useEffect(() => {
-    if (onlineQuizzes.length > 0 && inClassQuizzes.length === 0 && quizView !== 'online') {
-      setQuizView('online');
+    if (!loading && onlineQuizzes.length > 0) {
+      setQuizView((currentView) => currentView === 'in-class' ? 'online' : currentView);
     }
-  }, [onlineQuizzes.length, inClassQuizzes.length, quizView]);
+  }, [loading, onlineQuizzes.length]);
 
   const checkAuthAndLoadData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -513,11 +514,13 @@ export default function StudentCourse() {
 
   const loadOnlineQuizzes = async (userId: string) => {
     if (!backendBase) {
+      setOnlineQuizError('Online quiz service is not configured.');
       setOnlineQuizzes([]);
       return;
     }
 
     try {
+      setOnlineQuizError(null);
       const response = await fetch(
         `${backendBase}/api/student/quiz/online?courseId=${courseId}&studentId=${userId}`,
       );
@@ -530,6 +533,7 @@ export default function StudentCourse() {
       setOnlineQuizzes((payload.quizzes || []) as OnlineQuizSummary[]);
     } catch (error) {
       console.error('Error loading online quizzes:', error);
+      setOnlineQuizError(error instanceof Error ? error.message : 'Unable to load online quizzes.');
       setOnlineQuizzes([]);
     }
   };
@@ -896,7 +900,7 @@ export default function StudentCourse() {
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  In Class
+                  In Class ({inClassQuizzes.length})
                 </button>
                 <button
                   onClick={() => setQuizView('online')}
@@ -906,7 +910,7 @@ export default function StudentCourse() {
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  Online
+                  Online ({onlineQuizzes.length})
                 </button>
               </div>
             </div>
@@ -986,6 +990,11 @@ export default function StudentCourse() {
 
             {quizView === 'online' && (
               <>
+                {onlineQuizError && (
+                  <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {onlineQuizError}
+                  </div>
+                )}
                 {onlineQuizzes.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {onlineQuizzes.map((quiz) => (
