@@ -60,8 +60,8 @@ export default function StudentLayout({ children, profile }: StudentLayoutProps)
   const mainNavItems: NavItem[] = [
     { icon: Home, label: 'Dashboard', path: '/student/dashboard' },
     { icon: Bot, label: 'Multi-Model Playground', path: '/student/llm-playground' },
-    { icon: Lightbulb, label: 'Avatar Lecture Studio', path: '/student/create-lecture' },
     { icon: Video, label: 'Socratic Writing Studio', path: '/student/brainstorming' },
+    { icon: Lightbulb, label: 'Avatar Lecture Studio', path: '/student/create-lecture' },
     { icon: ClipboardCheck, label: 'Knowledge Check', path: '/student/test-knowledge' },
   ];
 
