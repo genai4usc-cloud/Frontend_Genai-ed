@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Bold, Heading1, Heading2, Heading3, Italic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -10,12 +10,20 @@ interface SocraticRichTextEditorProps {
   onChange: (nextHtml: string) => void;
 }
 
-export default function SocraticRichTextEditor({
+export type SocraticRichTextEditorHandle = {
+  getHtml: () => string;
+};
+
+const SocraticRichTextEditor = forwardRef<SocraticRichTextEditorHandle, SocraticRichTextEditorProps>(function SocraticRichTextEditor({
   value,
   readOnly = false,
   onChange,
-}: SocraticRichTextEditorProps) {
+}, ref) {
   const editorRef = useRef<HTMLDivElement | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    getHtml: () => editorRef.current?.innerHTML || '',
+  }), []);
 
   useEffect(() => {
     if (!editorRef.current) return;
@@ -88,4 +96,6 @@ export default function SocraticRichTextEditor({
       />
     </div>
   );
-}
+});
+
+export default SocraticRichTextEditor;

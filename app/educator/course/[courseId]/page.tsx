@@ -223,6 +223,7 @@ export default function CourseLectures() {
             created_at,
             status,
             mode,
+            material_source_mode,
             due_at,
             mcq_count,
             short_answer_count
@@ -236,6 +237,7 @@ export default function CourseLectures() {
       const normalizedQuizzes: Quiz[] = (quizRelations || [])
         .map((relation: any) => relation.quiz_batches)
         .filter(Boolean)
+        .filter((quiz: any) => quiz.material_source_mode !== 'socratic_final')
         .map((quiz: any) => ({
           id: quiz.id,
           quiz_name: quiz.quiz_name,

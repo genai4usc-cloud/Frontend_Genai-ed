@@ -602,7 +602,7 @@ export default function NewAssignmentPage() {
           .eq('course_id', courseId),
         supabase
           .from('quiz_batch_courses')
-          .select('quiz_batch_id, quiz_batches(id, quiz_name, status, mode)')
+          .select('quiz_batch_id, quiz_batches(id, quiz_name, status, mode, material_source_mode)')
           .eq('course_id', courseId),
         supabase
           .from('student_uploads')
@@ -675,7 +675,9 @@ export default function NewAssignmentPage() {
       setAvailableQuizzes(
         (quizRows || [])
           .filter((row: any) =>
-            row.quiz_batches?.mode === 'online' && row.quiz_batches?.status === 'published',
+            row.quiz_batches?.mode === 'online'
+              && row.quiz_batches?.status === 'published'
+              && row.quiz_batches?.material_source_mode !== 'socratic_final',
           )
           .map((row: any) => ({
             id: row.quiz_batch_id,

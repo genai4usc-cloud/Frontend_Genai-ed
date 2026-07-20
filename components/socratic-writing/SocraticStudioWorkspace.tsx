@@ -3,6 +3,7 @@
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  AlertTriangle,
   BookOpen,
   CheckCircle2,
   Circle,
@@ -11,7 +12,9 @@ import {
   FlaskConical,
   MessageSquareText,
   NotebookPen,
+  RefreshCw,
   Send,
+  ShieldCheck,
   Sparkles,
   Upload,
 } from 'lucide-react';
@@ -20,7 +23,9 @@ import Markdown from '@/components/Markdown';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import SocraticRichTextEditor from '@/components/socratic-writing/SocraticRichTextEditor';
+import SocraticRichTextEditor, {
+  type SocraticRichTextEditorHandle,
+} from '@/components/socratic-writing/SocraticRichTextEditor';
 import SocraticPdfReader from '@/components/socratic-writing/SocraticPdfReader';
 import EmbeddedOnlineQuiz from '@/components/socratic-writing/EmbeddedOnlineQuiz';
 import EmbeddedLectureViewer from '@/components/socratic-writing/EmbeddedLectureViewer';
@@ -34,6 +39,7 @@ import {
   recomputeStageStatuses,
   SOCRATIC_STAGE_ORDER,
   SocraticPreviewPayload,
+  SocraticFinalQuizState,
   SocraticResource,
   SocraticStageKey,
   SocraticStudioBlueprint,
@@ -42,6 +48,8 @@ import {
 import { supabase } from '@/lib/supabase';
 import {
   fetchStudentSocraticWorkspace,
+  isSocraticAuthExpiredError,
+  prepareSocraticFinalQuiz,
   saveStudentSocraticWorkspace,
   streamSocraticCoachMessage,
   streamSocraticPreviewCoachMessage,
@@ -58,6 +66,17 @@ type SocraticStudioWorkspaceProps = {
 
 type StudentAddedSource = SocraticResource & {
   sourceCreatedAt: string;
+};
+
+type EmbeddedQuizSubmissionDetail = {
+  status?: string;
+  attempt?: {
+    id?: string;
+    submitted_at?: string | null;
+    final_score?: number | null;
+    raw_score?: number | null;
+  } | null;
+  questions?: unknown[];
 };
 
 const isPdfLikeResource = (resource: Pick<SocraticResource, 'url' | 'storagePath'>) => {
@@ -85,6 +104,7 @@ export default function SocraticStudioWorkspace({
   onSavePreviewSession,
 }: SocraticStudioWorkspaceProps) {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [courseStudentId, setCourseStudentId] = useState<string | null>(null);
   const [blueprint, setBlueprint] = useState<SocraticStudioBlueprint | null>(null);
@@ -92,6 +112,8 @@ export default function SocraticStudioWorkspace({
   const [readOnly, setReadOnly] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [preparingFinalQuiz, setPreparingFinalQuiz] = useState(false);
+  const [finalQuiz, setFinalQuiz] = useState<SocraticFinalQuizState | null>(null);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
   const [newNoteDraft, setNewNoteDraft] = useState('');
@@ -104,8 +126,27 @@ export default function SocraticStudioWorkspace({
   const hydratedRef = useRef(false);
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSelectedResourceIdRef = useRef<string | null>(null);
+  const authExpiredRef = useRef(false);
+  const authExpiredToastShownRef = useRef(false);
+
+  const handleAuthExpired = (error: unknown) => {
+    if (!isSocraticAuthExpiredError(error)) return false;
+    authExpiredRef.current = true;
+    setReadOnly(true);
+    setSaving(false);
+    const message = error instanceof Error ? error.message : 'Your login session expired. Please sign in again.';
+    setLoadError(message);
+    if (!authExpiredToastShownRef.current) {
+      authExpiredToastShownRef.current = true;
+      toast.error(message);
+    }
+    return true;
+  };
 
   useEffect(() => {
+    authExpiredRef.current = false;
+    authExpiredToastShownRef.current = false;
+    setLoadError(null);
     void loadWorkspace();
 
     return () => {
@@ -117,6 +158,7 @@ export default function SocraticStudioWorkspace({
 
   useEffect(() => {
     const handleVisibilityRefresh = async () => {
+      if (authExpiredRef.current) return;
       if (previewMode) return;
       if (document.visibilityState !== 'visible') return;
       if (!workspaceId || !hydratedRef.current) return;
@@ -125,6 +167,7 @@ export default function SocraticStudioWorkspace({
         const payload = await fetchStudentSocraticWorkspace(assignmentId);
         setBlueprint(payload.blueprint);
         setReadOnly(payload.readOnly);
+        setFinalQuiz(payload.finalQuiz);
         setSession((current) => {
           if (!current) {
             return recomputeStageStatuses(payload.session, payload.blueprint);
@@ -140,6 +183,7 @@ export default function SocraticStudioWorkspace({
           );
         });
       } catch (error) {
+        if (handleAuthExpired(error)) return;
         console.error('Error refreshing Socratic resource state:', error);
       }
     };
@@ -153,11 +197,16 @@ export default function SocraticStudioWorkspace({
     };
   }, [assignmentId, previewMode, workspaceId]);
 
-  const loadWorkspace = async () => {
-    setLoading(true);
-    hydratedRef.current = false;
+  const loadWorkspace = async (options: { silent?: boolean } = {}) => {
+    const silent = Boolean(options.silent);
+    if (!silent) {
+      setLoading(true);
+      setLoadError(null);
+      hydratedRef.current = false;
+    }
 
     try {
+      if (authExpiredRef.current) return;
       if (previewMode) {
         if (!previewPayload) {
           throw new Error('Preview setup was not found. Return to assignment setup and launch Preview as Student again.');
@@ -170,6 +219,23 @@ export default function SocraticStudioWorkspace({
         setWorkspaceId('educator-preview');
         setCourseStudentId('educator-preview');
         setReadOnly(false);
+        setFinalQuiz({
+          enabled: false,
+          status: 'disabled',
+          quizBatchId: null,
+          quizGeneratedId: null,
+          essayHash: null,
+          currentEssayHash: null,
+          isStale: false,
+          generationError: null,
+          generatedAt: null,
+          quizSubmittedAt: null,
+          reportStatus: null,
+          reportGeneratedAt: null,
+          quizScore: null,
+          quizTotal: null,
+          systemIssue: null,
+        });
         setSelectedResourceId((current) => current || nextBlueprint.resources[0]?.id || null);
         hydratedRef.current = true;
         return;
@@ -184,13 +250,19 @@ export default function SocraticStudioWorkspace({
       setWorkspaceId(payload.workspaceId);
       setCourseStudentId(payload.courseStudentId);
       setReadOnly(payload.readOnly);
+      setFinalQuiz(payload.finalQuiz);
       setSelectedResourceId((current) => current || nextBlueprint.resources[0]?.id || null);
       hydratedRef.current = true;
     } catch (error) {
+      if (handleAuthExpired(error)) return;
       console.error('Error loading Socratic workspace:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to load Socratic Writing Studio.');
+      const message = error instanceof Error ? error.message : 'Failed to load Socratic Writing Studio.';
+      setLoadError(message);
+      toast.error(message);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -245,7 +317,7 @@ export default function SocraticStudioWorkspace({
   }, [allResources, selectedResourceId]);
 
   useEffect(() => {
-    if (!workspaceId || !session || !blueprint || !hydratedRef.current) return;
+    if (!workspaceId || !session || !blueprint || !hydratedRef.current || authExpiredRef.current) return;
 
     if (autosaveTimeoutRef.current) {
       clearTimeout(autosaveTimeoutRef.current);
@@ -260,6 +332,7 @@ export default function SocraticStudioWorkspace({
           await saveStudentSocraticWorkspace(workspaceId, session);
         }
       } catch (error) {
+        if (handleAuthExpired(error)) return;
         console.error('Error autosaving Socratic workspace:', error);
         toast.error(error instanceof Error ? error.message : 'Failed to save Socratic progress.');
       } finally {
@@ -456,6 +529,7 @@ export default function SocraticStudioWorkspace({
         );
       }
     } catch (error) {
+      if (handleAuthExpired(error)) return;
       console.error('Error sending Socratic coach message:', error);
       updateSession((current) => ({
         ...current,
@@ -545,6 +619,16 @@ export default function SocraticStudioWorkspace({
 
   const handleEssayChange = (nextHtml: string) => {
     if (readOnly) return;
+
+    setFinalQuiz((current) => {
+      if (!current?.enabled) return current;
+      if (!['ready', 'submitted', 'report_ready'].includes(current.status)) return current;
+      return {
+        ...current,
+        status: 'stale',
+        isStale: true,
+      };
+    });
 
     updateSession((current) => ({
       ...current,
@@ -642,6 +726,7 @@ export default function SocraticStudioWorkspace({
         toast.warning('Preview attached locally. Claude can read it only after it is uploaded by a real student.');
       }
     } catch (error) {
+      if (handleAuthExpired(error)) return;
       console.error('Error uploading student research PDF:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to upload PDF.');
     } finally {
@@ -662,6 +747,80 @@ export default function SocraticStudioWorkspace({
     exportWindow.print();
   };
 
+  const handlePrepareFinalQuiz = async (currentEssayHtml?: string) => {
+    if (!workspaceId || !session) return;
+    if (previewMode) {
+      toast.info('Final quiz generation is available in real student workspaces after publishing.');
+      return;
+    }
+
+    try {
+      setPreparingFinalQuiz(true);
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+      }
+      const sessionToSave =
+        currentEssayHtml !== undefined
+          ? {
+              ...session,
+              essayHtml: currentEssayHtml,
+              essayJson: JSON.stringify({ type: 'doc', version: 1, html: currentEssayHtml }),
+            }
+          : session;
+      const liveEssayText = sessionToSave.essayHtml
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (liveEssayText.length < 50) {
+        toast.error('Write more of the essay before generating the final quiz.');
+        return;
+      }
+
+      const savedPayload = await saveStudentSocraticWorkspace(workspaceId, sessionToSave);
+      const preparedPayload = await prepareSocraticFinalQuiz(savedPayload.workspaceId, sessionToSave);
+      setBlueprint(preparedPayload.blueprint);
+      setSession(recomputeStageStatuses(preparedPayload.session, preparedPayload.blueprint));
+      setReadOnly(preparedPayload.readOnly);
+      setFinalQuiz(preparedPayload.finalQuiz);
+      toast.success('Final quiz is ready.');
+    } catch (error) {
+      if (handleAuthExpired(error)) return;
+      console.error('Error preparing Socratic final quiz:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to prepare the final quiz.');
+      try {
+        const refreshed = await fetchStudentSocraticWorkspace(assignmentId);
+        setFinalQuiz(refreshed.finalQuiz);
+      } catch {
+        // Keep the visible error from the prepare request.
+      }
+    } finally {
+      setPreparingFinalQuiz(false);
+    }
+  };
+
+  const handleFinalQuizSubmitted = (quizDetail?: EmbeddedQuizSubmissionDetail) => {
+    if (previewMode) return;
+    setFinalQuiz((current) => {
+      if (!current) return current;
+      const submittedAt = quizDetail?.attempt?.submitted_at || current.quizSubmittedAt || new Date().toISOString();
+      const score =
+        quizDetail?.attempt?.final_score !== null && quizDetail?.attempt?.final_score !== undefined
+          ? quizDetail.attempt.final_score
+          : quizDetail?.attempt?.raw_score !== null && quizDetail?.attempt?.raw_score !== undefined
+            ? quizDetail.attempt.raw_score
+            : current.quizScore;
+
+      return {
+        ...current,
+        status: current.reportStatus === 'ready' ? 'report_ready' : 'submitted',
+        quizSubmittedAt: submittedAt,
+        quizScore: score,
+        quizTotal: quizDetail?.questions?.length || current.quizTotal,
+      };
+    });
+    toast.success('Final quiz submitted. You can now submit the final package.');
+  };
+
   const handleSubmit = async () => {
     if (!workspaceId) return;
     if (previewMode) {
@@ -675,14 +834,35 @@ export default function SocraticStudioWorkspace({
       setBlueprint(payload.blueprint);
       setSession(recomputeStageStatuses(payload.session, payload.blueprint));
       setReadOnly(payload.readOnly);
+      setFinalQuiz(payload.finalQuiz);
       toast.success('Socratic submission saved.');
     } catch (error) {
+      if (handleAuthExpired(error)) return;
       console.error('Error submitting Socratic workspace:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to submit the Socratic assignment.');
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (!loading && loadError && (!blueprint || !session || !stageSummary)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <div className="max-w-lg rounded-2xl border border-red-200 bg-red-50 p-6 text-center text-red-900">
+          <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-red-700" />
+          <h2 className="text-xl font-semibold">Socratic Studio could not load</h2>
+          <p className="mt-2 text-sm">{loadError}</p>
+          <button
+            type="button"
+            onClick={onBack}
+            className="mt-5 rounded-lg bg-brand-maroon px-4 py-2 text-sm font-semibold text-white hover:bg-brand-maroon-hover"
+          >
+            Back to assignment
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading || !blueprint || !session || !stageSummary) {
     return (
@@ -793,10 +973,14 @@ export default function SocraticStudioWorkspace({
             handleCoachMessage={handleCoachMessage}
             handleEssayChange={handleEssayChange}
             handleExportPdf={handleExportPdf}
+            handleFinalQuizSubmitted={handleFinalQuizSubmitted}
+            handlePrepareFinalQuiz={handlePrepareFinalQuiz}
             handleResourceProgress={handleResourceProgress}
             handleSubmit={handleSubmit}
+            finalQuiz={finalQuiz}
             readOnly={stageSummary.readOnly}
             previewMode={previewMode}
+            preparingFinalQuiz={preparingFinalQuiz}
             runBuildTool={runBuildTool}
             selectedResource={selectedResource}
             selectedStage={selectedStage}
@@ -843,6 +1027,7 @@ type WorkspaceStageContentProps = {
   selectedStage: SocraticStageKey;
   readOnly: boolean;
   previewMode: boolean;
+  finalQuiz: SocraticFinalQuizState | null;
   selectedResource: SocraticResource | null;
   setSelectedResourceId: (id: string) => void;
   getCoachDraft: () => string;
@@ -856,12 +1041,15 @@ type WorkspaceStageContentProps = {
   runBuildTool: (tool: 'thesis' | 'structure' | 'stress') => void;
   handleEssayChange: (nextHtml: string) => void;
   handleExportPdf: () => void;
+  handlePrepareFinalQuiz: (currentEssayHtml?: string) => void;
+  handleFinalQuizSubmitted: (quizDetail?: EmbeddedQuizSubmissionDetail) => void;
   handleSubmit: () => void;
   sidebarCollapsed: boolean;
   setSidebarCollapsed: Dispatch<SetStateAction<boolean>>;
   sourcesCollapsed: boolean;
   setSourcesCollapsed: Dispatch<SetStateAction<boolean>>;
   submitting: boolean;
+  preparingFinalQuiz: boolean;
   sendingMessage: boolean;
 };
 
@@ -891,6 +1079,7 @@ function WorkspaceStageContent({
   selectedStage,
   readOnly,
   previewMode,
+  finalQuiz,
   selectedResource,
   setSelectedResourceId,
   getCoachDraft,
@@ -901,12 +1090,15 @@ function WorkspaceStageContent({
   runBuildTool,
   handleEssayChange,
   handleExportPdf,
+  handlePrepareFinalQuiz,
+  handleFinalQuizSubmitted,
   handleSubmit,
   sidebarCollapsed,
   setSidebarCollapsed,
   sourcesCollapsed,
   setSourcesCollapsed,
   submitting,
+  preparingFinalQuiz,
   sendingMessage,
 }: WorkspaceStageContentProps) {
   const stageConfig = blueprint.stages[selectedStage];
@@ -916,6 +1108,7 @@ function WorkspaceStageContent({
       (entry.entryType === 'chat_prompt' || entry.entryType === 'chat_reply'),
   );
   const [readingReachedEnd, setReadingReachedEnd] = useState<Record<string, boolean>>({});
+  const essayEditorRef = useRef<SocraticRichTextEditorHandle | null>(null);
 
   const getResourceProgress = (resource: SocraticResource) => session.resourceProgress[resource.id];
   const isResourceCompleted = (resource: SocraticResource) => {
@@ -1258,32 +1451,31 @@ function WorkspaceStageContent({
         <div className="space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-gray-900">Compose the Essay</h3>
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleExportPdf}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Export PDF
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={readOnly || submitting}
-                className="rounded-lg bg-brand-maroon px-4 py-2 text-sm font-semibold text-white hover:bg-brand-maroon-hover disabled:opacity-50"
-              >
-                {submitting
-                  ? 'Submitting...'
-                  : session.submittedAt
-                    ? 'Save Resubmission'
-                    : 'Submit Assignment'}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Export PDF
+            </button>
           </div>
           <SocraticRichTextEditor
+            ref={essayEditorRef}
             value={session.essayHtml}
             onChange={handleEssayChange}
             readOnly={readOnly}
+          />
+          <FinalSocraticSubmissionCard
+            blueprint={blueprint}
+            finalQuiz={finalQuiz}
+            onFinalQuizSubmitted={handleFinalQuizSubmitted}
+            onPrepareFinalQuiz={() => handlePrepareFinalQuiz(essayEditorRef.current?.getHtml())}
+            onSubmit={handleSubmit}
+            preparingFinalQuiz={preparingFinalQuiz}
+            previewMode={previewMode}
+            readOnly={readOnly}
+            session={session}
+            submitting={submitting}
           />
         </div>
       )}
@@ -1365,6 +1557,176 @@ function WorkspaceStageContent({
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function FinalSocraticSubmissionCard({
+  blueprint,
+  finalQuiz,
+  onFinalQuizSubmitted,
+  onPrepareFinalQuiz,
+  onSubmit,
+  preparingFinalQuiz,
+  previewMode,
+  readOnly,
+  session,
+  submitting,
+}: {
+  blueprint: SocraticStudioBlueprint;
+  finalQuiz: SocraticFinalQuizState | null;
+  onFinalQuizSubmitted: (quizDetail?: EmbeddedQuizSubmissionDetail) => void;
+  onPrepareFinalQuiz: () => void;
+  onSubmit: () => void;
+  preparingFinalQuiz: boolean;
+  previewMode: boolean;
+  readOnly: boolean;
+  session: SocraticStudioSession;
+  submitting: boolean;
+}) {
+  const essayText = session.essayHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const hasEnoughEssay = essayText.length >= 50;
+  const status = finalQuiz?.status || 'disabled';
+  const finalQuizEnabled = Boolean(finalQuiz?.enabled);
+  const quizSubmitted = status === 'submitted' || status === 'report_ready' || status === 'system_failed';
+  const canSubmitWithSystemIssue = status === 'generation_failed';
+  const canSubmit = !finalQuizEnabled || quizSubmitted || canSubmitWithSystemIssue;
+  const generationError =
+    finalQuiz?.systemIssue || finalQuiz?.generationError || 'The final quiz could not be generated because of a system issue.';
+
+  if (previewMode) {
+    return (
+      <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+        <div className="flex items-start gap-3">
+          <ShieldCheck className="mt-1 h-5 w-5 text-blue-700" />
+          <div>
+            <h3 className="font-semibold text-blue-950">Final quiz and submission preview</h3>
+            <p className="mt-1 text-sm text-blue-900">
+              Real final quiz generation appears for student workspaces after the assignment is published. Preview mode keeps this disabled so it does not create quiz attempts or submissions.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!finalQuizEnabled) {
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-gray-950">Final Submission</h3>
+            <p className="mt-1 text-sm text-gray-600">
+              This assignment uses the original Socratic submission flow without a final quiz.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={readOnly || submitting}
+            className="rounded-lg bg-brand-maroon px-4 py-2 text-sm font-semibold text-white hover:bg-brand-maroon-hover disabled:opacity-50"
+          >
+            {submitting ? 'Submitting...' : session.submittedAt ? 'Save Resubmission' : 'Submit Assignment'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-brand-maroon/20 bg-brand-maroon/5 p-5 space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-brand-maroon ring-1 ring-brand-maroon/20">
+            <ShieldCheck className="h-4 w-4" />
+            Final step
+          </div>
+          <h3 className="mt-3 text-xl font-semibold text-gray-950">Final quiz and submission</h3>
+          <p className="mt-1 max-w-2xl text-sm text-gray-700">
+            When your essay feels nearly final, generate a short MCQ quiz from your essay, ledger, notes, chats, and assignment materials. Submit the quiz first, then submit the final Socratic package.
+          </p>
+        </div>
+        <div className="rounded-xl bg-white px-4 py-3 text-sm ring-1 ring-gray-200">
+          <div className="font-semibold capitalize text-gray-950">{status.replace('_', ' ')}</div>
+          {finalQuiz?.quizScore !== null && finalQuiz?.quizScore !== undefined && (
+            <div className="text-gray-600">
+              Quiz score: {finalQuiz.quizScore}
+              {finalQuiz.quizTotal ? ` / ${finalQuiz.quizTotal}` : ''}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {!hasEnoughEssay && !session.submittedAt && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          Write more of the essay before generating the final quiz. This prevents Claude from creating a weak quiz from an empty draft.
+        </div>
+      )}
+
+      {status === 'stale' && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <RefreshCw className="mt-0.5 h-4 w-4 shrink-0" />
+          Your essay changed after the final quiz was generated. Regenerate and submit the quiz again before final submission.
+        </div>
+      )}
+
+      {status === 'generation_failed' && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+          {generationError} You can retry generation, or submit with this system issue recorded for the educator.
+        </div>
+      )}
+
+      {finalQuiz?.quizBatchId && ['ready', 'submitted', 'report_ready'].includes(status) && !finalQuiz.isStale && (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+          <EmbeddedOnlineQuiz
+            courseId={blueprint.courseId}
+            quizBatchId={finalQuiz.quizBatchId}
+            onQuizSubmitted={onFinalQuizSubmitted}
+          />
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-4 ring-1 ring-gray-200">
+        <div className="text-sm text-gray-700">
+          {session.submittedAt
+            ? `Final package submitted ${new Date(session.submittedAt).toLocaleString()}.`
+            : canSubmit
+              ? 'Ready for final Socratic submission.'
+              : 'Generate and submit the final quiz before final submission.'}
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {!quizSubmitted && (
+            <button
+              type="button"
+              onClick={onPrepareFinalQuiz}
+              disabled={readOnly || preparingFinalQuiz || !hasEnoughEssay || status === 'generating'}
+              className="inline-flex items-center gap-2 rounded-lg border border-brand-maroon px-4 py-2 text-sm font-semibold text-brand-maroon hover:bg-brand-maroon hover:text-white disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${preparingFinalQuiz || status === 'generating' ? 'animate-spin' : ''}`} />
+              {status === 'stale'
+                ? 'Regenerate Final Quiz'
+                : status === 'generation_failed'
+                  ? 'Retry Final Quiz'
+                  : 'Generate Final Quiz'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={readOnly || submitting || !canSubmit}
+            className="rounded-lg bg-brand-maroon px-4 py-2 text-sm font-semibold text-white hover:bg-brand-maroon-hover disabled:opacity-50"
+          >
+            {submitting
+              ? 'Submitting...'
+              : canSubmitWithSystemIssue
+                ? 'Submit With System Issue'
+                : session.submittedAt
+                  ? 'Save Final Submission'
+                  : 'Submit Final Package'}
+          </button>
+        </div>
       </div>
     </div>
   );

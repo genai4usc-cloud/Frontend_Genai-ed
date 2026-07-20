@@ -81,40 +81,60 @@ interface EducatorQuizReviewPayload {
   attempts: EducatorQuizReviewAttempt[];
 }
 
-const FULLSCREEN_TOLERANCE_PX = 8;
-
-const hasFullscreenElement = () => {
-  if (typeof document === 'undefined') return false;
+const getFullscreenElement = (): Element | null => {
+  if (typeof document === 'undefined') return null;
   const fullscreenDocument = document as Document & {
     webkitFullscreenElement?: Element | null;
     mozFullScreenElement?: Element | null;
     msFullscreenElement?: Element | null;
   };
 
-  return Boolean(
+  return (
     fullscreenDocument.fullscreenElement
       || fullscreenDocument.webkitFullscreenElement
       || fullscreenDocument.mozFullScreenElement
-      || fullscreenDocument.msFullscreenElement,
+      || fullscreenDocument.msFullscreenElement
+      || null
   );
 };
 
-const isEffectivelyFullscreen = () => {
-  if (hasFullscreenElement()) return true;
-  if (typeof window === 'undefined') return false;
+const hasFullscreenElement = () => Boolean(getFullscreenElement());
 
-  const screenWidth = window.screen?.width || 0;
-  const screenHeight = window.screen?.height || 0;
-  const availableWidth = window.screen?.availWidth || screenWidth;
-  const availableHeight = window.screen?.availHeight || screenHeight;
-  const widthMatches =
-    Math.abs(window.innerWidth - screenWidth) <= FULLSCREEN_TOLERANCE_PX
-    || Math.abs(window.innerWidth - availableWidth) <= FULLSCREEN_TOLERANCE_PX;
-  const heightMatches =
-    Math.abs(window.innerHeight - screenHeight) <= FULLSCREEN_TOLERANCE_PX
-    || Math.abs(window.innerHeight - availableHeight) <= FULLSCREEN_TOLERANCE_PX;
+const requestElementFullscreen = async (target: HTMLElement) => {
+  const fullscreenTarget = target as HTMLElement & {
+    webkitRequestFullscreen?: () => Promise<void> | void;
+    mozRequestFullScreen?: () => Promise<void> | void;
+    msRequestFullscreen?: () => Promise<void> | void;
+  };
+  const request =
+    fullscreenTarget.requestFullscreen
+      || fullscreenTarget.webkitRequestFullscreen
+      || fullscreenTarget.mozRequestFullScreen
+      || fullscreenTarget.msRequestFullscreen;
 
-  return widthMatches && heightMatches;
+  if (!request) {
+    throw new Error('This browser does not support fullscreen mode.');
+  }
+
+  await request.call(fullscreenTarget);
+};
+
+const exitBrowserFullscreen = async () => {
+  if (typeof document === 'undefined' || !hasFullscreenElement()) return;
+  const fullscreenDocument = document as Document & {
+    webkitExitFullscreen?: () => Promise<void> | void;
+    mozCancelFullScreen?: () => Promise<void> | void;
+    msExitFullscreen?: () => Promise<void> | void;
+  };
+  const exit =
+    fullscreenDocument.exitFullscreen
+      || fullscreenDocument.webkitExitFullscreen
+      || fullscreenDocument.mozCancelFullScreen
+      || fullscreenDocument.msExitFullscreen;
+
+  if (exit) {
+    await exit.call(fullscreenDocument);
+  }
 };
 
 type EmbeddedOnlineQuizProps = {
@@ -122,6 +142,7 @@ type EmbeddedOnlineQuizProps = {
   quizBatchId: string;
   previewMode?: boolean;
   onProgressChange?: (state: { opened: boolean; completed: boolean }) => void;
+  onQuizSubmitted?: (detail: OnlineQuizDetail) => void;
 };
 
 const normalizeQuizLoadError = (error: unknown) => {
@@ -144,11 +165,25 @@ const normalizeQuizLoadError = (error: unknown) => {
   }
 };
 
+const readResponseError = async (response: Response) => {
+  const rawText = await response.text();
+  if (!rawText) return response.statusText || 'Request failed.';
+
+  try {
+    const parsed = JSON.parse(rawText);
+    const message = parsed.detail || parsed.message || parsed.error || rawText;
+    return typeof message === 'string' ? message : JSON.stringify(message);
+  } catch {
+    return rawText;
+  }
+};
+
 export default function EmbeddedOnlineQuiz({
   courseId,
   quizBatchId,
   previewMode = false,
   onProgressChange,
+  onQuizSubmitted,
 }: EmbeddedOnlineQuizProps) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [detail, setDetail] = useState<OnlineQuizDetail | null>(null);
@@ -167,8 +202,11 @@ export default function EmbeddedOnlineQuiz({
   const pendingIntegrityEventRef = useRef<string | null>(null);
   const reloadHandledForAttemptRef = useRef<string | null>(null);
   const ignoreIntegrityUntilRef = useRef<number>(0);
+  const completionNotifiedRef = useRef<string | null>(null);
+  const fullscreenConfirmedRef = useRef(false);
 
   const isQuizInProgress = detail?.status === 'in_progress' && !!detail?.attempt;
+  const shouldIgnoreIntegrityEvent = () => Date.now() < ignoreIntegrityUntilRef.current;
 
   useEffect(() => {
     void loadPage();
@@ -196,9 +234,17 @@ export default function EmbeddedOnlineQuiz({
 
   useEffect(() => {
     const syncFullscreenState = () => {
-      const active = isEffectivelyFullscreen();
+      const active = hasFullscreenElement();
       setIsFullscreenReady(active);
-      if (isQuizInProgress && !active) {
+      if (active) {
+        fullscreenConfirmedRef.current = true;
+        setNeedsFullscreenResume(false);
+        return;
+      }
+
+      if (shouldIgnoreIntegrityEvent()) return;
+
+      if (isQuizInProgress) {
         setNeedsFullscreenResume(true);
       }
     };
@@ -213,18 +259,30 @@ export default function EmbeddedOnlineQuiz({
   }, [isQuizInProgress]);
 
   useEffect(() => {
+    if (isQuizInProgress) return;
+    fullscreenConfirmedRef.current = false;
+    setNeedsFullscreenResume(false);
+  }, [isQuizInProgress]);
+
+  useEffect(() => {
     if (!detail) return;
     if (previewMode) return;
+    const complete =
+      detail.status === 'submitted'
+      || detail.status === 'grades_released'
+      || ['submitted', 'graded', 'timed_out'].includes(detail.attempt?.status || '');
     onProgressChange?.({
       opened: Boolean(detail.attempt),
       completed: Boolean(detail.attempt),
     });
-  }, [detail?.attempt?.id, detail?.status, onProgressChange, previewMode]);
+    if (complete && detail.attempt?.id && completionNotifiedRef.current !== detail.attempt.id) {
+      completionNotifiedRef.current = detail.attempt.id;
+      onQuizSubmitted?.(detail);
+    }
+  }, [detail?.attempt?.id, detail?.attempt?.status, detail?.status, onProgressChange, onQuizSubmitted, previewMode]);
 
   useEffect(() => {
     if (!isQuizInProgress || !profile) return;
-
-    const shouldIgnoreIntegrityEvent = () => Date.now() < ignoreIntegrityUntilRef.current;
 
     const handleVisibilityChange = () => {
       if (shouldIgnoreIntegrityEvent()) return;
@@ -235,25 +293,32 @@ export default function EmbeddedOnlineQuiz({
 
     const handleWindowBlur = () => {
       if (shouldIgnoreIntegrityEvent()) return;
+      if (hasFullscreenElement()) return;
       pendingIntegrityEventRef.current = 'window_blur';
     };
 
     const handleWindowFocus = () => {
+      if (pendingIntegrityEventRef.current === 'window_blur' && hasFullscreenElement()) {
+        pendingIntegrityEventRef.current = null;
+        return;
+      }
       void handlePendingIntegrityEvent();
     };
 
     const handleFullscreenChange = () => {
       if (shouldIgnoreIntegrityEvent()) {
-        const fullscreenActive = isEffectivelyFullscreen();
+        const fullscreenActive = hasFullscreenElement();
         setIsFullscreenReady(fullscreenActive);
         if (fullscreenActive) {
+          fullscreenConfirmedRef.current = true;
           setNeedsFullscreenResume(false);
         }
         return;
       }
 
-      const fullscreenActive = isEffectivelyFullscreen();
+      const fullscreenActive = hasFullscreenElement();
       if (fullscreenActive) {
+        fullscreenConfirmedRef.current = true;
         setIsFullscreenReady(true);
         setNeedsFullscreenResume(false);
         return;
@@ -276,14 +341,12 @@ export default function EmbeddedOnlineQuiz({
     window.addEventListener('blur', handleWindowBlur);
     window.addEventListener('focus', handleWindowFocus);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    window.addEventListener('resize', handleFullscreenChange);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleWindowBlur);
       window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      window.removeEventListener('resize', handleFullscreenChange);
     };
   }, [isQuizInProgress, profile?.id, submitting]);
 
@@ -310,16 +373,21 @@ export default function EmbeddedOnlineQuiz({
 
   const enterFullscreen = async () => {
     if (typeof document === 'undefined') return false;
-    if (isEffectivelyFullscreen()) return true;
+    if (hasFullscreenElement()) {
+      fullscreenConfirmedRef.current = true;
+      setIsFullscreenReady(true);
+      return true;
+    }
 
-    ignoreIntegrityUntilRef.current = Date.now() + 2000;
+    ignoreIntegrityUntilRef.current = Date.now() + 5000;
 
     try {
-      if (containerRef.current?.requestFullscreen) {
-        await containerRef.current.requestFullscreen();
-      } else {
-        await document.documentElement.requestFullscreen();
+      await requestElementFullscreen(containerRef.current || document.documentElement);
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+      if (!hasFullscreenElement()) {
+        throw new Error('Fullscreen did not activate. Please allow fullscreen for this site and try again.');
       }
+      fullscreenConfirmedRef.current = true;
       setIsFullscreenReady(true);
       setNeedsFullscreenResume(false);
       setIntegrityError(null);
@@ -382,7 +450,7 @@ export default function EmbeddedOnlineQuiz({
 
     const response = await fetch(`${backendBase}/api/educator/quiz/online/${quizBatchId}?educatorId=${educatorId}`);
     if (!response.ok) {
-      throw new Error(await response.text());
+      throw new Error(await readResponseError(response));
     }
 
     const payload = (await response.json()) as EducatorQuizReviewPayload;
@@ -430,7 +498,7 @@ export default function EmbeddedOnlineQuiz({
     }
     const response = await fetch(`${backendBase}/api/student/quiz/online/${quizBatchId}?studentId=${studentId}`);
     if (!response.ok) {
-      throw new Error(await response.text());
+      throw new Error(await readResponseError(response));
     }
 
     const payload = (await response.json()) as OnlineQuizDetail;
@@ -451,7 +519,7 @@ export default function EmbeddedOnlineQuiz({
       });
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        throw new Error(await readResponseError(response));
       }
 
       const payload = await response.json();
@@ -483,12 +551,12 @@ export default function EmbeddedOnlineQuiz({
       });
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        throw new Error(await readResponseError(response));
       }
 
       const payload = await response.json();
       setDetail(payload.detail as OnlineQuizDetail);
-      setNeedsFullscreenResume(Boolean(payload.require_fullscreen) && !isEffectivelyFullscreen());
+      setNeedsFullscreenResume(Boolean(payload.require_fullscreen) && !hasFullscreenElement());
 
       if (payload.message) {
         setPolicyMessage(payload.message);
@@ -504,7 +572,7 @@ export default function EmbeddedOnlineQuiz({
     if (!profile || !backendBase) return;
 
     const fullscreenEntered = await enterFullscreen();
-    if (!fullscreenEntered) {
+    if (!fullscreenEntered || !hasFullscreenElement()) {
       window.alert('You must enter fullscreen mode before starting the quiz.');
       return;
     }
@@ -521,19 +589,23 @@ export default function EmbeddedOnlineQuiz({
       });
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        throw new Error(await readResponseError(response));
       }
 
       const payload = (await response.json()) as OnlineQuizDetail;
-      ignoreIntegrityUntilRef.current = Date.now() + 2000;
+      ignoreIntegrityUntilRef.current = Date.now() + 5000;
+      fullscreenConfirmedRef.current = true;
       pendingIntegrityEventRef.current = null;
       setDetail(payload);
       setNeedsFullscreenResume(false);
+      setIsFullscreenReady(hasFullscreenElement());
       setPolicyMessage(payload.policy_notice || payload.attempt?.integrity?.policy_notice || null);
       setPolicyDismissed(false);
     } catch (error) {
       console.error('Error starting online quiz:', error);
-      window.alert('Failed to start the quiz.');
+      const message = error instanceof Error ? error.message : 'Failed to start the quiz.';
+      setIntegrityError(message);
+      window.alert(message);
     } finally {
       setStarting(false);
     }
@@ -541,6 +613,11 @@ export default function EmbeddedOnlineQuiz({
 
   const saveAnswer = async (questionIndex: number, selectedOption: string) => {
     if (!detail || !profile || !backendBase) return;
+    if (isQuizInProgress && !hasFullscreenElement()) {
+      setNeedsFullscreenResume(true);
+      setIntegrityError('Return to fullscreen before answering this quiz.');
+      return;
+    }
 
     setDetail((current) => {
       if (!current) return current;
@@ -568,11 +645,13 @@ export default function EmbeddedOnlineQuiz({
       });
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        throw new Error(await readResponseError(response));
       }
     } catch (error) {
       console.error('Error saving answer:', error);
-      window.alert('Failed to save the answer.');
+      const message = error instanceof Error ? error.message : 'Unknown save error.';
+      setIntegrityError(`Answer could not be saved: ${message}`);
+      window.alert(`Failed to save the answer: ${message}`);
     } finally {
       setSavingQuestionIndex(null);
     }
@@ -580,6 +659,11 @@ export default function EmbeddedOnlineQuiz({
 
   const submitQuiz = async (silent = false) => {
     if (!profile || !backendBase || submitting) return;
+    if (!silent && isQuizInProgress && !hasFullscreenElement()) {
+      setNeedsFullscreenResume(true);
+      setIntegrityError('Return to fullscreen before submitting this quiz.');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -593,20 +677,30 @@ export default function EmbeddedOnlineQuiz({
       });
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        throw new Error(await readResponseError(response));
       }
 
       const payload = (await response.json()) as OnlineQuizDetail;
+      completionNotifiedRef.current = payload.attempt?.id || completionNotifiedRef.current;
+      try {
+        await exitBrowserFullscreen();
+      } catch (fullscreenExitError) {
+        console.warn('Quiz submitted, but exiting fullscreen failed:', fullscreenExitError);
+      }
       setDetail(payload);
+      onQuizSubmitted?.(payload);
       setNeedsFullscreenResume(false);
+      setIsFullscreenReady(false);
       setPolicyMessage(payload.policy_notice || payload.attempt?.integrity?.policy_notice || null);
       if (!silent) {
         window.alert('Quiz submitted successfully.');
       }
     } catch (error) {
       console.error('Error submitting quiz:', error);
+      const message = error instanceof Error ? error.message : 'Failed to submit the quiz.';
+      setIntegrityError(message);
       if (!silent) {
-        window.alert('Failed to submit the quiz.');
+        window.alert(message);
       }
     } finally {
       setSubmitting(false);
@@ -760,9 +854,16 @@ export default function EmbeddedOnlineQuiz({
           )}
 
           {detail.status === 'submitted' && (
-            <div className="mt-4 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-800">
-              <CheckCircle2 className="h-4 w-4" />
-              {detail.policy_notice || 'Submitted. Grades will appear after your educator publishes them.'}
+            <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-blue-800">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                {detail.policy_notice || 'Submitted. Your score will appear here when grades are released.'}
+              </div>
+              {detail.attempt?.final_score !== undefined && detail.attempt?.final_score !== null && (
+                <div className="mt-3 rounded-lg bg-white/80 px-3 py-2 text-sm text-blue-950">
+                  Score: <span className="font-semibold">{detail.attempt.final_score} / {detail.total_marks}</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -850,6 +951,7 @@ export default function EmbeddedOnlineQuiz({
                       name={`question-${question.question_index}`}
                       checked={question.selected_option === optionKey}
                       onChange={() => saveAnswer(question.question_index, optionKey)}
+                      disabled={submitting || savingQuestionIndex !== null || needsFullscreenResume}
                       className="mt-1"
                     />
                     <div>

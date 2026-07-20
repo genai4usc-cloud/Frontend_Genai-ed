@@ -116,6 +116,37 @@ export interface SocraticReviewState {
   gradedAt: string | null;
 }
 
+export type SocraticFinalQuizStatus =
+  | 'disabled'
+  | 'not_ready'
+  | 'generating'
+  | 'ready'
+  | 'stale'
+  | 'generation_failed'
+  | 'submitted'
+  | 'report_ready'
+  | 'system_failed';
+
+export interface SocraticFinalQuizState {
+  enabled: boolean;
+  status: SocraticFinalQuizStatus;
+  quizBatchId: string | null;
+  quizGeneratedId: string | null;
+  essayHash: string | null;
+  currentEssayHash: string | null;
+  isStale: boolean;
+  generationError: string | null;
+  generatedAt: string | null;
+  quizSubmittedAt: string | null;
+  reportStatus: string | null;
+  reportGeneratedAt: string | null;
+  quizScore: number | null;
+  quizTotal: number | null;
+  systemIssue: string | null;
+  reportText?: string | null;
+  reportJson?: Record<string, unknown>;
+}
+
 export interface SocraticAssignmentSummary {
   assignmentId: string;
   courseId: string;

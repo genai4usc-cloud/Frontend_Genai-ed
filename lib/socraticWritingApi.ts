@@ -1,5 +1,6 @@
 import { getBackendBase } from '@/lib/backend';
 import {
+  SocraticFinalQuizState,
   SocraticReviewState,
   SocraticStageKey,
   SocraticStudioBlueprint,
@@ -28,6 +29,7 @@ export type SocraticWorkspacePayload = {
   readOnly: boolean;
   session: SocraticStudioSession;
   review: SocraticReviewState;
+  finalQuiz: SocraticFinalQuizState;
 };
 
 export type SocraticReviewStudent = {
@@ -45,6 +47,7 @@ export type SocraticReviewStudent = {
   ledger: SocraticStudioSession['ledger'];
   buildArtifacts: SocraticStudioSession['buildArtifacts'];
   review: SocraticReviewState;
+  finalQuiz?: SocraticFinalQuizState;
   resources: Array<{
     id: string;
     type: string;
@@ -92,17 +95,61 @@ const requireBackendBase = () => {
   return backendBase;
 };
 
-const getAccessToken = async () => {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const token = session?.access_token;
-  if (!token) {
-    throw new Error('No active session found.');
+const AUTH_EXPIRED_PATTERNS = [
+  'session from session_id claim in jwt does not exist',
+  'invalid or expired token',
+  'no active session found',
+  'auth session missing',
+  'invalid refresh token',
+];
+
+export const isSocraticAuthExpiredError = (error: unknown) => {
+  const message = (error instanceof Error ? error.message : String(error || '')).toLowerCase();
+  return AUTH_EXPIRED_PATTERNS.some((pattern) => message.includes(pattern));
+};
+
+const clearExpiredSocraticSession = async () => {
+  try {
+    await supabase.auth.signOut({ scope: 'local' });
+  } catch {
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // The original request error is more useful than a failed cleanup attempt.
+    }
+  }
+};
+
+const getAccessToken = async () => {
+  const retryDelays = [0, 150, 300, 600, 1000, 1500];
+  let lastToken: string | undefined;
+
+  for (const delay of retryDelays) {
+    if (delay) {
+      await wait(delay);
+    }
+
+    let session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'] = null;
+    try {
+      const response = await supabase.auth.getSession();
+      session = response.data.session;
+    } catch (error) {
+      if (isSocraticAuthExpiredError(error)) {
+        await clearExpiredSocraticSession();
+        throw new Error('Your login session expired. Please sign in again.');
+      }
+      throw error;
+    }
+
+    lastToken = session?.access_token;
+    if (lastToken) {
+      return lastToken;
+    }
   }
 
-  return token;
+  throw new Error('No active session found. Please refresh the page and sign in again if the problem continues.');
 };
 
 const apiRequest = async <T>(path: string, init?: RequestInit): Promise<T> => {
@@ -125,6 +172,10 @@ const apiRequest = async <T>(path: string, init?: RequestInit): Promise<T> => {
       detail = parsed.detail || raw;
     } catch {
       // Keep raw text when the body is not JSON.
+    }
+    if (isSocraticAuthExpiredError(detail)) {
+      await clearExpiredSocraticSession();
+      throw new Error('Your login session expired. Please sign in again.');
     }
     throw new Error(detail || `Request failed with status ${response.status}`);
   }
@@ -383,6 +434,15 @@ export const streamSocraticPreviewCoachMessage = async (
 export const submitSocraticWorkspace = async (workspaceId: string) =>
   apiRequest<SocraticWorkspacePayload>(`/api/socratic/student/workspace/${workspaceId}/submit`, {
     method: 'POST',
+  });
+
+export const prepareSocraticFinalQuiz = async (
+  workspaceId: string,
+  session?: SocraticStudioSession,
+) =>
+  apiRequest<SocraticWorkspacePayload>(`/api/socratic/student/workspace/${workspaceId}/final-quiz/prepare`, {
+    method: 'POST',
+    body: session ? JSON.stringify({ session }) : undefined,
   });
 
 export const fetchSocraticAssignmentReview = async (assignmentId: string) =>

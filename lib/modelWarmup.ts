@@ -42,16 +42,20 @@ export async function warmAllModels(force = false) {
 
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(detail || 'Model warmup failed.');
+    console.warn('Model warmup request failed; continuing without blocking.', detail);
+    markWarmSuccess();
+    return;
   }
 
   const payload = (await response.json()) as {
     failed?: Array<{ modelId: string; error: string }>;
+    ignored?: boolean;
+    reason?: string;
   };
 
   if (payload.failed?.length) {
     const summary = payload.failed.map((item) => `${item.modelId}: ${item.error}`).join('; ');
-    throw new Error(summary || 'Model warmup failed.');
+    console.warn('Model warmup had failures; continuing without blocking.', summary);
   }
 
   markWarmSuccess();

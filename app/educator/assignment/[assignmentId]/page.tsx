@@ -36,7 +36,12 @@ import {
   isAssignmentSystemMissingError,
 } from '@/lib/assignmentSystemErrors';
 import { supabase, Course, Profile } from '@/lib/supabase';
-import { fetchSocraticAssignmentConfig } from '@/lib/socraticWritingApi';
+import {
+  fetchSocraticAssignmentConfig,
+  fetchSocraticAssignmentReview,
+  SocraticReviewStudent,
+  SocraticReviewPayload,
+} from '@/lib/socraticWritingApi';
 import { SOCRATIC_STAGE_ORDER, SocraticStudioBlueprint } from '@/lib/socraticWriting';
 
 type CourseRosterEntry = {
@@ -81,6 +86,30 @@ const PromptReadOnlyBlock = ({
   );
 };
 
+const asString = (value: unknown) =>
+  typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value);
+
+const asReportList = (value: unknown) => (Array.isArray(value) ? value : []);
+
+const getReportItemParts = (item: unknown) => {
+  if (item && typeof item === 'object' && !Array.isArray(item)) {
+    const record = item as Record<string, unknown>;
+    return {
+      excerpt: asString(record.excerpt),
+      reason: asString(record.reason),
+      severity: asString(record.severity),
+      text: '',
+    };
+  }
+
+  return {
+    excerpt: '',
+    reason: '',
+    severity: '',
+    text: asString(item),
+  };
+};
+
 const toDateTimeLocalValue = (value: string | null) => {
   if (!value) return '';
 
@@ -92,6 +121,176 @@ const toDateTimeLocalValue = (value: string | null) => {
 const fromDateTimeLocalValue = (value: string) => {
   if (!value) return null;
   return new Date(value).toISOString();
+};
+
+type SocraticInlineReviewCardProps = {
+  error: string | null;
+  loading: boolean;
+  onOpenFullReview: () => void;
+  onRefresh: () => void;
+  student?: SocraticReviewStudent;
+};
+
+const SocraticInlineReviewCard = ({
+  error,
+  loading,
+  onOpenFullReview,
+  onRefresh,
+  student,
+}: SocraticInlineReviewCardProps) => {
+  const finalQuiz = student?.finalQuiz;
+  const aiAssessment = asString(finalQuiz?.reportJson?.ai_authenticity_assessment);
+  const redFlags = asReportList(finalQuiz?.reportJson?.ai_generated_red_flags);
+
+  return (
+    <div className="rounded-2xl border border-purple-200 bg-purple-50/40 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h4 className="font-semibold text-purple-950">Socratic final review</h4>
+          <p className="text-sm text-purple-800">
+            Essay, final quiz, AI report, and ledger for this student.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={loading}
+            className="rounded-lg border border-purple-300 bg-white px-3 py-2 text-sm font-medium text-purple-800 hover:bg-purple-50 disabled:opacity-50"
+          >
+            {loading ? 'Refreshing...' : 'Refresh'}
+          </button>
+          <button
+            type="button"
+            onClick={onOpenFullReview}
+            className="rounded-lg bg-purple-700 px-3 py-2 text-sm font-medium text-white hover:bg-purple-800"
+          >
+            Open full review
+          </button>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="mt-4 rounded-xl border border-dashed border-purple-200 bg-white p-4 text-sm text-purple-800">
+          Loading Socratic review data...
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {!loading && !error && !student && (
+        <div className="mt-4 rounded-xl border border-dashed border-purple-200 bg-white p-4 text-sm text-purple-800">
+          No Socratic workspace exists for this student yet.
+        </div>
+      )}
+
+      {!loading && !error && student && (
+        <div className="mt-4 space-y-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl bg-white p-4 ring-1 ring-purple-100">
+              <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Workspace</p>
+              <p className="mt-2 font-semibold capitalize text-gray-950">{student.status.replace('_', ' ')}</p>
+            </div>
+            <div className="rounded-xl bg-white p-4 ring-1 ring-purple-100">
+              <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Final quiz score</p>
+              <p className="mt-2 font-semibold text-gray-950">
+                {finalQuiz?.quizScore !== null && finalQuiz?.quizScore !== undefined
+                  ? `${finalQuiz.quizScore}${finalQuiz.quizTotal ? ` / ${finalQuiz.quizTotal}` : ''}`
+                  : 'Not submitted'}
+              </p>
+            </div>
+            <div className="rounded-xl bg-white p-4 ring-1 ring-purple-100">
+              <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">AI report</p>
+              <p className="mt-2 font-semibold capitalize text-gray-950">
+                {(finalQuiz?.reportStatus || 'pending').replace('_', ' ')}
+              </p>
+            </div>
+          </div>
+
+          {finalQuiz?.reportStatus !== 'ready' && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+              The final package is saved. Claude’s educator-only report may still be generating; refresh this section after a few seconds.
+            </div>
+          )}
+
+          {finalQuiz?.systemIssue && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{finalQuiz.systemIssue}</span>
+            </div>
+          )}
+
+          {aiAssessment && (
+            <div className="rounded-xl border border-blue-200 bg-white p-4">
+              <p className="font-semibold text-blue-950">AI authenticity assessment</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-blue-900">{aiAssessment}</p>
+            </div>
+          )}
+
+          <div className="rounded-xl border border-red-200 bg-white p-4">
+            <p className="font-semibold text-red-950">AI-generated red flags</p>
+            {redFlags.length > 0 ? (
+              <div className="mt-3 space-y-3">
+                {redFlags.map((item, index) => {
+                  const parts = getReportItemParts(item);
+                  return (
+                    <div key={index} className="rounded-lg bg-red-50 p-3 text-sm text-red-950">
+                      {parts.severity && (
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-red-700">
+                          Severity: {parts.severity}
+                        </p>
+                      )}
+                      {parts.excerpt && (
+                        <blockquote className="border-l-4 border-red-300 pl-3 italic text-red-900">
+                          {parts.excerpt}
+                        </blockquote>
+                      )}
+                      <p className="mt-2 leading-6">{parts.reason || parts.text}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-gray-600">
+                {finalQuiz?.reportStatus === 'ready'
+                  ? 'Claude did not return AI-generated red flags for this submission.'
+                  : 'Red flags will appear here when the Claude report is ready.'}
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <p className="font-semibold text-gray-950">Student ledger</p>
+            {student.ledger.length > 0 ? (
+              <div className="mt-3 max-h-96 space-y-3 overflow-auto pr-2">
+                {student.ledger.map((entry) => (
+                  <div key={entry.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        {entry.stage} | {entry.actor}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {new Date(entry.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="mt-2 font-medium text-gray-950">{entry.title}</p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-gray-700">{entry.content}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-gray-600">No ledger entries were captured for this student.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default function EducatorAssignmentDetailPage() {
@@ -130,6 +329,9 @@ export default function EducatorAssignmentDetailPage() {
   const [socraticBlueprint, setSocraticBlueprint] = useState<SocraticStudioBlueprint | null>(null);
   const [socraticConfigLoading, setSocraticConfigLoading] = useState(false);
   const [socraticConfigError, setSocraticConfigError] = useState<string | null>(null);
+  const [socraticReviewPayload, setSocraticReviewPayload] = useState<SocraticReviewPayload | null>(null);
+  const [socraticReviewLoading, setSocraticReviewLoading] = useState(false);
+  const [socraticReviewError, setSocraticReviewError] = useState<string | null>(null);
 
   useEffect(() => {
     void bootstrap();
@@ -154,6 +356,14 @@ export default function EducatorAssignmentDetailPage() {
     });
     return grouped;
   }, [submissionFiles]);
+
+  const socraticStudentsByCourseStudentId = useMemo(() => {
+    const grouped = new Map<string, SocraticReviewStudent>();
+    socraticReviewPayload?.students.forEach((student) => {
+      grouped.set(student.courseStudentId, student);
+    });
+    return grouped;
+  }, [socraticReviewPayload]);
 
   const analytics = useMemo(() => {
     const totalStudents = targets.length;
@@ -263,9 +473,12 @@ export default function EducatorAssignmentDetailPage() {
     resetEditState(normalizedAssignment);
     setSocraticBlueprint(null);
     setSocraticConfigError(null);
+    setSocraticReviewPayload(null);
+    setSocraticReviewError(null);
 
     if (normalizedAssignment.experience_type === 'socratic_writing') {
       setSocraticConfigLoading(true);
+      setSocraticReviewLoading(true);
       try {
         const configPayload = await fetchSocraticAssignmentConfig(normalizedAssignment.id);
         setSocraticBlueprint(configPayload.blueprint);
@@ -277,8 +490,21 @@ export default function EducatorAssignmentDetailPage() {
       } finally {
         setSocraticConfigLoading(false);
       }
+
+      try {
+        const reviewPayload = await fetchSocraticAssignmentReview(normalizedAssignment.id);
+        setSocraticReviewPayload(reviewPayload);
+      } catch (error) {
+        console.error('Error loading Socratic student review:', error);
+        setSocraticReviewError(
+          error instanceof Error ? error.message : 'Failed to load Socratic student review.',
+        );
+      } finally {
+        setSocraticReviewLoading(false);
+      }
     } else {
       setSocraticConfigLoading(false);
+      setSocraticReviewLoading(false);
     }
 
     const [{ data: courseRow }, { data: targetRows, error: targetError }, { data: rosterRows, error: rosterError }, { data: submissionRows, error: submissionError }] = await Promise.all([
@@ -335,6 +561,26 @@ export default function EducatorAssignmentDetailPage() {
       setSubmissionFiles((fileRows || []) as AssignmentSubmissionFile[]);
     } else {
       setSubmissionFiles([]);
+    }
+  };
+
+  const refreshSocraticReview = async () => {
+    if (!assignment || assignment.experience_type !== 'socratic_writing') return;
+
+    setSocraticReviewLoading(true);
+    setSocraticReviewError(null);
+    try {
+      const reviewPayload = await fetchSocraticAssignmentReview(assignment.id);
+      setSocraticReviewPayload(reviewPayload);
+      toast.success('Socratic review refreshed.');
+    } catch (error) {
+      console.error('Error refreshing Socratic student review:', error);
+      setSocraticReviewError(
+        error instanceof Error ? error.message : 'Failed to refresh Socratic student review.',
+      );
+      toast.error(error instanceof Error ? error.message : 'Failed to refresh Socratic student review.');
+    } finally {
+      setSocraticReviewLoading(false);
     }
   };
 
@@ -1189,6 +1435,7 @@ export default function EducatorAssignmentDetailPage() {
               const studentName = rosterEntry
                 ? [rosterEntry.first_name, rosterEntry.last_name].filter(Boolean).join(' ')
                 : '';
+              const socraticStudent = socraticStudentsByCourseStudentId.get(target.course_student_id);
 
               return (
                 <div key={target.id} className="rounded-2xl border border-gray-200 p-5 space-y-4">
@@ -1243,6 +1490,16 @@ export default function EducatorAssignmentDetailPage() {
                         {submission.submission_text}
                       </div>
                     </div>
+                  )}
+
+                  {assignment.experience_type === 'socratic_writing' && (
+                    <SocraticInlineReviewCard
+                      error={socraticReviewError}
+                      loading={socraticReviewLoading}
+                      onOpenFullReview={() => router.push(`/educator/assignment/${assignment.id}/socratic-review`)}
+                      onRefresh={() => void refreshSocraticReview()}
+                      student={socraticStudent}
+                    />
                   )}
 
                   {submission ? (
